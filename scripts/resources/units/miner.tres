@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/unit_data.gd" id="1_abc1"]
+
+[resource]
+script = ExtResource("1_abc1")
+unit_name = "Miner"
+is_miner = true
+is_fighter = false
+cost = 50
+train_time = 5.0
+population = 1
+max_hp = 40
+speed = 80.0
+damage = 6
+attack_range = 28.0
+attack_speed = 1.0
+sight_range = 250.0
+miner_level = 1
+carry_capacity = 20
+mining_rate = 5.0
+max_dig_layer = 2

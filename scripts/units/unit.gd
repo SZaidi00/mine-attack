@@ -1,0 +1,501 @@
+class_name Unit
+extends Node2D
+
+signal died(unit)
+
+enum State { IDLE, MOVE, ATTACK, MINE, DEPOSIT, ENTER_MINE, EXIT_MINE, DEAD }
+
+@export var data: UnitData
+@export var team: GameManager.Team = GameManager.Team.PLAYER
+
+var hp: int = 0
+var carried_coin: int = 0
+var is_underground: bool = false
+var selected: bool = false
+var hovered: bool = false
+
+var _state: State = State.IDLE
+var _path: PackedVector2Array = PackedVector2Array()
+var _path_index: int = 0
+var _target_unit = null
+var _target_building: Node2D = null
+var _target_cell: Vector2i = Vector2i(-9999, -9999)
+var _target_position: Vector2 = Vector2.ZERO
+var _attack_timer: float = 0.0
+var _mine_timer: float = 0.0
+var _dead_timer: float = 0.0
+
+@onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
+
+
+func _ready() -> void:
+	if data == null:
+		data = preload("res://scripts/resources/units/swordsman.tres")
+	if data.is_miner:
+		_apply_miner_upgrade()
+	hp = data.max_hp
+	add_to_group("units")
+	_add_hover_area()
+	add_to_group(team_name())
+	queue_redraw()
+	# Miners should start working immediately instead of waiting for a command.
+	if data.is_miner:
+		_find_and_mine()
+
+
+func _process(delta: float) -> void:
+	if _state == State.DEAD:
+		_dead_timer -= delta
+		modulate.a = max(0, _dead_timer)
+		if _dead_timer <= 0:
+			queue_free()
+		return
+
+	if data.is_miner:
+		_apply_miner_upgrade()
+		if _state == State.IDLE:
+			if carried_coin >= data.carry_capacity:
+				deposit_coin()
+			else:
+				_find_and_mine()
+	match _state:
+		State.MOVE:
+			_follow_path(delta)
+		State.ATTACK:
+			_process_attack(delta)
+		State.MINE:
+			_process_mine(delta)
+		State.DEPOSIT:
+			_process_deposit(delta)
+		State.ENTER_MINE:
+			_process_enter_mine(delta)
+		State.EXIT_MINE:
+			_process_exit_mine(delta)
+
+
+# ---------- Commands ----------
+
+func move_to(world_pos: Vector2) -> void:
+	if data.is_fighter and _is_enemy_underground(world_pos):
+		return
+	_clear_target()
+	_target_position = world_pos
+	_state = State.MOVE
+	_repath(world_pos)
+
+
+func attack_unit(target) -> void:
+	if target == null or target.team == team:
+		return
+	_clear_target()
+	_target_unit = target
+	_state = State.ATTACK
+
+
+func attack_building(target: Node2D) -> void:
+	if target == null:
+		return
+	_clear_target()
+	_target_building = target
+	_state = State.ATTACK
+
+
+func mine_cell(grid_pos: Vector2i) -> void:
+	if data == null or not data.is_miner:
+		return
+	_clear_target()
+	_target_cell = grid_pos
+	_state = State.MINE
+	# Move adjacent.
+	var adj: Vector2 = _nearest_adjacent_world(grid_pos)
+	_repath(adj)
+
+
+func deposit_coin() -> void:
+	if data == null or not data.is_miner:
+		return
+	_clear_target()
+	_state = State.DEPOSIT
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry:
+		_repath(entry.global_position)
+	else:
+		_state = State.IDLE
+
+
+func enter_mine() -> void:
+	_clear_target()
+	_state = State.ENTER_MINE
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry:
+		_repath(entry.global_position)
+	else:
+		_state = State.IDLE
+
+
+func exit_mine() -> void:
+	_clear_target()
+	_state = State.EXIT_MINE
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry:
+		_repath(entry.call("get_underground_position"))
+	else:
+		_state = State.IDLE
+
+
+func stop() -> void:
+	_clear_target()
+	_state = State.IDLE
+	_path.clear()
+
+
+func take_damage(amount: int) -> void:
+	hp -= amount
+	queue_redraw()
+	if hp <= 0:
+		_die()
+
+
+# ---------- State processing ----------
+
+func _follow_path(delta: float) -> void:
+	if _path.is_empty() or _path_index >= _path.size():
+		_state = State.IDLE
+		return
+	var target: Vector2 = _path[_path_index]
+	var dir: Vector2 = target - global_position
+	var dist: float = dir.length()
+	if dist <= 2.0:
+		_path_index += 1
+		if _path_index >= _path.size():
+			_state = State.IDLE
+			return
+		target = _path[_path_index]
+		dir = target - global_position
+		dist = dir.length()
+	var step: float = data.speed * delta
+	global_position += dir.normalized() * min(step, dist)
+
+
+func _process_attack(delta: float) -> void:
+	_attack_timer -= delta
+	var target_pos: Vector2 = Vector2.ZERO
+	var target_alive: bool = false
+
+	if _target_unit != null and is_instance_valid(_target_unit) and _target_unit._state != State.DEAD:
+		target_pos = _target_unit.global_position
+		target_alive = true
+	elif _target_building != null and is_instance_valid(_target_building):
+		target_pos = _target_building.global_position
+		target_alive = true
+	else:
+		_state = State.IDLE
+		return
+
+	if global_position.distance_to(target_pos) > data.attack_range:
+		_repath(target_pos)
+		_follow_path(delta)
+		return
+
+	_path.clear()
+	if _attack_timer <= 0:
+		_attack_timer = 1.0 / data.attack_speed
+		if data.attack_range <= 35.0:
+			# Melee
+			if _target_unit != null:
+				_target_unit.take_damage(data.damage)
+			elif _target_building != null:
+				_target_building.call("take_damage", data.damage)
+		else:
+			# Ranged projectile.
+			_spawn_projectile(target_pos)
+
+
+func _spawn_projectile(target_pos: Vector2) -> void:
+	var proj: Node2D = preload("res://scenes/projectile.tscn").instantiate()
+	proj.position = global_position
+	proj.set("team", team)
+	proj.set("damage", data.damage)
+	proj.set("is_fireball", data.unit_name == "Wizard")
+	proj.set("target_position", target_pos)
+	# Try to find the actual target node for homing.
+	if _target_unit != null and is_instance_valid(_target_unit):
+		proj.set("homing_target", _target_unit)
+	elif _target_building != null and is_instance_valid(_target_building):
+		proj.set("homing_building", _target_building)
+	get_node("/root/Main/Projectiles").add_child(proj)
+
+
+func _process_mine(delta: float) -> void:
+	var cell: GridWorld.Cell = _grid.get_cell(_target_cell)
+	if cell == null or cell.type == GridWorld.CellType.EMPTY:
+		# Already mined; idle or find next ore.
+		_state = State.IDLE
+		return
+	if carried_coin >= data.carry_capacity:
+		deposit_coin()
+		return
+	if data.miner_level < cell.miner_level_required:
+		_state = State.IDLE
+		return
+
+	var cell_world: Vector2 = _grid.grid_to_world(_target_cell)
+	if global_position.distance_to(cell_world) > GridWorld.CELL_SIZE * 1.5:
+		_repath(_nearest_adjacent_world(_target_cell))
+		_follow_path(delta)
+		return
+
+	_path.clear()
+	_mine_timer -= delta
+	if _mine_timer <= 0:
+		_mine_timer = 1.0 / data.mining_rate
+		var dmg: int = max(1, data.damage)
+		var coin: int = _grid.damage_cell(_target_cell, dmg, data.miner_level)
+		if coin > 0:
+			carried_coin = min(data.carry_capacity, carried_coin + coin)
+			queue_redraw()
+
+
+func _process_deposit(delta: float) -> void:
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry == null:
+		_state = State.IDLE
+		return
+	var target_pos: Vector2 = entry.global_position if not is_underground else entry.call("get_underground_position")
+	if global_position.distance_to(target_pos) > GridWorld.CELL_SIZE:
+		_repath(target_pos)
+		_follow_path(delta)
+		return
+	entry.call("deposit", self)
+	_state = State.IDLE
+
+
+func _process_enter_mine(delta: float) -> void:
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry == null:
+		_state = State.IDLE
+		return
+	if global_position.distance_to(entry.global_position) > GridWorld.CELL_SIZE:
+		_repath(entry.global_position)
+		_follow_path(delta)
+		return
+	entry.call("enter_mine", self)
+	_state = State.IDLE
+
+
+func _process_exit_mine(delta: float) -> void:
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry == null:
+		_state = State.IDLE
+		return
+	if global_position.distance_to(entry.call("get_underground_position")) > GridWorld.CELL_SIZE:
+		_repath(entry.call("get_underground_position"))
+		_follow_path(delta)
+		return
+	entry.call("exit_mine", self)
+	_state = State.IDLE
+
+
+# ---------- Helpers ----------
+
+func _clear_target() -> void:
+	_target_unit = null
+	_target_building = null
+	_target_cell = Vector2i(-9999, -9999)
+	_target_position = Vector2.ZERO
+	_path.clear()
+	_path_index = 0
+
+
+func _repath(target_world: Vector2) -> void:
+	_path = _grid.find_path(global_position, target_world)
+	_path_index = 0
+	# Skip the first point if it is the current cell.
+	if _path.size() > 1 and _path[0].distance_to(global_position) < 4.0:
+		_path_index = 1
+
+
+func _nearest_adjacent_world(grid_pos: Vector2i) -> Vector2:
+	var best: Vector2 = _grid.grid_to_world(grid_pos)
+	var best_dist: float = 999999.0
+	for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var adj: Vector2i = grid_pos + off
+		if not _grid.is_solid(adj):
+			var pos: Vector2 = _grid.grid_to_world(adj)
+			var d: float = global_position.distance_squared_to(pos)
+			if d < best_dist:
+				best_dist = d
+				best = pos
+	return best
+
+
+func _find_and_mine() -> void:
+	var center: Vector2i = _grid.world_to_grid(global_position)
+	var team_dir: int = _team_dir()
+
+	# Helper closure: score a candidate cell.
+	var best: Vector2i = Vector2i(-9999, -9999)
+	var best_score: float = 999999.0
+	var best_reachable: bool = false
+
+	var scan := func(types: Array, reachable_only: bool) -> void:
+		for x in range(-16, 17):
+			for y in range(-2, 16):
+				var pos: Vector2i = center + Vector2i(x, y)
+				var cell: GridWorld.Cell = _grid.get_cell(pos)
+				if cell == null or not (cell.type in types):
+					continue
+				if cell.type == GridWorld.CellType.SURFACE_GROUND:
+					continue
+				if data.miner_level < cell.miner_level_required:
+					continue
+				# Stick to own side of the mine.
+				if pos.x * team_dir < -2:
+					continue
+				var reachable: bool = _has_empty_neighbor(pos)
+				if reachable_only and not reachable:
+					continue
+				var dist: float = center.distance_to(pos)
+				# Prefer reachable cells, then ore over dirt, then closer.
+				var is_ore: bool = cell.type == GridWorld.CellType.ORE
+				var score: float = dist - (100.0 if reachable else 0.0) - (50.0 if is_ore else 0.0)
+				if score < best_score:
+					best_score = score
+					best = pos
+					best_reachable = reachable
+
+	# First try reachable ore.
+	scan.call([GridWorld.CellType.ORE], true)
+	# Then reachable dirt to keep digging forward.
+	if best == Vector2i(-9999, -9999):
+		best_score = 999999.0
+		scan.call([GridWorld.CellType.DIRT], true)
+	# Last resort: any ore.
+	if best == Vector2i(-9999, -9999):
+		best_score = 999999.0
+		scan.call([GridWorld.CellType.ORE], false)
+	# Fallback: any diggable dirt.
+	if best == Vector2i(-9999, -9999):
+		best_score = 999999.0
+		scan.call([GridWorld.CellType.DIRT], false)
+
+	if best != Vector2i(-9999, -9999):
+		mine_cell(best)
+	else:
+		# No diggable target in range; head toward the mine entry so we can keep mining.
+		var entry: Node2D = _nearest_friendly_mine_entry()
+		if entry:
+			move_to(entry.global_position)
+
+
+func _has_empty_neighbor(grid_pos: Vector2i) -> bool:
+	for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		if not _grid.is_solid(grid_pos + off):
+			return true
+	return false
+
+
+func _nearest_friendly_mine_entry() -> Node2D:
+	var best: Node2D = null
+	var best_dist: float = 999999.0
+	for entry in get_tree().get_nodes_in_group("mine_entries"):
+		if entry.get("team") == team:
+			var d: float = global_position.distance_squared_to(entry.global_position)
+			if d < best_dist:
+				best_dist = d
+				best = entry
+	return best
+
+
+func _die() -> void:
+	_state = State.DEAD
+	_dead_timer = 1.0
+	remove_from_group("units")
+	remove_from_group(team_name())
+	EconomyManager.remove_population(team, data.population)
+	died.emit(self)
+	queue_redraw()
+
+
+func team_name() -> String:
+	return "player" if team == GameManager.Team.PLAYER else "enemy"
+
+
+func _team_dir() -> int:
+	return -1 if team == GameManager.Team.PLAYER else 1
+
+
+func _is_enemy_underground(world_pos: Vector2) -> bool:
+	if world_pos.y <= GridWorld.CELL_SIZE:
+		return false
+	return world_pos.x * _team_dir() > 0
+
+
+func _add_hover_area() -> void:
+	var area: Area2D = Area2D.new()
+	area.name = "HoverArea"
+	area.input_pickable = true
+	area.mouse_entered.connect(func(): hovered = true; queue_redraw())
+	area.mouse_exited.connect(func(): hovered = false; queue_redraw())
+	var shape: CollisionShape2D = CollisionShape2D.new()
+	var rect: RectangleShape2D = RectangleShape2D.new()
+	rect.size = Vector2(22, 22)
+	shape.shape = rect
+	area.add_child(shape)
+	add_child(area)
+
+
+func _apply_miner_upgrade() -> void:
+	var level: int = EconomyManager.get_miner_level(team)
+	if data.miner_level == level:
+		return
+	data.miner_level = level
+	if level >= 2:
+		data.max_dig_layer = 4
+		data.carry_capacity += 5
+		data.max_hp += 10
+		data.mining_rate += 1.0
+	if level >= 3:
+		data.max_dig_layer = 7
+		data.carry_capacity += 10
+		data.max_hp += 15
+		data.mining_rate += 2.0
+	hp += 10
+
+
+# ---------- Drawing ----------
+
+func _draw() -> void:
+	var color: Color = GameManager.COLOR_PLAYER if team == GameManager.Team.PLAYER else GameManager.COLOR_ENEMY
+	var size: float = 18.0
+	# Selection indicator.
+	if selected:
+		draw_arc(Vector2.ZERO, size + 4, 0, TAU, 16, Color.WHITE, 2.0)
+
+	# Body.
+	draw_rect(Rect2(-size / 2.0, -size / 2.0, size, size), color, true)
+	draw_rect(Rect2(-size / 2.0, -size / 2.0, size, size), GameManager.COLOR_SHADOW, false, 1.0)
+
+	# Weapon / class indicator.
+	if data.is_miner:
+		# Pickaxe handle and head.
+		draw_line(Vector2(4, 4), Vector2(14, -6), GameManager.COLOR_STEEL, 2.0)
+		draw_rect(Rect2(10, -10, 8, 4), GameManager.COLOR_STEEL, true)
+	elif data.unit_name == "Swordsman":
+		draw_line(Vector2(4, 4), Vector2(16, -8), Color.WHITE, 3.0)
+	elif data.unit_name == "Archer":
+		draw_arc(Vector2(10, 0), 7, -PI / 2, PI / 2, 8, GameManager.COLOR_RUST, 2.0)
+		draw_line(Vector2(10, -7), Vector2(10, 7), GameManager.COLOR_RUST, 2.0)
+	elif data.unit_name == "Wizard":
+		draw_line(Vector2(6, 6), Vector2(12, -14), GameManager.COLOR_RUST, 2.0)
+		draw_circle(Vector2(12, -16), 4, Color.PURPLE)
+
+	# HP bar (only on hover or selection).
+	if selected or hovered:
+		var hp_pct: float = float(hp) / float(data.max_hp)
+		draw_rect(Rect2(-10, -size / 2.0 - 8, 20, 4), Color.BLACK, true)
+		draw_rect(Rect2(-10, -size / 2.0 - 8, 20 * hp_pct, 4), Color.GREEN, true)
+
+	# Carried coin indicator for miners.
+	if data.is_miner and carried_coin > 0:
+		draw_rect(Rect2(-6, size / 2.0 + 2, 12, 6), GameManager.COLOR_RUST, true)

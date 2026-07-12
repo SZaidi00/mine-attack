@@ -1,0 +1,64 @@
+extends Node2D
+
+signal coin_deposited(team: GameManager.Team, amount: int)
+
+@export var team: GameManager.Team = GameManager.Team.PLAYER
+@export var underground_spawn: NodePath
+
+var _underground_position: Vector2
+
+
+func _ready() -> void:
+	add_to_group("mine_entries")
+	_underground_position = global_position + Vector2(0, 3 * GridWorld.CELL_SIZE)
+	queue_redraw()
+	if underground_spawn:
+		var node = get_node_or_null(underground_spawn)
+		if node:
+			_underground_position = node.global_position
+
+
+func get_underground_position() -> Vector2:
+	return _underground_position
+
+
+func get_surface_position() -> Vector2:
+	return global_position
+
+
+func deposit(unit: Node2D) -> void:
+	if unit == null:
+		return
+	var data = unit.get("data")
+	if data == null or not data.is_miner:
+		return
+	var carried: int = unit.get("carried_coin")
+	if carried > 0:
+		EconomyManager.add_coin(team, carried)
+		coin_deposited.emit(team, carried)
+		unit.set("carried_coin", 0)
+
+
+func enter_mine(unit: Node2D) -> void:
+	if unit == null:
+		return
+	unit.global_position = _underground_position
+	unit.set("is_underground", true)
+
+
+func exit_mine(unit: Node2D) -> void:
+	if unit == null:
+		return
+	unit.global_position = global_position
+	unit.set("is_underground", false)
+
+
+func _draw() -> void:
+	var w: float = GridWorld.CELL_SIZE * 3.0
+	var h: float = GridWorld.CELL_SIZE * 2.5
+	var rect: Rect2 = Rect2(-w / 2.0, -h, w, h)
+	var color: Color = GameManager.COLOR_PLAYER if team == GameManager.Team.PLAYER else GameManager.COLOR_ENEMY
+	draw_rect(rect, GameManager.COLOR_SHADOW, true)
+	draw_rect(rect, color, false, 2.0)
+	# Mine opening.
+	draw_rect(Rect2(rect.position.x + 8, rect.position.y + 8, w - 16, h - 16), GameManager.COLOR_DEEP_ICE, true)

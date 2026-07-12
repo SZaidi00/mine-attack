@@ -1,0 +1,58 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/grid_world.gd" id="1_grid"]
+[ext_resource type="PackedScene" path="res://scenes/building.tscn" id="2_building"]
+[ext_resource type="PackedScene" path="res://scenes/mine_entry.tscn" id="3_mine_entry"]
+[ext_resource type="Script" path="res://scripts/controllers/player_controller.gd" id="4_player"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="5_hud"]
+[ext_resource type="Script" path="res://scripts/controllers/ai_controller.gd" id="6_ai"]
+
+[node name="Main" type="Node2D"]
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="GridWorld" type="Node2D" parent="World"]
+script = ExtResource("1_grid")
+
+[node name="PlayerBuilding" parent="World" instance=ExtResource("2_building")]
+position = Vector2(-960, 0)
+team = 0
+
+[node name="EnemyBuilding" parent="World" instance=ExtResource("2_building")]
+position = Vector2(960, 0)
+team = 1
+
+[node name="PlayerMineEntry" parent="World" instance=ExtResource("3_mine_entry")]
+position = Vector2(-480, 0)
+team = 0
+
+[node name="EnemyMineEntry" parent="World" instance=ExtResource("3_mine_entry")]
+position = Vector2(480, 0)
+team = 1
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(0, 300)
+zoom = Vector2(0.7, 0.7)
+
+[node name="Units" type="Node2D" parent="."]
+
+[node name="Projectiles" type="Node2D" parent="."]
+
+[node name="PlayerController" type="Node" parent="."]
+script = ExtResource("4_player")
+camera = NodePath("../Camera2D")
+selection_box = NodePath("../UI/SelectionBox")
+
+[node name="AIController" type="Node" parent="."]
+script = ExtResource("6_ai")
+team = 1
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="SelectionBox" type="ColorRect" parent="UI"]
+visible = false
+modulate = Color(0.3, 0.7, 1, 0.4)
+offset_right = 100.0
+offset_bottom = 100.0
+
+[node name="HUD" parent="UI" instance=ExtResource("5_hud")]

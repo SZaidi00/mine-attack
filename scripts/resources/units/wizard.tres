@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/unit_data.gd" id="1_abc4"]
+
+[resource]
+script = ExtResource("1_abc4")
+unit_name = "Wizard"
+is_miner = false
+is_fighter = true
+cost = 300
+train_time = 10.0
+population = 1
+max_hp = 55
+speed = 85.0
+damage = 22
+attack_range = 130.0
+attack_speed = 0.7
+sight_range = 280.0
+miner_level = 0
+carry_capacity = 0
+mining_rate = 0.0
+max_dig_layer = 0
