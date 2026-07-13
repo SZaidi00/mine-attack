@@ -79,6 +79,9 @@ func _spawn_front(unit_id: String, data: UnitData) -> void:
 	unit.set("team", team)
 	unit.position = _spawn_position()
 	get_node("/root/Main/Units").add_child(unit)
+	# Make sure miners head straight into the shaft as soon as they spawn.
+	if data_copy.is_miner and unit.has_method("enter_mine"):
+		unit.call("enter_mine")
 
 
 func _spawn_position() -> Vector2:

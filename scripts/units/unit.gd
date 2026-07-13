@@ -23,6 +23,7 @@ var _target_cell: Vector2i = Vector2i(-9999, -9999)
 var _target_position: Vector2 = Vector2.ZERO
 var _attack_timer: float = 0.0
 var _mine_timer: float = 0.0
+var _mining_anim_timer: float = 0.0
 var _dead_timer: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
@@ -39,8 +40,8 @@ func _ready() -> void:
 	add_to_group(team_name())
 	queue_redraw()
 	# Miners should start working immediately instead of waiting for a command.
-	if data.is_miner:
-		_find_and_mine()
+	if data.is_miner and _state == State.IDLE:
+		_handle_idle_miner()
 
 
 func _process(delta: float) -> void:
@@ -54,16 +55,14 @@ func _process(delta: float) -> void:
 	if data.is_miner:
 		_apply_miner_upgrade()
 		if _state == State.IDLE:
-			if carried_coin >= data.carry_capacity:
-				deposit_coin()
-			else:
-				_find_and_mine()
+			_handle_idle_miner()
 	match _state:
 		State.MOVE:
 			_follow_path(delta)
 		State.ATTACK:
 			_process_attack(delta)
 		State.MINE:
+			_mining_anim_timer += delta
 			_process_mine(delta)
 		State.DEPOSIT:
 			_process_deposit(delta)
@@ -329,6 +328,17 @@ func _nearest_adjacent_world(grid_pos: Vector2i) -> Vector2:
 	return best
 
 
+func _handle_idle_miner() -> void:
+	# Full miners should deposit. Surface miners should enter the shaft first.
+	# Underground miners look for the next cell to dig.
+	if carried_coin >= data.carry_capacity:
+		deposit_coin()
+	elif not is_underground:
+		enter_mine()
+	else:
+		_find_and_mine()
+
+
 func _find_and_mine() -> void:
 	var center: Vector2i = _grid.world_to_grid(global_position)
 	var team_dir: int = _team_dir()
@@ -382,10 +392,13 @@ func _find_and_mine() -> void:
 	if best != Vector2i(-9999, -9999):
 		mine_cell(best)
 	else:
-		# No diggable target in range; head toward the mine entry so we can keep mining.
+		# No diggable target in range; regroup near the mine entry.
 		var entry: Node2D = _nearest_friendly_mine_entry()
 		if entry:
-			move_to(entry.global_position)
+			if is_underground:
+				move_to(entry.call("get_underground_position"))
+			else:
+				move_to(entry.global_position)
 
 
 func _has_empty_neighbor(grid_pos: Vector2i) -> bool:
@@ -478,9 +491,15 @@ func _draw() -> void:
 
 	# Weapon / class indicator.
 	if data.is_miner:
-		# Pickaxe handle and head.
-		draw_line(Vector2(4, 4), Vector2(14, -6), GameManager.COLOR_STEEL, 2.0)
-		draw_rect(Rect2(10, -10, 8, 4), GameManager.COLOR_STEEL, true)
+		# Animate the pickaxe while mining.
+		var swing: float = 0.0
+		if _state == State.MINE:
+			swing = sin(_mining_anim_timer * 15.0) * 0.6
+		var pivot: Vector2 = Vector2(4, 4)
+		draw_set_transform(pivot, swing, Vector2.ONE)
+		draw_line(Vector2.ZERO, Vector2(10, -10), GameManager.COLOR_STEEL, 2.0)
+		draw_rect(Rect2(6, -14, 8, 4), GameManager.COLOR_STEEL, true)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	elif data.unit_name == "Swordsman":
 		draw_line(Vector2(4, 4), Vector2(16, -8), Color.WHITE, 3.0)
 	elif data.unit_name == "Archer":
