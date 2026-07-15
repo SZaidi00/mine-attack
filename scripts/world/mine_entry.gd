@@ -10,7 +10,7 @@ var _underground_position: Vector2
 
 func _ready() -> void:
 	add_to_group("mine_entries")
-	_underground_position = global_position + Vector2(0, 3 * GridWorld.CELL_SIZE)
+	_underground_position = global_position + Vector2(0, 5 * GridWorld.CELL_SIZE)
 	queue_redraw()
 	if underground_spawn:
 		var node = get_node_or_null(underground_spawn)
@@ -35,6 +35,7 @@ func deposit(unit: Node2D) -> void:
 	var carried: int = unit.get("carried_coin")
 	if carried > 0:
 		EconomyManager.add_coin(team, carried)
+		EconomyManager.mine_coin(team, carried)
 		coin_deposited.emit(team, carried)
 		unit.set("carried_coin", 0)
 

@@ -2,6 +2,7 @@ class_name GridWorld
 extends Node2D
 
 signal cell_destroyed(grid_pos: Vector2i)
+signal wall_hp_changed(current: int, maximum: int)
 
 enum CellType { EMPTY, SURFACE_GROUND, DIRT, ORE, WALL }
 
@@ -29,10 +30,17 @@ const CELL_SIZE: int = 32
 const X_MIN: int = -40
 const X_MAX: int = 40
 const Y_MIN: int = 0
-const Y_MAX: int = 14
+const Y_MAX: int = 21
+
+# Central wall is a single objective with shared HP (GDD: 2000 HP).
+const WALL_HP_TOTAL: int = 2000
 
 var _cells: Dictionary = {}  # Vector2i -> Cell
 var _astar: AStarGrid2D = AStarGrid2D.new()
+
+var _wall_hp: int = WALL_HP_TOTAL
+var _wall_max_hp: int = WALL_HP_TOTAL
+var _central_wall_cells: Array[Vector2i] = []
 
 
 func _ready() -> void:
@@ -46,30 +54,28 @@ func _generate_map() -> void:
 	for x in range(X_MIN, X_MAX + 1):
 		_set_cell(Vector2i(x, 0), Cell.new(CellType.SURFACE_GROUND, 0, 99, 9999, 0))
 
-	# Underground layers.
+	# Underground layers: 3 rows per layer => 7 layers total.
 	for y in range(1, Y_MAX + 1):
-		var layer: int = (y - 1) / 2 + 1
-		var ml_req: int = 1
-		if layer >= 3 and layer <= 4:
-			ml_req = 2
-		elif layer >= 5:
-			ml_req = 3
-		var base_hp: int = 30 + layer * 10
-		var base_coin: int = 5 + layer * 3
+		var layer: int = (y - 1) / 3 + 1
+		var ml_req: int = _layer_miner_level(layer)
+		var tile_hp: int = _layer_tile_hp(layer)
 
 		for x in range(X_MIN, X_MAX + 1):
 			# Central wall (3 tiles thick).
 			if x in [-1, 0, 1]:
-				_set_cell(Vector2i(x, y), Cell.new(CellType.WALL, layer, 1, 400, 0, true))
+				var pos: Vector2i = Vector2i(x, y)
+				_set_cell(pos, Cell.new(CellType.WALL, layer, 1, 9999, 0, true))
+				_central_wall_cells.append(pos)
 				continue
 
 			# Ore chance rises with depth.
-			var is_ore: bool = randf() < (0.08 + layer * 0.02)
+			var is_ore: bool = randf() < (0.05 + layer * 0.03)
 			if is_ore:
-				var coin: int = base_coin + randi_range(0, layer * 2)
-				_set_cell(Vector2i(x, y), Cell.new(CellType.ORE, layer, ml_req, base_hp, coin))
+				var coin_range: Vector2i = _layer_coin_range(layer)
+				var coin: int = randi_range(coin_range.x, coin_range.y)
+				_set_cell(Vector2i(x, y), Cell.new(CellType.ORE, layer, ml_req, tile_hp, coin))
 			else:
-				_set_cell(Vector2i(x, y), Cell.new(CellType.DIRT, layer, ml_req, base_hp, 0))
+				_set_cell(Vector2i(x, y), Cell.new(CellType.DIRT, layer, ml_req, tile_hp, 0))
 
 	# Entry shafts (empty vertical corridors for own mine entry).
 	_carve_shaft(-15)
@@ -81,6 +87,34 @@ func _generate_map() -> void:
 		_set_cell(Vector2i(X_MAX + 1, y), Cell.new(CellType.WALL, 0, 99, 9999, 0, true))
 	for x in range(X_MIN - 1, X_MAX + 2):
 		_set_cell(Vector2i(x, Y_MAX + 1), Cell.new(CellType.WALL, 0, 99, 9999, 0, true))
+
+
+func _layer_miner_level(layer: int) -> int:
+	if layer <= 2:
+		return 1
+	if layer <= 4:
+		return 2
+	return 3
+
+
+func _layer_tile_hp(layer: int) -> int:
+	if layer <= 2:
+		return 50
+	if layer <= 4:
+		return 75
+	return 100
+
+
+func _layer_coin_range(layer: int) -> Vector2i:
+	match layer:
+		1: return Vector2i(5, 10)
+		2: return Vector2i(8, 15)
+		3: return Vector2i(12, 20)
+		4: return Vector2i(15, 25)
+		5: return Vector2i(20, 35)
+		6: return Vector2i(25, 40)
+		7: return Vector2i(30, 50)
+	return Vector2i(1, 2)
 
 
 func _init_astar() -> void:
@@ -99,7 +133,7 @@ func _set_cell(grid_pos: Vector2i, cell: Cell) -> void:
 
 
 func _carve_shaft(x: int) -> void:
-	for y in range(1, 5):
+	for y in range(1, 7):
 		var pos: Vector2i = Vector2i(x, y)
 		_cells.erase(pos)
 
@@ -157,9 +191,9 @@ func damage_cell(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
 		return 0
 	if miner_level < cell.miner_level_required:
 		return 0
+
 	if cell.is_wall:
-		# Walls take reduced damage from low-level miners.
-		damage = max(1, damage * miner_level)
+		return _damage_wall(grid_pos, damage, miner_level)
 
 	cell.hp -= damage
 	if cell.hp <= 0:
@@ -173,9 +207,54 @@ func damage_cell(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
 	return 0
 
 
+func _damage_wall(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
+	# Only the central wall uses the shared HP pool.
+	if not _central_wall_cells.has(grid_pos):
+		return 0
+
+	# Walls take reduced damage from low-level miners.
+	var applied: int = max(1, damage * miner_level)
+	_wall_hp -= applied
+	wall_hp_changed.emit(_wall_hp, _wall_max_hp)
+
+	if _wall_hp <= 0:
+		for pos in _central_wall_cells:
+			_cells.erase(pos)
+			_astar.set_point_solid(pos, false)
+		_central_wall_cells.clear()
+		_wall_hp = 0
+		queue_redraw()
+		cell_destroyed.emit(grid_pos)
+	else:
+		queue_redraw()
+	return 0
+
+
 func is_wall(grid_pos: Vector2i) -> bool:
 	var cell: Cell = _cells.get(grid_pos)
 	return cell != null and cell.is_wall
+
+
+func is_central_wall(grid_pos: Vector2i) -> bool:
+	return _central_wall_cells.has(grid_pos)
+
+
+func get_wall_cells() -> Array[Vector2i]:
+	return _central_wall_cells.duplicate()
+
+
+func get_wall_hp() -> int:
+	return _wall_hp
+
+
+func get_wall_max_hp() -> int:
+	return _wall_max_hp
+
+
+func get_wall_hp_ratio() -> float:
+	if _wall_max_hp <= 0:
+		return 0.0
+	return float(_wall_hp) / float(_wall_max_hp)
 
 
 func get_layer_at(grid_pos: Vector2i) -> int:
@@ -207,6 +286,18 @@ func _draw() -> void:
 			CellType.WALL:
 				draw_rect(rect, GameManager.COLOR_STEEL, true)
 				draw_rect(rect, GameManager.COLOR_SHADOW, false, 2.0)
+
+
+	# Central wall HP bar.
+	if _wall_hp > 0:
+		var bar_w: float = 200
+		var bar_h: float = 12
+		var bar_x: float = -bar_w / 2.0
+		var bar_y: float = 16
+		draw_rect(Rect2(bar_x, bar_y, bar_w, bar_h), Color.BLACK, true)
+		var wall_pct: float = get_wall_hp_ratio()
+		draw_rect(Rect2(bar_x, bar_y, bar_w * wall_pct, bar_h), Color.ORANGE_RED, true)
+		draw_rect(Rect2(bar_x, bar_y, bar_w, bar_h), Color.WHITE, false, 1.0)
 
 
 func _dirt_color(layer: int) -> Color:

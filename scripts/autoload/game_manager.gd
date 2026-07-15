@@ -18,6 +18,12 @@ const COLOR_DIRT_3: Color = Color("#4A3B26")
 signal game_over(winner: Team)
 
 var game_active: bool = true
+var match_time: float = 0.0
+
+
+func _process(delta: float) -> void:
+	if game_active:
+		match_time += delta
 
 
 func declare_winner(winner: Team) -> void:

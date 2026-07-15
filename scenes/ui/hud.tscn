@@ -38,10 +38,22 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Miner Lv: 1"
 
-[node name="QueueLabel" type="Label" parent="TopBar/HBoxContainer"]
+[node name="QueuePanel" type="HBoxContainer" parent="TopBar/HBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Queue: -"
+
+[node name="QueueLabel" type="Label" parent="TopBar/HBoxContainer/QueuePanel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Queue: "
+
+[node name="ProgressBar" type="ProgressBar" parent="TopBar/HBoxContainer/QueuePanel"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 16)
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+value = 0.0
 
 [node name="SelectionLabel" type="Label" parent="TopBar/HBoxContainer"]
 unique_name_in_owner = true
@@ -88,7 +100,7 @@ text = "Archer (150)"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(120, 44)
 layout_mode = 2
-text = "Wizard (300)"
+text = "Wizard (250)"
 
 [node name="UpgradeMinerButton" type="Button" parent="BottomBar/HBoxContainer"]
 unique_name_in_owner = true
@@ -113,6 +125,21 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(120, 44)
 layout_mode = 2
 text = "Garrison"
+
+[node name="SurfaceButton" type="Button" parent="BottomBar/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 44)
+layout_mode = 2
+text = "Surface"
+toggle_mode = true
+button_pressed = true
+
+[node name="UndergroundButton" type="Button" parent="BottomBar/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 44)
+layout_mode = 2
+text = "Underground"
+toggle_mode = true
 
 [node name="GameOverPanel" type="PanelContainer" parent="."]
 visible = false
@@ -140,6 +167,11 @@ alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
+
+[node name="PlayAgainButton" type="Button" parent="GameOverPanel/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Play Again"
 
 [node name="QuitButton" type="Button" parent="GameOverPanel/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true

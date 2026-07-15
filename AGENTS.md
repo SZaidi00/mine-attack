@@ -97,7 +97,7 @@ mine-attack/
 Autoload singletons (configured in `project.godot`):
 
 - `GameManager` — global game state, team enum, shared color palette, population cap, win/loss signals.
-- `EconomyManager` — coin balances, population counts, miner upgrade levels. Emits `coin_changed`, `population_changed`, `miner_level_changed`.
+- `EconomyManager` — coin balances, population counts, miner upgrade levels, units trained, coin mined. Emits `coin_changed`, `population_changed`, `miner_level_changed`, `stats_changed`.
 
 ---
 
@@ -115,17 +115,18 @@ Global singletons accessible from any script via their class name.
   - `declare_winner(winner: Team)`
 
 - `economy_manager.gd`
-  - `STARTING_COIN = 350`
-  - `UNIT_COSTS`: miner 50, swordsman 100, archer 150, wizard 300.
-  - `MINER_UPGRADE_COSTS`: level 2 → 250, level 3 → 600.
-  - Coin, population, and miner-level getters/setters with signals.
+  - `STARTING_COIN = 150`
+  - `UNIT_COSTS`: miner 50, swordsman 100, archer 150, wizard 250.
+  - `MINER_UPGRADE_COSTS`: level 2 → 500, level 3 → 1500.
+  - Coin, population, miner-level, units-trained, and coin-mined getters/setters with signals.
 
 ### `scripts/controllers/`
 
 - `player_controller.gd`
-  - Handles selection box, single/box selection, camera pan/zoom, hotkeys.
-  - Issues context-sensitive commands on right-click: attack, mine, enter/exit mine, move.
-  - Provides UI callbacks: `train_unit(unit_id)`, `upgrade_miner()`, `set_stance(stance)`.
+  - Handles selection box, single/box selection (with Shift add-to-selection), camera pan/zoom, hotkeys.
+  - Issues context-sensitive commands on right-click: attack, mine, breach wall, enter/exit mine, move.
+  - Supports view toggle (Tab / Surface / Underground buttons) and pause (Space / Esc).
+  - Provides UI callbacks: `train_unit(unit_id)`, `upgrade_miner()`, `set_stance(stance)`, `set_view(underground)`.
 
 - `ai_controller.gd`
   - Tick-driven AI with separate timers for economy (2s), mining (1s), and attack waves (18s).
@@ -137,14 +138,17 @@ Global singletons accessible from any script via their class name.
 - `grid_world.gd`
   - `CellType` enum: `EMPTY`, `SURFACE_GROUND`, `DIRT`, `ORE`, `WALL`.
   - `Cell` inner class holds type, hp, layer, miner level requirement, coin value, wall flag.
-  - Procedural map generation with central 3-tile wall, ore distribution, entry shafts, borders.
+  - Procedural map generation with 7 underground layers (3 rows per layer), layer-specific tile HP and ore coin values, entry shafts, borders.
+  - Central wall is a single shared 2000 HP objective spanning all layers at `x = -1, 0, 1`.
   - Uses `AStarGrid2D` for pathfinding.
-  - `damage_cell()` applies mining damage and returns coin when destroyed.
+  - `damage_cell()` applies mining damage and returns coin when destroyed; wall damage reduces the shared wall HP pool.
 
 - `building.gd`
-  - Training queue with `queue_unit(unit_id)`.
+  - Training queue with `queue_unit(unit_id)` and `cancel_queue(index)` (100% refund).
+  - Default building HP is 5000.
   - Spawns units at the building front and automatically sends miners into the mine.
   - Emits `hp_changed`, `queue_changed`, `destroyed`.
+  - Draws a health bar above the building.
   - Marks its footprint as solid on the grid.
 
 - `mine_entry.gd`
@@ -156,9 +160,11 @@ Global singletons accessible from any script via their class name.
 - `unit.gd`
   - Large state machine: `IDLE`, `MOVE`, `ATTACK`, `MINE`, `DEPOSIT`, `ENTER_MINE`, `EXIT_MINE`, `DEAD`.
   - Command API: `move_to`, `attack_unit`, `attack_building`, `mine_cell`, `deposit_coin`, `enter_mine`, `exit_mine`, `stop`.
-  - Miners auto-enter mine on spawn and auto-seek diggable cells when idle.
+  - Miners auto-enter mine on spawn, auto-seek diggable cells when idle, and flee toward friendly fighters or the mine entry when attacked.
+  - Fighters auto-attack nearby enemies (fighters → building → enemy miners on own side) and patrol underground when idle.
+  - Fighters move at 60% speed while underground.
   - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`).
-  - Custom `_draw()` renders each unit as a colored rectangle with class-specific weapon icons.
+  - Custom `_draw()` renders each unit as a colored rectangle with class-specific weapon icons and an HP bar when damaged.
 
 - `projectile.gd`
   - Homing arrow / fireball projectile.
@@ -171,7 +177,7 @@ Global singletons accessible from any script via their class name.
 
 ### `scripts/ui/`
 
-- `hud.gd` — wires buttons to `PlayerController`, listens to economy and queue signals, updates labels, shows game-over panel.
+- `hud.gd` — wires buttons to `PlayerController`, listens to economy and queue signals, updates labels, shows training progress, displays clickable training queue with cancel, toggles surface/underground view, and shows game-over stats panel with Play Again.
 
 ---
 
@@ -236,22 +242,30 @@ Defined in `project.godot` under `[input]`:
 | `camera_right` | D / Right arrow |
 | `camera_zoom_in` | Mouse wheel up |
 | `camera_zoom_out` | Mouse wheel down |
+| `train_miner` | `1` |
+| `train_swordsman` | `2` |
+| `train_archer` | `3` |
+| `train_wizard` | `4` |
+| `toggle_view` | Tab |
+| `pause` | Space / Esc |
+| Add to selection | Shift + click / drag |
 
 ---
 
 ## Gameplay rules and balance
 
 - **Population cap:** 100 per team.
-- **Starting coin:** 350 per team.
+- **Starting coin:** 150 per team.
 - **Units:** Miner, Swordsman, Archer, Wizard.
 - **Miner upgrades:**
-  - Level 2 costs 250, unlocks layers 3–4, +5 carry capacity, +10 HP, +1 mining rate.
-  - Level 3 costs 600, unlocks layers 5–7, +10 carry capacity (cumulative), +15 HP, +2 mining rate.
+  - Level 2 costs 500, unlocks layers 3–4, +5 carry capacity, +10 HP, +1 mining rate.
+  - Level 3 costs 1500, unlocks layers 5–7, +10 carry capacity (cumulative), +15 HP, +2 mining rate.
 - **Layers:**
-  - Layers 1–2: miner level 1.
-  - Layers 3–4: miner level 2.
-  - Layers 5–7: miner level 3.
-- **Central wall:** A 3-tile thick wall at `x = -1, 0, 1` separates the two sides. Miners on either team can break it by mining.
+  - 7 underground layers, 3 grid rows each (~96 px per layer).
+  - Layers 1–2: miner level 1, tile HP 50, ore coin 5–10 / 8–15.
+  - Layers 3–4: miner level 2, tile HP 75, ore coin 12–20 / 15–25.
+  - Layers 5–7: miner level 3, tile HP 100, ore coin 20–35 / 25–40 / 30–50.
+- **Central wall:** A 3-tile thick wall at `x = -1, 0, 1` spans all layers and shares a single 2000 HP pool. Miners on either team can breach it with an explicit right-click command.
 - **Win condition:** Destroy the enemy building.
 
 ---

@@ -13,6 +13,8 @@ var _zoom_max: float = 2.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
+var _underground_view: bool = true
+
 
 func _ready() -> void:
 	if selection_box:
@@ -36,7 +38,17 @@ func _process(delta: float) -> void:
 	var half_size: Vector2 = get_viewport().get_visible_rect().size / (2.0 * camera.zoom)
 	var min_pos: Vector2 = Vector2((GridWorld.X_MIN - 2) * GridWorld.CELL_SIZE, -300)
 	var max_pos: Vector2 = Vector2((GridWorld.X_MAX + 3) * GridWorld.CELL_SIZE, (GridWorld.Y_MAX + 4) * GridWorld.CELL_SIZE)
-	camera.position = camera.position.clamp(min_pos + half_size, max_pos - half_size)
+	var lo: Vector2 = min_pos + half_size
+	var hi: Vector2 = max_pos - half_size
+	if lo.x > hi.x:
+		var mid_x: float = (min_pos.x + max_pos.x) / 2.0
+		lo.x = mid_x
+		hi.x = mid_x
+	if lo.y > hi.y:
+		var mid_y: float = (min_pos.y + max_pos.y) / 2.0
+		lo.y = mid_y
+		hi.y = mid_y
+	camera.position = camera.position.clamp(lo, hi)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -72,6 +84,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera.zoom = (camera.zoom * 1.1).clamp(Vector2(_zoom_min, _zoom_min), Vector2(_zoom_max, _zoom_max))
 	elif event.is_action_pressed("camera_zoom_out"):
 		camera.zoom = (camera.zoom / 1.1).clamp(Vector2(_zoom_min, _zoom_min), Vector2(_zoom_max, _zoom_max))
+	elif event.is_action_pressed("train_miner"):
+		train_unit("miner")
+	elif event.is_action_pressed("train_swordsman"):
+		train_unit("swordsman")
+	elif event.is_action_pressed("train_archer"):
+		train_unit("archer")
+	elif event.is_action_pressed("train_wizard"):
+		train_unit("wizard")
+	elif event.is_action_pressed("toggle_view"):
+		_toggle_view()
+	elif event.is_action_pressed("pause"):
+		get_tree().paused = not get_tree().paused
 
 	if _is_dragging and event is InputEventMouseMotion:
 		_update_selection_box(get_viewport().get_mouse_position())
@@ -86,16 +110,25 @@ func _update_selection_box(current: Vector2) -> void:
 
 func _single_select(screen_pos: Vector2) -> void:
 	var world_pos: Vector2 = _screen_to_world(screen_pos)
+	var shift: bool = Input.is_key_pressed(KEY_SHIFT)
 	# Check units first.
 	var clicked_unit: Unit = _unit_at(world_pos)
 	if clicked_unit != null and clicked_unit.team == GameManager.Team.PLAYER:
-		_select_units([clicked_unit])
+		if shift:
+			if not _selected_units.has(clicked_unit):
+				_selected_units.append(clicked_unit)
+			_select_units(_selected_units)
+		else:
+			_select_units([clicked_unit])
 		return
 	# Then buildings.
 	var clicked_building: Node2D = _building_at(world_pos)
 	if clicked_building != null and clicked_building.get("team") == GameManager.Team.PLAYER:
-		_select_units([])
+		if not shift:
+			_select_units([])
 		# TODO: building selection UI.
+		return
+	if shift:
 		return
 	_select_units([])
 
@@ -108,7 +141,13 @@ func _box_select(start: Vector2, end: Vector2) -> void:
 		var sp: Vector2 = camera.unproject_position(unit.global_position)
 		if sp.x >= min_p.x and sp.x <= max_p.x and sp.y >= min_p.y and sp.y <= max_p.y:
 			units.append(unit)
-	_select_units(units)
+	if Input.is_key_pressed(KEY_SHIFT):
+		for u in units:
+			if not _selected_units.has(u):
+				_selected_units.append(u)
+		_select_units(_selected_units)
+	else:
+		_select_units(units)
 
 
 func _select_units(units: Array) -> void:
@@ -142,8 +181,18 @@ func _issue_command(screen_pos: Vector2) -> void:
 				u.attack_building(enemy_building)
 		return
 
-	# Diggable cell clicked -> mine with miners.
+	# Central wall clicked -> breach with miners.
 	var grid_pos: Vector2i = _grid.world_to_grid(world_pos)
+	if _grid.is_central_wall(grid_pos):
+		var any_miner: bool = false
+		for u in _selected_units:
+			if u.data.is_miner:
+				u.mine_cell(grid_pos)
+				any_miner = true
+		if any_miner:
+			return
+
+	# Diggable cell clicked -> mine with miners.
 	if _grid.has_cell(grid_pos) and _grid.get_cell(grid_pos).type != GridWorld.CellType.SURFACE_GROUND:
 		var any_miner: bool = false
 		for u in _selected_units:
@@ -242,6 +291,21 @@ func train_unit(unit_id: String) -> void:
 
 func upgrade_miner() -> void:
 	EconomyManager.upgrade_miner(GameManager.Team.PLAYER)
+
+
+func _toggle_view() -> void:
+	set_view(not _underground_view)
+
+
+func set_view(underground: bool) -> void:
+	if camera == null:
+		return
+	_underground_view = underground
+	camera.position.y = 400.0 if _underground_view else -150.0
+
+
+func is_underground_view() -> bool:
+	return _underground_view
 
 
 func set_stance(stance: String) -> void:

@@ -5,7 +5,7 @@ signal queue_changed(entries: Array)
 signal destroyed(team: GameManager.Team)
 
 @export var team: GameManager.Team = GameManager.Team.PLAYER
-@export var max_hp: int = 2500
+@export var max_hp: int = 5000
 @export var unit_scene: PackedScene
 @export var width_cells: int = 6
 @export var height_cells: int = 5
@@ -33,12 +33,13 @@ func _mark_footprint_solid() -> void:
 		return
 	var origin: Vector2i = _grid.world_to_grid(global_position)
 	for x in range(-width_cells / 2, width_cells / 2):
-		for y in range(0, -height_cells, -1):
+		# Keep the surface row (y = 0) walkable so units can pass the base.
+		for y in range(-1, -height_cells, -1):
 			var pos: Vector2i = origin + Vector2i(x, y)
-			# Replace surface cells with building cells so units path around.
 			if _grid.has_cell(pos):
 				_grid._cells[pos] = GridWorld.Cell.new(GridWorld.CellType.WALL, 0, 99, 9999, 0, true)
-				_grid._astar.set_point_solid(pos, true)
+				if _grid._astar.is_in_boundsv(pos):
+					_grid._astar.set_point_solid(pos, true)
 
 
 func _process(delta: float) -> void:
@@ -67,12 +68,13 @@ func queue_unit(unit_id: String) -> bool:
 	return true
 
 
-func _spawn_front(unit_id: String, data: UnitData) -> void:
+func _spawn_front(_unit_id: String, data: UnitData) -> void:
 	if not EconomyManager.can_add_population(team, data.population):
 		# Refund if cap reached.
 		EconomyManager.add_coin(team, data.cost)
 		return
 	EconomyManager.add_population(team, data.population)
+	EconomyManager.train_unit(team)
 	var unit: Node2D = unit_scene.instantiate()
 	var data_copy: UnitData = data.duplicate(true)
 	unit.set("data", data_copy)
@@ -104,6 +106,16 @@ func get_queue() -> Array:
 	return _queue
 
 
+func cancel_queue(index: int) -> bool:
+	if _queue.is_empty() or index < 0 or index >= _queue.size():
+		return false
+	var entry = _queue[index]
+	EconomyManager.add_coin(team, entry.data.cost)
+	_queue.remove_at(index)
+	queue_changed.emit(_queue)
+	return true
+
+
 func _draw() -> void:
 	var w: float = width_cells * GridWorld.CELL_SIZE
 	var h: float = height_cells * GridWorld.CELL_SIZE
@@ -115,3 +127,12 @@ func _draw() -> void:
 	draw_rect(Rect2(rect.position.x + 8, rect.position.y + 8, w - 16, 12), color.darkened(0.3), true)
 	draw_rect(Rect2(rect.position.x + 12, rect.position.y + h - 20, 16, 20), GameManager.COLOR_SHADOW, true)
 	draw_rect(Rect2(rect.position.x + w - 28, rect.position.y + h - 20, 16, 20), GameManager.COLOR_SHADOW, true)
+
+	# Health bar.
+	var hp_pct: float = float(_hp) / float(max_hp)
+	var bar_w: float = w - 16
+	var bar_h: float = 8
+	var bar_pos: Vector2 = Vector2(rect.position.x + 8, rect.position.y - 16)
+	draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color.BLACK, true)
+	var fill_color: Color = Color.GREEN if team == GameManager.Team.PLAYER else Color.RED
+	draw_rect(Rect2(bar_pos, Vector2(bar_w * hp_pct, bar_h)), fill_color, true)

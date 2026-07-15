@@ -25,6 +25,8 @@ var _attack_timer: float = 0.0
 var _mine_timer: float = 0.0
 var _mining_anim_timer: float = 0.0
 var _dead_timer: float = 0.0
+var _flee_timer: float = 0.0
+var _flee_target: Vector2 = Vector2.ZERO
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -39,9 +41,11 @@ func _ready() -> void:
 	_add_hover_area()
 	add_to_group(team_name())
 	queue_redraw()
-	# Miners should start working immediately instead of waiting for a command.
-	if data.is_miner and _state == State.IDLE:
-		_handle_idle_miner()
+	# Spawners (the building) are responsible for issuing the first command.
+	# This avoids double-ordering a miner before its first _process tick.
+	# Deferred safety net: if a surface miner is still idle after spawn, send it in.
+	if data.is_miner:
+		call_deferred("_deferred_enter_mine_check")
 
 
 func _process(delta: float) -> void:
@@ -52,10 +56,21 @@ func _process(delta: float) -> void:
 			queue_free()
 		return
 
+	if _flee_timer > 0:
+		_flee_timer -= delta
+		if _state == State.IDLE:
+			_continue_flee()
+		match _state:
+			State.MOVE:
+				_follow_path(delta)
+		return
+
 	if data.is_miner:
 		_apply_miner_upgrade()
 		if _state == State.IDLE:
 			_handle_idle_miner()
+	elif data.is_fighter and _state == State.IDLE:
+		_handle_idle_fighter()
 	match _state:
 		State.MOVE:
 			_follow_path(delta)
@@ -128,6 +143,9 @@ func enter_mine() -> void:
 	var entry: Node2D = _nearest_friendly_mine_entry()
 	if entry:
 		_repath(entry.global_position)
+		# If A* can't find a route, walk straight to the shaft instead of freezing.
+		if _path.is_empty():
+			_path.append(entry.global_position)
 	else:
 		_state = State.IDLE
 
@@ -153,6 +171,8 @@ func take_damage(amount: int) -> void:
 	queue_redraw()
 	if hp <= 0:
 		_die()
+	elif data.is_miner:
+		_start_flee()
 
 
 # ---------- State processing ----------
@@ -172,7 +192,10 @@ func _follow_path(delta: float) -> void:
 		target = _path[_path_index]
 		dir = target - global_position
 		dist = dir.length()
-	var step: float = data.speed * delta
+	var speed: float = data.speed
+	if is_underground and data.is_fighter:
+		speed *= 0.6
+	var step: float = speed * delta
 	global_position += dir.normalized() * min(step, dist)
 
 
@@ -276,6 +299,9 @@ func _process_enter_mine(delta: float) -> void:
 		return
 	if global_position.distance_to(entry.global_position) > GridWorld.CELL_SIZE:
 		_repath(entry.global_position)
+		# Fallback: walk straight to the mine entry if pathfinding fails.
+		if _path.is_empty():
+			_path.append(entry.global_position)
 		_follow_path(delta)
 		return
 	entry.call("enter_mine", self)
@@ -309,9 +335,14 @@ func _clear_target() -> void:
 func _repath(target_world: Vector2) -> void:
 	_path = _grid.find_path(global_position, target_world)
 	_path_index = 0
-	# Skip the first point if it is the current cell.
-	if _path.size() > 1 and _path[0].distance_to(global_position) < 4.0:
-		_path_index = 1
+	# Skip the first point if it is the current cell or if moving to it would
+	# send us backward relative to the overall target direction (can happen when
+	# the unit spawns on a sub-cell position and A* returns the cell center).
+	if _path.size() > 1:
+		var to_first: Vector2 = _path[0] - global_position
+		var to_target: Vector2 = target_world - global_position
+		if to_first.distance_to(Vector2.ZERO) < 4.0 or to_first.dot(to_target) < 0.0:
+			_path_index = 1
 
 
 func _nearest_adjacent_world(grid_pos: Vector2i) -> Vector2:
@@ -348,8 +379,14 @@ func _find_and_mine() -> void:
 	var best_score: float = 999999.0
 	var best_reachable: bool = false
 
+	# Scan forward into the team's own side first so ties are broken toward the
+	# center wall rather than back toward the friendly building.
+	var x_start: int = 16 if team_dir == -1 else -16
+	var x_end: int = -17 if team_dir == -1 else 17
+	var x_step: int = -1 if team_dir == -1 else 1
+
 	var scan := func(types: Array, reachable_only: bool) -> void:
-		for x in range(-16, 17):
+		for x in range(x_start, x_end, x_step):
 			for y in range(-2, 16):
 				var pos: Vector2i = center + Vector2i(x, y)
 				var cell: GridWorld.Cell = _grid.get_cell(pos)
@@ -430,6 +467,13 @@ func _die() -> void:
 	queue_redraw()
 
 
+func _deferred_enter_mine_check() -> void:
+	if data == null or not data.is_miner:
+		return
+	if not is_underground and _state == State.IDLE:
+		enter_mine()
+
+
 func team_name() -> String:
 	return "player" if team == GameManager.Team.PLAYER else "enemy"
 
@@ -442,6 +486,138 @@ func _is_enemy_underground(world_pos: Vector2) -> bool:
 	if world_pos.y <= GridWorld.CELL_SIZE:
 		return false
 	return world_pos.x * _team_dir() > 0
+
+
+func _start_flee() -> void:
+	_flee_timer = 3.0
+	var friendly_fighter: Unit = _nearest_friendly_fighter()
+	if friendly_fighter != null and global_position.distance_to(friendly_fighter.global_position) <= 300:
+		_flee_target = friendly_fighter.global_position
+	else:
+		var entry: Node2D = _nearest_friendly_mine_entry()
+		if entry == null:
+			_flee_timer = 0.0
+			return
+		_flee_target = entry.global_position
+	_clear_target()
+	_target_position = _flee_target
+	_state = State.MOVE
+	_repath(_flee_target)
+
+
+func _continue_flee() -> void:
+	if _flee_target == Vector2.ZERO:
+		return
+	_state = State.MOVE
+	_repath(_flee_target)
+
+
+func _nearest_friendly_fighter() -> Unit:
+	var best: Unit = null
+	var best_dist: float = 999999.0
+	for unit in get_tree().get_nodes_in_group(team_name()):
+		if unit == self or not unit.data.is_fighter:
+			continue
+		if unit._state == State.DEAD:
+			continue
+		var d: float = global_position.distance_squared_to(unit.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = unit
+	return best
+
+
+func _handle_idle_fighter() -> void:
+	var target = _find_auto_attack_target()
+	if target != null:
+		if target is Unit:
+			attack_unit(target)
+		else:
+			attack_building(target)
+		return
+	if is_underground:
+		_patrol_underground()
+
+
+func _find_auto_attack_target():
+	# 1. Enemy fighters in attack range (closest first).
+	var best: Unit = null
+	var best_dist: float = data.attack_range * data.attack_range
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit.team == team or unit._state == State.DEAD:
+			continue
+		if not unit.data.is_fighter:
+			continue
+		var d: float = global_position.distance_squared_to(unit.global_position)
+		if d <= best_dist:
+			best_dist = d
+			best = unit
+	if best != null:
+		return best
+
+	# 2. Enemy fighters in sight range.
+	best = null
+	best_dist = data.sight_range * data.sight_range
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit.team == team or unit._state == State.DEAD:
+			continue
+		if not unit.data.is_fighter:
+			continue
+		var d: float = global_position.distance_squared_to(unit.global_position)
+		if d <= best_dist:
+			best_dist = d
+			best = unit
+	if best != null:
+		return best
+
+	# 3. Enemy building in sight range.
+	var enemy_building: Node2D = _get_enemy_building()
+	if enemy_building != null:
+		var d: float = global_position.distance_squared_to(enemy_building.global_position)
+		if d <= data.sight_range * data.sight_range:
+			return enemy_building
+
+	# 4. Enemy miners on our side of the wall (underground only).
+	if is_underground:
+		best = null
+		best_dist = data.sight_range * data.sight_range
+		var team_dir: int = _team_dir()
+		for unit in get_tree().get_nodes_in_group("units"):
+			if unit.team == team or unit._state == State.DEAD:
+				continue
+			if not unit.data.is_miner:
+				continue
+			var grid_x: int = _grid.world_to_grid(unit.global_position).x
+			if grid_x * team_dir < 2:
+				continue
+			var d: float = global_position.distance_squared_to(unit.global_position)
+			if d <= best_dist:
+				best_dist = d
+				best = unit
+		if best != null:
+			return best
+	return null
+
+
+func _patrol_underground() -> void:
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry == null:
+		return
+	var center: Vector2 = entry.call("get_underground_position")
+	var angle: float = randf() * TAU
+	var radius: float = randf_range(80, 240)
+	var target: Vector2 = center + Vector2(cos(angle), sin(angle)) * radius
+	# Clamp within the mine bounds.
+	target.x = clamp(target.x, (GridWorld.X_MIN + 1) * GridWorld.CELL_SIZE, (GridWorld.X_MAX - 1) * GridWorld.CELL_SIZE)
+	target.y = clamp(target.y, GridWorld.CELL_SIZE, GridWorld.Y_MAX * GridWorld.CELL_SIZE)
+	move_to(target)
+
+
+func _get_enemy_building() -> Node2D:
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.get("team") != team:
+			return b
+	return null
 
 
 func _add_hover_area() -> void:
@@ -509,8 +685,8 @@ func _draw() -> void:
 		draw_line(Vector2(6, 6), Vector2(12, -14), GameManager.COLOR_RUST, 2.0)
 		draw_circle(Vector2(12, -16), 4, Color.PURPLE)
 
-	# HP bar (only on hover or selection).
-	if selected or hovered:
+	# HP bar when damaged, hovered, or selected.
+	if selected or hovered or hp < data.max_hp:
 		var hp_pct: float = float(hp) / float(data.max_hp)
 		draw_rect(Rect2(-10, -size / 2.0 - 8, 20, 4), Color.BLACK, true)
 		draw_rect(Rect2(-10, -size / 2.0 - 8, 20 * hp_pct, 4), Color.GREEN, true)
