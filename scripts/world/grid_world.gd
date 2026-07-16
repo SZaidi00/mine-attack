@@ -26,6 +26,10 @@ class Cell:
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
+const _SKY_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_sky.png")
+const _SURFACE_GROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_ground.png")
+const _UNDERGROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/underground_base.png")
+
 const CELL_SIZE: int = _Constants.TILE_SIZE
 
 # Map bounds in grid coordinates.
@@ -266,8 +270,22 @@ func count_accessible_unmined_tiles(side: int, miner_level: int) -> int:
 
 
 func _draw() -> void:
-	# Background fill for underground.
-	draw_rect(Rect2((X_MIN - 1) * CELL_SIZE, CELL_SIZE, (X_MAX - X_MIN + 3) * CELL_SIZE, Y_MAX * CELL_SIZE), GameManager.COLOR_SHADOW, true)
+	var world_left: float = (X_MIN - 1) * CELL_SIZE
+	var world_right: float = (X_MAX + 2) * CELL_SIZE
+	var world_width: float = world_right - world_left
+
+	# Sky background.
+	var sky_height: float = _SKY_TEXTURE.get_height()
+	draw_texture_rect(_SKY_TEXTURE, Rect2(world_left, -sky_height, world_width, sky_height), true)
+
+	# Surface ground background (top 32 px will remain visible above the underground).
+	var ground_height: float = _SURFACE_GROUND_TEXTURE.get_height()
+	draw_texture_rect(_SURFACE_GROUND_TEXTURE, Rect2(world_left, 0, world_width, ground_height), true)
+
+	# Underground background.
+	var underground_y: float = CELL_SIZE
+	var underground_height: float = Y_MAX * CELL_SIZE
+	draw_texture_rect(_UNDERGROUND_TEXTURE, Rect2(world_left, underground_y, world_width, underground_height), true)
 
 	for pos in _cells.keys():
 		var cell: Cell = _cells[pos]

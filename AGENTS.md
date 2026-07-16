@@ -240,7 +240,7 @@ godot --headless --export-release "Web" build/MineAttack.html
   - `"buildings"` — all buildings.
   - `"mine_entries"` — all mine shafts.
 - **Signals:** UI and controllers connect to signals emitted by `EconomyManager`, `Building`, `GameManager`, and `MineEntry` rather than polling.
-- **Drawing:** Most world visuals (buildings, effects, grid) are code-drawn (`_draw()`) using simple rectangles and arcs. Units use sprite assets from `frost_mines_assets/units/` assigned through `UnitData.player_textures` / `enemy_textures`, with miners swapping by upgrade level. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
+- **Drawing:** Buildings, effects, and foreground grid tiles are code-drawn (`_draw()`) using simple rectangles and arcs. Backgrounds use sprite assets from `frost_mines_assets/backgrounds/` (sky, surface ground, underground base). Units use sprite assets from `frost_mines_assets/units/` assigned through `UnitData.player_textures` / `enemy_textures`, with miners swapping by upgrade level. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
 
 ---
 
