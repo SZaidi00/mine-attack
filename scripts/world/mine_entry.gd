@@ -38,6 +38,14 @@ func deposit(unit: Node2D) -> void:
 		EconomyManager.mine_coin(team, carried)
 		coin_deposited.emit(team, carried)
 		unit.set("carried_coin", 0)
+		_spawn_coin_popup(carried)
+
+
+func _spawn_coin_popup(amount: int) -> void:
+	var popup: CoinPopup = preload("res://scenes/effects/coin_popup.tscn").instantiate()
+	popup.setup(amount)
+	popup.global_position = global_position + Vector2(0, -30)
+	get_tree().current_scene.add_child(popup)
 
 
 func enter_mine(unit: Node2D) -> void:

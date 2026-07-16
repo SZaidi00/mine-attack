@@ -54,6 +54,7 @@ mine-attack/
 │   └── ui/hud.tscn            # In-game UI
 └── scripts/                   # GDScript source files
     ├── autoload/              # Global singletons
+    │   ├── constants.gd       # Centralized balance and input constants
     │   ├── game_manager.gd    # Game state, teams, colors, win/loss
     │   └── economy_manager.gd # Coin, population, miner upgrades
     ├── controllers/           # High-level gameplay controllers
@@ -67,7 +68,13 @@ mine-attack/
     │       ├── archer.tres
     │       └── wizard.tres
     ├── ui/                    # UI logic
-    │   └── hud.gd             # HUD updates and button callbacks
+    │   ├── hud.gd             # HUD updates and button callbacks
+    │   ├── layer_indicator.gd # Accessible underground layer indicator
+    │   ├── training_queue_panel.gd # Training queue display and cancel
+    │   └── unit_button.gd     # Train button with cost/disable/shake
+    ├── effects/               # Floating text effects
+    │   ├── coin_popup.gd      # Coin deposit popup
+    │   └── damage_popup.gd    # Damage number popup
     ├── units/                 # Unit behavior
     │   ├── unit.gd            # Main unit state machine
     │   └── projectile.gd      # Projectile movement and damage
@@ -107,14 +114,18 @@ Autoload singletons (configured in `project.godot`):
 
 Global singletons accessible from any script via their class name.
 
+- `constants.gd` (autoloaded first)
+  - Centralized balance numbers: unit costs, train times, fighter/miner stats, miner upgrade costs, building/wall HP, underground layer data, grid bounds, and input action names.
+
 - `game_manager.gd`
   - `enum Team { PLAYER, ENEMY }`
-  - Constants: `POPULATION_CAP = 100`, team colors, terrain colors.
+  - Constants: team colors, terrain colors.
   - `signal game_over(winner: Team)`
   - `game_active: bool`
   - `declare_winner(winner: Team)`
 
 - `economy_manager.gd`
+  - Reads balance values from `Constants`.
   - `STARTING_COIN = 150`
   - `UNIT_COSTS`: miner 50, swordsman 100, archer 150, wizard 250.
   - `MINER_UPGRADE_COSTS`: level 2 → 500, level 3 → 1500.
@@ -177,7 +188,15 @@ Global singletons accessible from any script via their class name.
 
 ### `scripts/ui/`
 
-- `hud.gd` — wires buttons to `PlayerController`, listens to economy and queue signals, updates labels, shows training progress, displays clickable training queue with cancel, toggles surface/underground view, and shows game-over stats panel with Play Again.
+- `hud.gd` — wires non-training buttons to `PlayerController`, listens to economy signals, updates labels, toggles surface/underground view, and shows game-over stats panel with Play Again.
+- `unit_button.gd` — train button with cost/train-time labels, affordability/disable state, and failure shake.
+- `training_queue_panel.gd` — shows currently training unit progress and queued units that can be cancelled.
+- `layer_indicator.gd` — highlights accessible underground layers based on miner upgrade level.
+
+### `scripts/effects/`
+
+- `damage_popup.gd` — floating red/green combat numbers.
+- `coin_popup.gd` — floating gold coin deposit numbers.
 
 ---
 
@@ -221,7 +240,7 @@ godot --headless --export-release "Web" build/MineAttack.html
   - `"buildings"` — all buildings.
   - `"mine_entries"` — all mine shafts.
 - **Signals:** UI and controllers connect to signals emitted by `EconomyManager`, `Building`, `GameManager`, and `MineEntry` rather than polling.
-- **Drawing:** Visuals are code-drawn (`_draw()`) using simple rectangles and arcs; there are no imported sprite assets except `icon.svg`.
+- **Drawing:** World visuals (units, buildings, effects, grid) are code-drawn (`_draw()`) using simple rectangles and arcs. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
 
 ---
 

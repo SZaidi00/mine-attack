@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+Constants="*res://scripts/autoload/constants.gd"
 GameManager="*res://scripts/autoload/game_manager.gd"
 EconomyManager="*res://scripts/autoload/economy_manager.gd"
 

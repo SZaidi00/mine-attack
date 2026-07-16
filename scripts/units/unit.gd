@@ -5,6 +5,10 @@ signal died(unit)
 
 enum State { IDLE, MOVE, ATTACK, MINE, DEPOSIT, ENTER_MINE, EXIT_MINE, DEAD }
 
+const _HP_BAR_BG: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_unit_bg.png")
+const _HP_BAR_GREEN: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_unit_green.png")
+const _HP_BAR_ORANGE: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_unit_orange.png")
+
 @export var data: UnitData
 @export var team: GameManager.Team = GameManager.Team.PLAYER
 
@@ -23,7 +27,8 @@ var _target_cell: Vector2i = Vector2i(-9999, -9999)
 var _target_position: Vector2 = Vector2.ZERO
 var _attack_timer: float = 0.0
 var _mine_timer: float = 0.0
-var _mining_anim_timer: float = 0.0
+var _mine_target_angle: float = 0.0
+var _mine_hit_flash: float = 0.0
 var _dead_timer: float = 0.0
 var _flee_timer: float = 0.0
 var _flee_target: Vector2 = Vector2.ZERO
@@ -77,7 +82,6 @@ func _process(delta: float) -> void:
 		State.ATTACK:
 			_process_attack(delta)
 		State.MINE:
-			_mining_anim_timer += delta
 			_process_mine(delta)
 		State.DEPOSIT:
 			_process_deposit(delta)
@@ -169,10 +173,18 @@ func stop() -> void:
 func take_damage(amount: int) -> void:
 	hp -= amount
 	queue_redraw()
+	_spawn_damage_popup(amount)
 	if hp <= 0:
 		_die()
 	elif data.is_miner:
 		_start_flee()
+
+
+func _spawn_damage_popup(amount: int) -> void:
+	var popup: DamagePopup = preload("res://scenes/effects/damage_popup.tscn").instantiate()
+	popup.setup(amount)
+	popup.global_position = global_position + Vector2(0, -20)
+	get_tree().current_scene.add_child(popup)
 
 
 # ---------- State processing ----------
@@ -268,9 +280,13 @@ func _process_mine(delta: float) -> void:
 		return
 
 	_path.clear()
+	_mine_target_angle = (cell_world - global_position).angle()
 	_mine_timer -= delta
+	_mine_hit_flash -= delta
+	queue_redraw()
 	if _mine_timer <= 0:
 		_mine_timer = 1.0 / data.mining_rate
+		_mine_hit_flash = 0.08
 		var dmg: int = max(1, data.damage)
 		var coin: int = _grid.damage_cell(_target_cell, dmg, data.miner_level)
 		if coin > 0:
@@ -396,8 +412,8 @@ func _find_and_mine() -> void:
 					continue
 				if data.miner_level < cell.miner_level_required:
 					continue
-				# Stick to own side of the mine.
-				if pos.x * team_dir < -2:
+				# Stick to own side of the mine until the central wall is breached.
+				if _grid.get_wall_hp() > 0 and pos.x * team_dir < -2:
 					continue
 				var reachable: bool = _has_empty_neighbor(pos)
 				if reachable_only and not reachable:
@@ -485,7 +501,7 @@ func _team_dir() -> int:
 func _is_enemy_underground(world_pos: Vector2) -> bool:
 	if world_pos.y <= GridWorld.CELL_SIZE:
 		return false
-	return world_pos.x * _team_dir() > 0
+	return world_pos.x * _team_dir() < 0
 
 
 func _start_flee() -> void:
@@ -652,6 +668,55 @@ func _apply_miner_upgrade() -> void:
 	hp += 10
 
 
+func _draw_pickaxe() -> void:
+	# Base pose: pickaxe held at the miner's side.
+	var pivot: Vector2 = Vector2(4, 4)
+	var base_rotation: float = -PI / 4.0
+	var swing: float = 0.0
+	var lunge: Vector2 = Vector2.ZERO
+	var striking: bool = false
+
+	if _state == State.MINE:
+		# Time the swing to the mining rate so the strike lands on each hit.
+		var period: float = 1.0 / max(0.1, data.mining_rate)
+		var t: float = clamp(1.0 - (_mine_timer / period), 0.0, 1.0)
+		# Aim the pickaxe toward the target cell.
+		var aim_angle: float = _mine_target_angle - global_rotation
+		base_rotation = aim_angle - PI / 6.0
+		# Backswing (0%..60%), then sharp strike (60%..100%).
+		if t < 0.6:
+			swing = -PI * 0.55 * (t / 0.6)
+		else:
+			var strike_t: float = (t - 0.6) / 0.4
+			swing = -PI * 0.55 + PI * 0.9 * strike_t
+			striking = strike_t > 0.75
+		if striking:
+			lunge = Vector2(cos(aim_angle), sin(aim_angle)) * 3.0
+
+	pivot += lunge
+	draw_set_transform(pivot, base_rotation + swing, Vector2.ONE)
+	# Handle.
+	draw_line(Vector2.ZERO, Vector2(12, -12), GameManager.COLOR_STEEL, 2.5)
+	# Pick head.
+	draw_rect(Rect2(7, -16, 10, 5), GameManager.COLOR_STEEL, true)
+	draw_line(Vector2(8, -18), Vector2(16, -14), Color.WHITE, 2.0)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+	# Spark burst on the strike impact.
+	if _state == State.MINE and (_mine_hit_flash > 0.0 or striking):
+		var tip: Vector2 = pivot + Vector2(cos(base_rotation + swing), sin(base_rotation + swing)) * 16.0
+		var burst_color: Color = Color.YELLOW if _mine_hit_flash > 0.0 else Color.ORANGE
+		# Bright impact point.
+		draw_circle(tip, 3.0, burst_color)
+		draw_circle(tip, 1.5, Color.WHITE)
+		# Fixed radial sparks so they do not flicker every redraw.
+		var spark_count: int = 6
+		for i in range(spark_count):
+			var spark_angle: float = base_rotation + swing + (i / float(spark_count)) * TAU
+			var spark_len: float = 5.0 if _mine_hit_flash > 0.0 else 3.0
+			draw_line(tip, tip + Vector2(cos(spark_angle), sin(spark_angle)) * spark_len, burst_color, 1.5)
+
+
 # ---------- Drawing ----------
 
 func _draw() -> void:
@@ -667,15 +732,7 @@ func _draw() -> void:
 
 	# Weapon / class indicator.
 	if data.is_miner:
-		# Animate the pickaxe while mining.
-		var swing: float = 0.0
-		if _state == State.MINE:
-			swing = sin(_mining_anim_timer * 15.0) * 0.6
-		var pivot: Vector2 = Vector2(4, 4)
-		draw_set_transform(pivot, swing, Vector2.ONE)
-		draw_line(Vector2.ZERO, Vector2(10, -10), GameManager.COLOR_STEEL, 2.0)
-		draw_rect(Rect2(6, -14, 8, 4), GameManager.COLOR_STEEL, true)
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		_draw_pickaxe()
 	elif data.unit_name == "Swordsman":
 		draw_line(Vector2(4, 4), Vector2(16, -8), Color.WHITE, 3.0)
 	elif data.unit_name == "Archer":
@@ -688,8 +745,13 @@ func _draw() -> void:
 	# HP bar when damaged, hovered, or selected.
 	if selected or hovered or hp < data.max_hp:
 		var hp_pct: float = float(hp) / float(data.max_hp)
-		draw_rect(Rect2(-10, -size / 2.0 - 8, 20, 4), Color.BLACK, true)
-		draw_rect(Rect2(-10, -size / 2.0 - 8, 20 * hp_pct, 4), Color.GREEN, true)
+		var bar_rect: Rect2 = Rect2(-10, -size / 2.0 - 8, 20, 4)
+		draw_texture_rect(_HP_BAR_BG, bar_rect, false)
+		if hp_pct > 0.0:
+			var fill_texture: Texture2D = _HP_BAR_GREEN if hp_pct >= 0.5 else _HP_BAR_ORANGE
+			var fill_rect: Rect2 = Rect2(-10, -size / 2.0 - 8, 20 * hp_pct, 4)
+			var src_rect: Rect2 = Rect2(0, 0, fill_texture.get_width() * hp_pct, fill_texture.get_height())
+			draw_texture_rect_region(fill_texture, fill_rect, src_rect)
 
 	# Carried coin indicator for miners.
 	if data.is_miner and carried_coin > 0:

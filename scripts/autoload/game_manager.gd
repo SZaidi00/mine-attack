@@ -2,8 +2,6 @@ extends Node
 
 enum Team { PLAYER, ENEMY }
 
-const POPULATION_CAP: int = 100
-
 const COLOR_PLAYER: Color = Color("#3B82F6")
 const COLOR_ENEMY: Color = Color("#B91C1C")
 const COLOR_ICE: Color = Color("#DCECF5")
@@ -31,3 +29,8 @@ func declare_winner(winner: Team) -> void:
 		return
 	game_active = false
 	game_over.emit(winner)
+
+
+func reset() -> void:
+	game_active = true
+	match_time = 0.0

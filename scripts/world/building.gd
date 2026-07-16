@@ -1,11 +1,17 @@
 extends Node2D
 
+const _Constants = preload("res://scripts/autoload/constants.gd")
+
+const _HP_BAR_BG: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_bg.png")
+const _HP_BAR_GREEN: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_green.png")
+const _HP_BAR_RED: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_red.png")
+
 signal hp_changed(current: int, maximum: int)
 signal queue_changed(entries: Array)
 signal destroyed(team: GameManager.Team)
 
 @export var team: GameManager.Team = GameManager.Team.PLAYER
-@export var max_hp: int = 5000
+@export var max_hp: int = _Constants.PLAYER_BUILDING_HP
 @export var unit_scene: PackedScene
 @export var width_cells: int = 6
 @export var height_cells: int = 5
@@ -95,11 +101,19 @@ func take_damage(amount: int) -> void:
 	_hp -= amount
 	hp_changed.emit(_hp, max_hp)
 	queue_redraw()
+	_spawn_damage_popup(amount)
 	if _hp <= 0:
 		_hp = 0
 		destroyed.emit(team)
 		var winner: GameManager.Team = GameManager.Team.PLAYER if team == GameManager.Team.ENEMY else GameManager.Team.ENEMY
 		GameManager.declare_winner(winner)
+
+
+func _spawn_damage_popup(amount: int) -> void:
+	var popup: DamagePopup = preload("res://scenes/effects/damage_popup.tscn").instantiate()
+	popup.setup(amount)
+	popup.global_position = global_position + Vector2(0, -100)
+	get_tree().current_scene.add_child(popup)
 
 
 func get_queue() -> Array:
@@ -133,6 +147,10 @@ func _draw() -> void:
 	var bar_w: float = w - 16
 	var bar_h: float = 8
 	var bar_pos: Vector2 = Vector2(rect.position.x + 8, rect.position.y - 16)
-	draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color.BLACK, true)
-	var fill_color: Color = Color.GREEN if team == GameManager.Team.PLAYER else Color.RED
-	draw_rect(Rect2(bar_pos, Vector2(bar_w * hp_pct, bar_h)), fill_color, true)
+	var bar_rect: Rect2 = Rect2(bar_pos, Vector2(bar_w, bar_h))
+	draw_texture_rect(_HP_BAR_BG, bar_rect, false)
+	var fill_texture: Texture2D = _HP_BAR_GREEN if team == GameManager.Team.PLAYER else _HP_BAR_RED
+	if hp_pct > 0.0:
+		var fill_rect: Rect2 = Rect2(bar_pos, Vector2(bar_w * hp_pct, bar_h))
+		var src_rect: Rect2 = Rect2(0, 0, fill_texture.get_width() * hp_pct, fill_texture.get_height())
+		draw_texture_rect_region(fill_texture, fill_rect, src_rect)

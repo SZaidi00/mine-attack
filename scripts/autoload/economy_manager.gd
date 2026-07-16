@@ -1,28 +1,15 @@
 extends Node
 
+const _Constants = preload("res://scripts/autoload/constants.gd")
+
 signal coin_changed(team: GameManager.Team)
 signal population_changed(team: GameManager.Team)
 signal miner_level_changed(team: GameManager.Team)
 signal stats_changed(team: GameManager.Team)
 
-const STARTING_COIN: int = 150
-
-# Unit costs and train times mirror UnitData resources; these are used by UI/AI.
-const UNIT_COSTS: Dictionary = {
-	"miner": 50,
-	"swordsman": 100,
-	"archer": 150,
-	"wizard": 250,
-}
-
-const MINER_UPGRADE_COSTS: Dictionary = {
-	2: 500,
-	3: 1500,
-}
-
 var _coin: Dictionary = {
-	GameManager.Team.PLAYER: STARTING_COIN,
-	GameManager.Team.ENEMY: STARTING_COIN,
+	GameManager.Team.PLAYER: _Constants.STARTING_COIN,
+	GameManager.Team.ENEMY: _Constants.STARTING_COIN,
 }
 
 var _population: Dictionary = {
@@ -48,6 +35,37 @@ var _coin_mined: Dictionary = {
 
 func _ready() -> void:
 	pass
+
+
+func reset() -> void:
+	_coin = {
+		GameManager.Team.PLAYER: _Constants.STARTING_COIN,
+		GameManager.Team.ENEMY: _Constants.STARTING_COIN,
+	}
+	_population = {
+		GameManager.Team.PLAYER: 0,
+		GameManager.Team.ENEMY: 0,
+	}
+	_miner_level = {
+		GameManager.Team.PLAYER: 1,
+		GameManager.Team.ENEMY: 1,
+	}
+	_units_trained = {
+		GameManager.Team.PLAYER: 0,
+		GameManager.Team.ENEMY: 0,
+	}
+	_coin_mined = {
+		GameManager.Team.PLAYER: 0,
+		GameManager.Team.ENEMY: 0,
+	}
+	coin_changed.emit(GameManager.Team.PLAYER)
+	coin_changed.emit(GameManager.Team.ENEMY)
+	population_changed.emit(GameManager.Team.PLAYER)
+	population_changed.emit(GameManager.Team.ENEMY)
+	miner_level_changed.emit(GameManager.Team.PLAYER)
+	miner_level_changed.emit(GameManager.Team.ENEMY)
+	stats_changed.emit(GameManager.Team.PLAYER)
+	stats_changed.emit(GameManager.Team.ENEMY)
 
 
 func add_coin(team: GameManager.Team, amount: int) -> void:
@@ -86,7 +104,7 @@ func get_population(team: GameManager.Team) -> int:
 
 
 func can_add_population(team: GameManager.Team, amount: int) -> bool:
-	return _population[team] + amount <= GameManager.POPULATION_CAP
+	return _population[team] + amount <= _Constants.MAX_UNITS
 
 
 func get_miner_level(team: GameManager.Team) -> int:
@@ -95,9 +113,9 @@ func get_miner_level(team: GameManager.Team) -> int:
 
 func upgrade_miner(team: GameManager.Team) -> bool:
 	var next_level: int = _miner_level[team] + 1
-	if not MINER_UPGRADE_COSTS.has(next_level):
+	if not _Constants.MINER_UPGRADE_COSTS.has(next_level):
 		return false
-	var cost: int = MINER_UPGRADE_COSTS[next_level]
+	var cost: int = _Constants.MINER_UPGRADE_COSTS[next_level]
 	if not spend_coin(team, cost):
 		return false
 	_miner_level[team] = next_level
@@ -107,8 +125,8 @@ func upgrade_miner(team: GameManager.Team) -> bool:
 
 func get_miner_upgrade_cost(team: GameManager.Team) -> int:
 	var next_level: int = _miner_level[team] + 1
-	if MINER_UPGRADE_COSTS.has(next_level):
-		return MINER_UPGRADE_COSTS[next_level]
+	if _Constants.MINER_UPGRADE_COSTS.has(next_level):
+		return _Constants.MINER_UPGRADE_COSTS[next_level]
 	return -1
 
 

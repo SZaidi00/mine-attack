@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/effects/damage_popup.gd" id="1_damage_popup"]
+
+[node name="DamagePopup" type="Label"]
+offset_right = 40.0
+offset_bottom = 23.0
+theme_override_font_sizes/font_size = 10
+text = "-0"
+script = ExtResource("1_damage_popup")

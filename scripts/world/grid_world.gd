@@ -24,16 +24,18 @@ class Cell:
 		coin_value = coin
 		is_wall = wall
 
-const CELL_SIZE: int = 32
+const _Constants = preload("res://scripts/autoload/constants.gd")
+
+const CELL_SIZE: int = _Constants.TILE_SIZE
 
 # Map bounds in grid coordinates.
-const X_MIN: int = -40
-const X_MAX: int = 40
-const Y_MIN: int = 0
-const Y_MAX: int = 21
+const X_MIN: int = _Constants.GRID_X_MIN
+const X_MAX: int = _Constants.GRID_X_MAX
+const Y_MIN: int = _Constants.GRID_Y_MIN
+const Y_MAX: int = _Constants.GRID_Y_MAX
 
 # Central wall is a single objective with shared HP (GDD: 2000 HP).
-const WALL_HP_TOTAL: int = 2000
+const WALL_HP_TOTAL: int = _Constants.WALL_HP
 
 var _cells: Dictionary = {}  # Vector2i -> Cell
 var _astar: AStarGrid2D = AStarGrid2D.new()
@@ -58,7 +60,7 @@ func _generate_map() -> void:
 	for y in range(1, Y_MAX + 1):
 		var layer: int = (y - 1) / 3 + 1
 		var ml_req: int = _layer_miner_level(layer)
-		var tile_hp: int = _layer_tile_hp(layer)
+		var tile_hp: int = _Constants.LAYER_TILE_HP[layer]
 
 		for x in range(X_MIN, X_MAX + 1):
 			# Central wall (3 tiles thick).
@@ -71,7 +73,7 @@ func _generate_map() -> void:
 			# Ore chance rises with depth.
 			var is_ore: bool = randf() < (0.05 + layer * 0.03)
 			if is_ore:
-				var coin_range: Vector2i = _layer_coin_range(layer)
+				var coin_range: Vector2i = _Constants.LAYER_COIN_RANGES[layer]
 				var coin: int = randi_range(coin_range.x, coin_range.y)
 				_set_cell(Vector2i(x, y), Cell.new(CellType.ORE, layer, ml_req, tile_hp, coin))
 			else:
@@ -97,24 +99,7 @@ func _layer_miner_level(layer: int) -> int:
 	return 3
 
 
-func _layer_tile_hp(layer: int) -> int:
-	if layer <= 2:
-		return 50
-	if layer <= 4:
-		return 75
-	return 100
 
-
-func _layer_coin_range(layer: int) -> Vector2i:
-	match layer:
-		1: return Vector2i(5, 10)
-		2: return Vector2i(8, 15)
-		3: return Vector2i(12, 20)
-		4: return Vector2i(15, 25)
-		5: return Vector2i(20, 35)
-		6: return Vector2i(25, 40)
-		7: return Vector2i(30, 50)
-	return Vector2i(1, 2)
 
 
 func _init_astar() -> void:
@@ -262,6 +247,22 @@ func get_layer_at(grid_pos: Vector2i) -> int:
 	if cell == null:
 		return 0
 	return cell.layer
+
+
+func count_accessible_unmined_tiles(side: int, miner_level: int) -> int:
+	var max_layer: int = _Constants.MINER_STATS[miner_level].max_layer
+	var team_dir: int = -1 if side == GameManager.Team.PLAYER else 1
+	var count: int = 0
+	for pos in _cells.keys():
+		var cell: Cell = _cells[pos]
+		if cell.type != CellType.DIRT and cell.type != CellType.ORE:
+			continue
+		if cell.layer > max_layer:
+			continue
+		# Player side: x < 0; enemy side: x > 0.
+		if pos.x * team_dir < 0:
+			count += 1
+	return count
 
 
 func _draw() -> void:

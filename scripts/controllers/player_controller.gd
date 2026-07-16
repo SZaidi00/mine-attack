@@ -1,6 +1,8 @@
 class_name PlayerController
 extends Node
 
+const _Constants = preload("res://scripts/autoload/constants.gd")
+
 @export var camera: Camera2D
 @export var selection_box: ColorRect
 
@@ -25,44 +27,41 @@ func _process(delta: float) -> void:
 	if camera == null:
 		return
 	var move: Vector2 = Vector2.ZERO
-	if Input.is_action_pressed("camera_right"):
+	if Input.is_action_pressed(_Constants.INPUT_CAMERA_RIGHT):
 		move.x += 1
-	if Input.is_action_pressed("camera_left"):
+	if Input.is_action_pressed(_Constants.INPUT_CAMERA_LEFT):
 		move.x -= 1
-	if Input.is_action_pressed("camera_down"):
+	if Input.is_action_pressed(_Constants.INPUT_CAMERA_DOWN):
 		move.y += 1
-	if Input.is_action_pressed("camera_up"):
+	if Input.is_action_pressed(_Constants.INPUT_CAMERA_UP):
 		move.y -= 1
 	camera.position += move.normalized() * _camera_speed * delta / camera.zoom
-	# Clamp camera within world bounds.
+	# Clamp camera within world bounds. Only clamp when the viewport is smaller
+	# than the playable area; otherwise the whole world is visible and the player
+	# should be free to pan (e.g. to follow surface/underground views).
 	var half_size: Vector2 = get_viewport().get_visible_rect().size / (2.0 * camera.zoom)
 	var min_pos: Vector2 = Vector2((GridWorld.X_MIN - 2) * GridWorld.CELL_SIZE, -300)
 	var max_pos: Vector2 = Vector2((GridWorld.X_MAX + 3) * GridWorld.CELL_SIZE, (GridWorld.Y_MAX + 4) * GridWorld.CELL_SIZE)
 	var lo: Vector2 = min_pos + half_size
 	var hi: Vector2 = max_pos - half_size
-	if lo.x > hi.x:
-		var mid_x: float = (min_pos.x + max_pos.x) / 2.0
-		lo.x = mid_x
-		hi.x = mid_x
-	if lo.y > hi.y:
-		var mid_y: float = (min_pos.y + max_pos.y) / 2.0
-		lo.y = mid_y
-		hi.y = mid_y
-	camera.position = camera.position.clamp(lo, hi)
+	if lo.x <= hi.x:
+		camera.position.x = clampf(camera.position.x, lo.x, hi.x)
+	if lo.y <= hi.y:
+		camera.position.y = clampf(camera.position.y, lo.y, hi.y)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not GameManager.game_active:
 		return
 
-	if event.is_action_pressed("lmb"):
+	if event.is_action_pressed(_Constants.INPUT_SELECT):
 		_drag_start = get_viewport().get_mouse_position()
 		_is_dragging = true
 		if selection_box:
 			selection_box.position = _drag_start
 			selection_box.size = Vector2.ZERO
 			selection_box.visible = true
-	elif event.is_action_released("lmb"):
+	elif event.is_action_released(_Constants.INPUT_SELECT):
 		if _is_dragging:
 			var end: Vector2 = get_viewport().get_mouse_position()
 			if end.distance_to(_drag_start) < 8:
@@ -72,29 +71,29 @@ func _unhandled_input(event: InputEvent) -> void:
 			_is_dragging = false
 			if selection_box:
 				selection_box.visible = false
-	elif event.is_action_pressed("rmb"):
+	elif event.is_action_pressed(_Constants.INPUT_COMMAND):
 		_issue_command(get_viewport().get_mouse_position())
-	elif event.is_action_pressed("select_all"):
+	elif event.is_action_pressed(_Constants.INPUT_SELECT_ALL):
 		_select_units(get_tree().get_nodes_in_group("player"))
-	elif event.is_action_pressed("select_miners"):
+	elif event.is_action_pressed(_Constants.INPUT_SELECT_MINERS):
 		_select_units(_filter_miners(get_tree().get_nodes_in_group("player")))
-	elif event.is_action_pressed("select_fighters"):
+	elif event.is_action_pressed(_Constants.INPUT_SELECT_FIGHTERS):
 		_select_units(_filter_fighters(get_tree().get_nodes_in_group("player")))
-	elif event.is_action_pressed("camera_zoom_in"):
+	elif event.is_action_pressed(_Constants.INPUT_CAMERA_ZOOM_IN):
 		camera.zoom = (camera.zoom * 1.1).clamp(Vector2(_zoom_min, _zoom_min), Vector2(_zoom_max, _zoom_max))
-	elif event.is_action_pressed("camera_zoom_out"):
+	elif event.is_action_pressed(_Constants.INPUT_CAMERA_ZOOM_OUT):
 		camera.zoom = (camera.zoom / 1.1).clamp(Vector2(_zoom_min, _zoom_min), Vector2(_zoom_max, _zoom_max))
-	elif event.is_action_pressed("train_miner"):
+	elif event.is_action_pressed(_Constants.INPUT_TRAIN_MINER):
 		train_unit("miner")
-	elif event.is_action_pressed("train_swordsman"):
+	elif event.is_action_pressed(_Constants.INPUT_TRAIN_SWORDSMAN):
 		train_unit("swordsman")
-	elif event.is_action_pressed("train_archer"):
+	elif event.is_action_pressed(_Constants.INPUT_TRAIN_ARCHER):
 		train_unit("archer")
-	elif event.is_action_pressed("train_wizard"):
+	elif event.is_action_pressed(_Constants.INPUT_TRAIN_WIZARD):
 		train_unit("wizard")
-	elif event.is_action_pressed("toggle_view"):
+	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_VIEW):
 		_toggle_view()
-	elif event.is_action_pressed("pause"):
+	elif event.is_action_pressed(_Constants.INPUT_PAUSE):
 		get_tree().paused = not get_tree().paused
 
 	if _is_dragging and event is InputEventMouseMotion:
@@ -282,11 +281,11 @@ func _filter_fighters(units: Array) -> Array:
 
 # ---------- UI callbacks ----------
 
-func train_unit(unit_id: String) -> void:
+func train_unit(unit_id: String) -> bool:
 	for building in get_tree().get_nodes_in_group("buildings"):
 		if building.get("team") == GameManager.Team.PLAYER:
-			building.call("queue_unit", unit_id)
-			return
+			return building.call("queue_unit", unit_id)
+	return false
 
 
 func upgrade_miner() -> void:
