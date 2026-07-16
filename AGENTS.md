@@ -159,7 +159,7 @@ Global singletons accessible from any script via their class name.
   - Default building HP is 5000.
   - Spawns units at the building front and automatically sends miners into the mine.
   - Emits `hp_changed`, `queue_changed`, `destroyed`.
-  - Draws a health bar above the building.
+  - Draws a team-specific building sprite and a health bar above it.
   - Marks its footprint as solid on the grid.
 
 - `mine_entry.gd`
@@ -240,7 +240,7 @@ godot --headless --export-release "Web" build/MineAttack.html
   - `"buildings"` — all buildings.
   - `"mine_entries"` — all mine shafts.
 - **Signals:** UI and controllers connect to signals emitted by `EconomyManager`, `Building`, `GameManager`, and `MineEntry` rather than polling.
-- **Drawing:** Buildings, effects, and foreground grid tiles are code-drawn (`_draw()`) using simple rectangles and arcs. Backgrounds use sprite assets from `frost_mines_assets/backgrounds/` (sky, surface ground, underground base). Units use sprite assets from `frost_mines_assets/units/` assigned through `UnitData.player_textures` / `enemy_textures`, with miners swapping by upgrade level. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
+- **Drawing:** Effects and foreground grid tiles are code-drawn (`_draw()`) using simple rectangles and arcs. Buildings use sprite assets from `frost_mines_assets/buildings/` (player/enemy variants). Backgrounds use sprite assets from `frost_mines_assets/backgrounds/` (sky, surface ground, underground base). Units use sprite assets from `frost_mines_assets/units/` assigned through `UnitData.player_textures` / `enemy_textures`, with miners swapping by upgrade level. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
 
 ---
 

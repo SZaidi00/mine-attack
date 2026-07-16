@@ -6,6 +6,11 @@ const _HP_BAR_BG: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_bg.png
 const _HP_BAR_GREEN: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_green.png")
 const _HP_BAR_RED: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_red.png")
 
+const _BUILDING_TEXTURES: Dictionary = {
+	GameManager.Team.PLAYER: preload("res://frost_mines_assets/buildings/building_player.png"),
+	GameManager.Team.ENEMY: preload("res://frost_mines_assets/buildings/building_enemy.png")
+}
+
 signal hp_changed(current: int, maximum: int)
 signal queue_changed(entries: Array)
 signal destroyed(team: GameManager.Team)
@@ -131,22 +136,16 @@ func cancel_queue(index: int) -> bool:
 
 
 func _draw() -> void:
-	var w: float = width_cells * GridWorld.CELL_SIZE
-	var h: float = height_cells * GridWorld.CELL_SIZE
-	var rect: Rect2 = Rect2(-w / 2.0, -h, w, h)
-	var color: Color = GameManager.COLOR_PLAYER if team == GameManager.Team.PLAYER else GameManager.COLOR_ENEMY
-	draw_rect(rect, GameManager.COLOR_STEEL, true)
-	draw_rect(rect, color, false, 3.0)
-	# Roof / greeble details.
-	draw_rect(Rect2(rect.position.x + 8, rect.position.y + 8, w - 16, 12), color.darkened(0.3), true)
-	draw_rect(Rect2(rect.position.x + 12, rect.position.y + h - 20, 16, 20), GameManager.COLOR_SHADOW, true)
-	draw_rect(Rect2(rect.position.x + w - 28, rect.position.y + h - 20, 16, 20), GameManager.COLOR_SHADOW, true)
+	var texture: Texture2D = _BUILDING_TEXTURES[team]
+	var sprite_size: Vector2 = texture.get_size()
+	var sprite_rect: Rect2 = Rect2(-sprite_size.x / 2.0, -sprite_size.y, sprite_size.x, sprite_size.y)
+	draw_texture(texture, sprite_rect.position)
 
 	# Health bar.
 	var hp_pct: float = float(_hp) / float(max_hp)
-	var bar_w: float = w - 16
+	var bar_w: float = sprite_size.x - 16
 	var bar_h: float = 8
-	var bar_pos: Vector2 = Vector2(rect.position.x + 8, rect.position.y - 16)
+	var bar_pos: Vector2 = Vector2(sprite_rect.position.x + 8, sprite_rect.position.y - 16)
 	var bar_rect: Rect2 = Rect2(bar_pos, Vector2(bar_w, bar_h))
 	draw_texture_rect(_HP_BAR_BG, bar_rect, false)
 	var fill_texture: Texture2D = _HP_BAR_GREEN if team == GameManager.Team.PLAYER else _HP_BAR_RED
