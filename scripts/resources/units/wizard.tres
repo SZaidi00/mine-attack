@@ -1,6 +1,8 @@
-[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="UnitData" load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/resources/unit_data.gd" id="1_abc4"]
+[ext_resource type="Texture2D" path="res://frost_mines_assets/units/wizard_player.png" id="2_wizard_player"]
+[ext_resource type="Texture2D" path="res://frost_mines_assets/units/wizard_enemy.png" id="3_wizard_enemy"]
 
 [resource]
 script = ExtResource("1_abc4")
@@ -10,6 +12,8 @@ is_fighter = true
 cost = 250
 train_time = 10.0
 population = 1
+player_textures = Array[Texture2D]([ExtResource("2_wizard_player")])
+enemy_textures = Array[Texture2D]([ExtResource("3_wizard_enemy")])
 max_hp = 60
 speed = 50.0
 damage = 37

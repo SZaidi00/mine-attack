@@ -738,10 +738,21 @@ func _draw_pickaxe() -> void:
 # ---------- Drawing ----------
 
 func _get_unit_texture() -> Texture2D:
+	var textures: Array[Texture2D]
+	if team == GameManager.Team.PLAYER:
+		textures = data.player_textures
+	else:
+		textures = data.enemy_textures
+
 	if data.is_miner:
 		var idx: int = clampi(data.miner_level - 1, 0, 2)
+		if textures.size() > idx and textures[idx] != null:
+			return textures[idx]
 		return _MINER_TEXTURES[team][idx]
-	return data.texture
+
+	if textures.size() > 0 and textures[0] != null:
+		return textures[0]
+	return null
 
 
 func _draw() -> void:
