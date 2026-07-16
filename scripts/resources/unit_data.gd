@@ -8,6 +8,8 @@ extends Resource
 @export var train_time: float = 5.0
 @export var population: int = 1
 
+@export var texture: Texture2D
+
 @export var max_hp: int = 50
 @export var speed: float = 100.0
 @export var damage: int = 10

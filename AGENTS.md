@@ -175,7 +175,7 @@ Global singletons accessible from any script via their class name.
   - Fighters auto-attack nearby enemies (fighters → building → enemy miners on own side) and patrol underground when idle.
   - Fighters move at 60% speed while underground.
   - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`).
-  - Custom `_draw()` renders each unit as a colored rectangle with class-specific weapon icons and an HP bar when damaged.
+  - Custom `_draw()` renders fighters as colored rectangles with class-specific weapon icons and miners as sprite assets from `frost_mines_assets/units/`. All units show an HP bar when damaged, hovered, or selected.
 
 - `projectile.gd`
   - Homing arrow / fireball projectile.
@@ -240,7 +240,7 @@ godot --headless --export-release "Web" build/MineAttack.html
   - `"buildings"` — all buildings.
   - `"mine_entries"` — all mine shafts.
 - **Signals:** UI and controllers connect to signals emitted by `EconomyManager`, `Building`, `GameManager`, and `MineEntry` rather than polling.
-- **Drawing:** World visuals (units, buildings, effects, grid) are code-drawn (`_draw()`) using simple rectangles and arcs. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
+- **Drawing:** Most world visuals (fighters, buildings, effects, grid) are code-drawn (`_draw()`) using simple rectangles and arcs. Miners use sprite assets from `frost_mines_assets/units/` and swap texture based on team and upgrade level. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
 
 ---
 

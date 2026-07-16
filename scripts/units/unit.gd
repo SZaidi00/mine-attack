@@ -9,6 +9,19 @@ const _HP_BAR_BG: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_unit_b
 const _HP_BAR_GREEN: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_unit_green.png")
 const _HP_BAR_ORANGE: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_unit_orange.png")
 
+const _MINER_TEXTURES: Dictionary = {
+	GameManager.Team.PLAYER: [
+		preload("res://frost_mines_assets/units/miner_l1_player.png"),
+		preload("res://frost_mines_assets/units/miner_l2_player.png"),
+		preload("res://frost_mines_assets/units/miner_l3_player.png")
+	],
+	GameManager.Team.ENEMY: [
+		preload("res://frost_mines_assets/units/miner_l1_enemy.png"),
+		preload("res://frost_mines_assets/units/miner_l2_enemy.png"),
+		preload("res://frost_mines_assets/units/miner_l3_enemy.png")
+	]
+}
+
 @export var data: UnitData
 @export var team: GameManager.Team = GameManager.Team.PLAYER
 
@@ -644,7 +657,11 @@ func _add_hover_area() -> void:
 	area.mouse_exited.connect(func(): hovered = false; queue_redraw())
 	var shape: CollisionShape2D = CollisionShape2D.new()
 	var rect: RectangleShape2D = RectangleShape2D.new()
-	rect.size = Vector2(22, 22)
+	var sprite_texture: Texture2D = _get_unit_texture()
+	if sprite_texture != null:
+		rect.size = sprite_texture.get_size()
+	else:
+		rect.size = Vector2(22, 22)
 	shape.shape = rect
 	area.add_child(shape)
 	add_child(area)
@@ -666,6 +683,7 @@ func _apply_miner_upgrade() -> void:
 		data.max_hp += 15
 		data.mining_rate += 2.0
 	hp += 10
+	queue_redraw()
 
 
 func _draw_pickaxe() -> void:
@@ -719,40 +737,67 @@ func _draw_pickaxe() -> void:
 
 # ---------- Drawing ----------
 
+func _get_unit_texture() -> Texture2D:
+	if data.is_miner:
+		var idx: int = clampi(data.miner_level - 1, 0, 2)
+		return _MINER_TEXTURES[team][idx]
+	return data.texture
+
+
 func _draw() -> void:
 	var color: Color = GameManager.COLOR_PLAYER if team == GameManager.Team.PLAYER else GameManager.COLOR_ENEMY
-	var size: float = 18.0
+	var sprite_texture: Texture2D = _get_unit_texture()
+	var body_top: float
+	var body_bottom: float
+	var selection_radius: float
+
+	if sprite_texture != null:
+		var sprite_size: Vector2 = sprite_texture.get_size()
+		body_top = -sprite_size.y / 2.0
+		body_bottom = sprite_size.y / 2.0
+		selection_radius = max(sprite_size.x, sprite_size.y) / 2.0 + 4.0
+	else:
+		var size: float = 18.0
+		body_top = -size / 2.0
+		body_bottom = size / 2.0
+		selection_radius = size + 4.0
+
 	# Selection indicator.
 	if selected:
-		draw_arc(Vector2.ZERO, size + 4, 0, TAU, 16, Color.WHITE, 2.0)
+		draw_arc(Vector2.ZERO, selection_radius, 0, TAU, 16, Color.WHITE, 2.0)
 
 	# Body.
-	draw_rect(Rect2(-size / 2.0, -size / 2.0, size, size), color, true)
-	draw_rect(Rect2(-size / 2.0, -size / 2.0, size, size), GameManager.COLOR_SHADOW, false, 1.0)
+	if sprite_texture != null:
+		var sprite_size: Vector2 = sprite_texture.get_size()
+		draw_texture(sprite_texture, -sprite_size / 2.0)
+	else:
+		var size: float = 18.0
+		draw_rect(Rect2(-size / 2.0, -size / 2.0, size, size), color, true)
+		draw_rect(Rect2(-size / 2.0, -size / 2.0, size, size), GameManager.COLOR_SHADOW, false, 1.0)
 
-	# Weapon / class indicator.
-	if data.is_miner:
-		_draw_pickaxe()
-	elif data.unit_name == "Swordsman":
-		draw_line(Vector2(4, 4), Vector2(16, -8), Color.WHITE, 3.0)
-	elif data.unit_name == "Archer":
-		draw_arc(Vector2(10, 0), 7, -PI / 2, PI / 2, 8, GameManager.COLOR_RUST, 2.0)
-		draw_line(Vector2(10, -7), Vector2(10, 7), GameManager.COLOR_RUST, 2.0)
-	elif data.unit_name == "Wizard":
-		draw_line(Vector2(6, 6), Vector2(12, -14), GameManager.COLOR_RUST, 2.0)
-		draw_circle(Vector2(12, -16), 4, Color.PURPLE)
+		# Weapon / class indicator.
+		if data.is_miner:
+			_draw_pickaxe()
+		elif data.unit_name == "Swordsman":
+			draw_line(Vector2(4, 4), Vector2(16, -8), Color.WHITE, 3.0)
+		elif data.unit_name == "Archer":
+			draw_arc(Vector2(10, 0), 7, -PI / 2, PI / 2, 8, GameManager.COLOR_RUST, 2.0)
+			draw_line(Vector2(10, -7), Vector2(10, 7), GameManager.COLOR_RUST, 2.0)
+		elif data.unit_name == "Wizard":
+			draw_line(Vector2(6, 6), Vector2(12, -14), GameManager.COLOR_RUST, 2.0)
+			draw_circle(Vector2(12, -16), 4, Color.PURPLE)
 
 	# HP bar when damaged, hovered, or selected.
 	if selected or hovered or hp < data.max_hp:
 		var hp_pct: float = float(hp) / float(data.max_hp)
-		var bar_rect: Rect2 = Rect2(-10, -size / 2.0 - 8, 20, 4)
+		var bar_rect: Rect2 = Rect2(-10, body_top - 8, 20, 4)
 		draw_texture_rect(_HP_BAR_BG, bar_rect, false)
 		if hp_pct > 0.0:
 			var fill_texture: Texture2D = _HP_BAR_GREEN if hp_pct >= 0.5 else _HP_BAR_ORANGE
-			var fill_rect: Rect2 = Rect2(-10, -size / 2.0 - 8, 20 * hp_pct, 4)
+			var fill_rect: Rect2 = Rect2(-10, body_top - 8, 20 * hp_pct, 4)
 			var src_rect: Rect2 = Rect2(0, 0, fill_texture.get_width() * hp_pct, fill_texture.get_height())
 			draw_texture_rect_region(fill_texture, fill_rect, src_rect)
 
 	# Carried coin indicator for miners.
 	if data.is_miner and carried_coin > 0:
-		draw_rect(Rect2(-6, size / 2.0 + 2, 12, 6), GameManager.COLOR_RUST, true)
+		draw_rect(Rect2(-6, body_bottom + 2, 12, 6), GameManager.COLOR_RUST, true)
