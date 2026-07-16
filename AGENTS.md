@@ -165,6 +165,7 @@ Global singletons accessible from any script via their class name.
 - `mine_entry.gd`
   - Teleports units between surface and underground positions.
   - `deposit(unit)` converts carried coin into team coin.
+  - Draws the mine entry sprite from `frost_mines_assets/props/`.
 
 ### `scripts/units/`
 
@@ -240,7 +241,7 @@ godot --headless --export-release "Web" build/MineAttack.html
   - `"buildings"` — all buildings.
   - `"mine_entries"` — all mine shafts.
 - **Signals:** UI and controllers connect to signals emitted by `EconomyManager`, `Building`, `GameManager`, and `MineEntry` rather than polling.
-- **Drawing:** Effects and foreground grid tiles are code-drawn (`_draw()`) using simple rectangles and arcs. Buildings use sprite assets from `frost_mines_assets/buildings/` (player/enemy variants). Backgrounds use sprite assets from `frost_mines_assets/backgrounds/` (sky, surface ground, underground base). Units use sprite assets from `frost_mines_assets/units/` assigned through `UnitData.player_textures` / `enemy_textures`, with miners swapping by upgrade level. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
+- **Drawing:** Effects and foreground dirt/ore tiles are code-drawn (`_draw()`) using simple rectangles and arcs. Buildings use sprite assets from `frost_mines_assets/buildings/` (player/enemy variants). Wall cells use `frost_mines_assets/props/wall_segment.png`. Mine entrances use `frost_mines_assets/props/mine_entry.png`. Backgrounds use sprite assets from `frost_mines_assets/backgrounds/` (sky, surface ground, underground base). Units use sprite assets from `frost_mines_assets/units/` assigned through `UnitData.player_textures` / `enemy_textures`, with miners swapping by upgrade level. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
 
 ---
 

@@ -1,5 +1,7 @@
 extends Node2D
 
+const _MINE_ENTRY_TEXTURE: Texture2D = preload("res://frost_mines_assets/props/mine_entry.png")
+
 signal coin_deposited(team: GameManager.Team, amount: int)
 
 @export var team: GameManager.Team = GameManager.Team.PLAYER
@@ -63,11 +65,5 @@ func exit_mine(unit: Node2D) -> void:
 
 
 func _draw() -> void:
-	var w: float = GridWorld.CELL_SIZE * 3.0
-	var h: float = GridWorld.CELL_SIZE * 2.5
-	var rect: Rect2 = Rect2(-w / 2.0, -h, w, h)
-	var color: Color = GameManager.COLOR_PLAYER if team == GameManager.Team.PLAYER else GameManager.COLOR_ENEMY
-	draw_rect(rect, GameManager.COLOR_SHADOW, true)
-	draw_rect(rect, color, false, 2.0)
-	# Mine opening.
-	draw_rect(Rect2(rect.position.x + 8, rect.position.y + 8, w - 16, h - 16), GameManager.COLOR_DEEP_ICE, true)
+	var sprite_size: Vector2 = _MINE_ENTRY_TEXTURE.get_size()
+	draw_texture(_MINE_ENTRY_TEXTURE, Vector2(-sprite_size.x / 2.0, -sprite_size.y))

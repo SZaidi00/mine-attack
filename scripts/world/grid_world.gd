@@ -29,6 +29,7 @@ const _Constants = preload("res://scripts/autoload/constants.gd")
 const _SKY_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_sky.png")
 const _SURFACE_GROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_ground.png")
 const _UNDERGROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/underground_base.png")
+const _WALL_TEXTURE: Texture2D = preload("res://frost_mines_assets/props/wall_segment.png")
 
 const CELL_SIZE: int = _Constants.TILE_SIZE
 
@@ -303,7 +304,7 @@ func _draw() -> void:
 				var inner: Rect2 = rect.grow(-8)
 				draw_rect(inner, GameManager.COLOR_RUST, true)
 			CellType.WALL:
-				draw_rect(rect, GameManager.COLOR_STEEL, true)
+				draw_texture_rect(_WALL_TEXTURE, rect, true)
 				draw_rect(rect, GameManager.COLOR_SHADOW, false, 2.0)
 
 
