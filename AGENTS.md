@@ -149,7 +149,7 @@ Global singletons accessible from any script via their class name.
 - `grid_world.gd`
   - `CellType` enum: `EMPTY`, `SURFACE_GROUND`, `DIRT`, `ORE`, `WALL`.
   - `Cell` inner class holds type, hp, layer, miner level requirement, coin value, wall flag.
-  - Procedural map generation with 7 underground layers (3 rows per layer), layer-specific tile HP and ore coin values, entry shafts, borders.
+  - Procedural map generation with 7 underground layers (3 rows per layer), layer-specific tile HP and ore coin values, entry shafts, borders. Dirt and ore cells draw per-layer tile sprites from `frost_mines_assets/tiles/`.
   - Central wall is a single shared 2000 HP objective spanning all layers at `x = -1, 0, 1`.
   - Uses `AStarGrid2D` for pathfinding.
   - `damage_cell()` applies mining damage and returns coin when destroyed; wall damage reduces the shared wall HP pool.
@@ -176,11 +176,12 @@ Global singletons accessible from any script via their class name.
   - Fighters auto-attack nearby enemies (fighters → building → enemy miners on own side) and patrol underground when idle.
   - Fighters move at 60% speed while underground.
   - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`).
-  - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected.
+  - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected, use `frost_mines_assets/effects/selection_ring.png` for selection, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage.
 
 - `projectile.gd`
   - Homing arrow / fireball projectile.
   - Fireballs deal splash damage to units and buildings.
+  - Draws `frost_mines_assets/effects/projectile_arrow.png` for arrows and `frost_mines_assets/effects/projectile_blast.png` for fireballs.
 
 ### `scripts/resources/`
 
@@ -189,7 +190,7 @@ Global singletons accessible from any script via their class name.
 
 ### `scripts/ui/`
 
-- `hud.gd` — wires non-training buttons to `PlayerController`, listens to economy signals, updates labels, toggles surface/underground view, and shows game-over stats panel with Play Again.
+- `hud.gd` — wires non-training buttons to `PlayerController`, listens to economy signals, updates labels, toggles surface/underground view, shows game-over stats panel with Play Again, and adds icon sprites from `frost_mines_assets/icons/` to stat labels and the attack stance button.
 - `unit_button.gd` — train button with cost/train-time labels, affordability/disable state, and failure shake.
 - `training_queue_panel.gd` — shows currently training unit progress and queued units that can be cancelled.
 - `layer_indicator.gd` — highlights accessible underground layers based on miner upgrade level.
@@ -197,7 +198,7 @@ Global singletons accessible from any script via their class name.
 ### `scripts/effects/`
 
 - `damage_popup.gd` — floating red/green combat numbers.
-- `coin_popup.gd` — floating gold coin deposit numbers.
+- `coin_popup.gd` — floating gold coin deposit numbers with a `frost_mines_assets/effects/coin_sparkle.png` icon.
 
 ---
 
@@ -241,7 +242,7 @@ godot --headless --export-release "Web" build/MineAttack.html
   - `"buildings"` — all buildings.
   - `"mine_entries"` — all mine shafts.
 - **Signals:** UI and controllers connect to signals emitted by `EconomyManager`, `Building`, `GameManager`, and `MineEntry` rather than polling.
-- **Drawing:** Effects and foreground dirt/ore tiles are code-drawn (`_draw()`) using simple rectangles and arcs. Buildings use sprite assets from `frost_mines_assets/buildings/` (player/enemy variants). Wall cells use `frost_mines_assets/props/wall_segment.png`. Mine entrances use `frost_mines_assets/props/mine_entry.png`. Backgrounds use sprite assets from `frost_mines_assets/backgrounds/` (sky, surface ground, underground base). Units use sprite assets from `frost_mines_assets/units/` assigned through `UnitData.player_textures` / `enemy_textures`, with miners swapping by upgrade level. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
+- **Drawing:** The surface ground row is code-drawn (`_draw()`) using simple rectangles and arcs. Underground dirt/ore tiles use per-layer sprite assets from `frost_mines_assets/tiles/`. Buildings use sprite assets from `frost_mines_assets/buildings/` (player/enemy variants). Wall cells use `frost_mines_assets/props/wall_segment.png`. Mine entrances use `frost_mines_assets/props/mine_entry.png`. Backgrounds use sprite assets from `frost_mines_assets/backgrounds/` (sky, surface ground, underground base). Units use sprite assets from `frost_mines_assets/units/` assigned through `UnitData.player_textures` / `enemy_textures`, with miners swapping by upgrade level, and use `frost_mines_assets/effects/` for selection rings and impact flashes. Projectiles use arrow/blast effect sprites. The in-game HUD/UI uses sprite assets from `frost_mines_assets/ui/` and `frost_mines_assets/icons/` (panel backgrounds, buttons, progress bars, stat/unit icons, and building/unit HP bars).
 
 ---
 

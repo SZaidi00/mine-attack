@@ -30,6 +30,15 @@ const _SKY_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/su
 const _SURFACE_GROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_ground.png")
 const _UNDERGROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/underground_base.png")
 const _WALL_TEXTURE: Texture2D = preload("res://frost_mines_assets/props/wall_segment.png")
+const _LAYER_TILES: Array[Texture2D] = [
+	preload("res://frost_mines_assets/tiles/layer_1_tile.png"),
+	preload("res://frost_mines_assets/tiles/layer_2_tile.png"),
+	preload("res://frost_mines_assets/tiles/layer_3_tile.png"),
+	preload("res://frost_mines_assets/tiles/layer_4_tile.png"),
+	preload("res://frost_mines_assets/tiles/layer_5_tile.png"),
+	preload("res://frost_mines_assets/tiles/layer_6_tile.png"),
+	preload("res://frost_mines_assets/tiles/layer_7_tile.png")
+]
 
 const CELL_SIZE: int = _Constants.TILE_SIZE
 
@@ -297,9 +306,17 @@ func _draw() -> void:
 				# Surface outline.
 				draw_rect(rect, GameManager.COLOR_STEEL, false, 1.0)
 			CellType.DIRT:
-				draw_rect(rect, _dirt_color(cell.layer), true)
+				var dirt_texture: Texture2D = _layer_tile(cell.layer)
+				if dirt_texture != null:
+					draw_texture_rect(dirt_texture, rect, false)
+				else:
+					draw_rect(rect, _dirt_color(cell.layer), true)
 			CellType.ORE:
-				draw_rect(rect, _dirt_color(cell.layer), true)
+				var ore_texture: Texture2D = _layer_tile(cell.layer)
+				if ore_texture != null:
+					draw_texture_rect(ore_texture, rect, false)
+				else:
+					draw_rect(rect, _dirt_color(cell.layer), true)
 				# Ore nugget.
 				var inner: Rect2 = rect.grow(-8)
 				draw_rect(inner, GameManager.COLOR_RUST, true)
@@ -326,3 +343,8 @@ func _dirt_color(layer: int) -> Color:
 	if layer <= 4:
 		return GameManager.COLOR_DIRT_2
 	return GameManager.COLOR_DIRT_3
+
+
+func _layer_tile(layer: int) -> Texture2D:
+	var idx: int = clampi(layer - 1, 0, _LAYER_TILES.size() - 1)
+	return _LAYER_TILES[idx]

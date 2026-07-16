@@ -1,5 +1,8 @@
 extends Node2D
 
+const _ARROW_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/projectile_arrow.png")
+const _BLAST_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/projectile_blast.png")
+
 @export var speed: float = 400.0
 @export var damage: int = 10
 @export var is_fireball: bool = false
@@ -54,8 +57,8 @@ func _impact() -> void:
 
 func _draw() -> void:
 	if is_fireball:
-		draw_circle(Vector2.ZERO, 5, Color.ORANGE_RED)
-		draw_circle(Vector2.ZERO, 3, Color.YELLOW)
+		var blast_size: Vector2 = _BLAST_TEXTURE.get_size()
+		draw_texture(_BLAST_TEXTURE, -blast_size / 2.0)
 	else:
-		draw_rect(Rect2(-6, -1, 12, 2), GameManager.COLOR_RUST, true)
-		draw_polygon([Vector2(6, -3), Vector2(12, 0), Vector2(6, 3)], [GameManager.COLOR_RUST])
+		var arrow_size: Vector2 = _ARROW_TEXTURE.get_size()
+		draw_texture(_ARROW_TEXTURE, -arrow_size / 2.0)

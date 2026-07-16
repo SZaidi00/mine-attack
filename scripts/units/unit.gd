@@ -22,6 +22,9 @@ const _MINER_TEXTURES: Dictionary = {
 	]
 }
 
+const _SELECTION_RING: Texture2D = preload("res://frost_mines_assets/effects/selection_ring.png")
+const _IMPACT_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/impact_hit.png")
+
 @export var data: UnitData
 @export var team: GameManager.Team = GameManager.Team.PLAYER
 
@@ -42,6 +45,7 @@ var _attack_timer: float = 0.0
 var _mine_timer: float = 0.0
 var _mine_target_angle: float = 0.0
 var _mine_hit_flash: float = 0.0
+var _hit_flash_timer: float = 0.0
 var _dead_timer: float = 0.0
 var _flee_timer: float = 0.0
 var _flee_target: Vector2 = Vector2.ZERO
@@ -73,6 +77,11 @@ func _process(delta: float) -> void:
 		if _dead_timer <= 0:
 			queue_free()
 		return
+
+	if _hit_flash_timer > 0:
+		_hit_flash_timer -= delta
+		if _hit_flash_timer <= 0:
+			queue_redraw()
 
 	if _flee_timer > 0:
 		_flee_timer -= delta
@@ -185,6 +194,7 @@ func stop() -> void:
 
 func take_damage(amount: int) -> void:
 	hp -= amount
+	_hit_flash_timer = 0.15
 	queue_redraw()
 	_spawn_damage_popup(amount)
 	if hp <= 0:
@@ -775,7 +785,8 @@ func _draw() -> void:
 
 	# Selection indicator.
 	if selected:
-		draw_arc(Vector2.ZERO, selection_radius, 0, TAU, 16, Color.WHITE, 2.0)
+		var ring_size: float = selection_radius * 2.0
+		draw_texture_rect(_SELECTION_RING, Rect2(-selection_radius, -selection_radius, ring_size, ring_size), false)
 
 	# Body.
 	if sprite_texture != null:
@@ -797,6 +808,11 @@ func _draw() -> void:
 		elif data.unit_name == "Wizard":
 			draw_line(Vector2(6, 6), Vector2(12, -14), GameManager.COLOR_RUST, 2.0)
 			draw_circle(Vector2(12, -16), 4, Color.PURPLE)
+
+	# Impact hit flash.
+	if _hit_flash_timer > 0:
+		var impact_size: Vector2 = _IMPACT_TEXTURE.get_size()
+		draw_texture(_IMPACT_TEXTURE, -impact_size / 2.0)
 
 	# HP bar when damaged, hovered, or selected.
 	if selected or hovered or hp < data.max_hp:

@@ -13,7 +13,8 @@ const _TAB_INACTIVE: Texture2D = preload("res://frost_mines_assets/ui/tab_inacti
 const _ICON_COIN: Texture2D = preload("res://frost_mines_assets/icons/icon_coin.png")
 const _ICON_MINER: Texture2D = preload("res://frost_mines_assets/icons/icon_miner.png")
 const _ICON_SWORDSMAN: Texture2D = preload("res://frost_mines_assets/icons/icon_swordsman.png")
-const _ICON_BUILDING: Texture2D = preload("res://frost_mines_assets/icons/icon_building.png")
+const _ICON_HP: Texture2D = preload("res://frost_mines_assets/icons/icon_hp.png")
+const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_attack.png")
 
 @onready var _coin_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/CoinLabel
 @onready var _miner_level_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/MinerLevelLabel
@@ -41,6 +42,7 @@ func _ready() -> void:
 	_style_upgrade_button()
 	_style_stance_buttons()
 	_add_stat_icons()
+	_add_attack_button_icon()
 
 	_upgrade_button.pressed.connect(_upgrade_miner)
 	_attack_button.pressed.connect(_stance.bind("attack"))
@@ -142,8 +144,8 @@ func _add_stat_icons() -> void:
 	_add_icon_before_label(_coin_label, _ICON_COIN)
 	_add_icon_before_label(_miner_level_label, _ICON_MINER)
 	_add_icon_before_label(_unit_count_label, _ICON_SWORDSMAN)
-	_add_icon_before_label(_player_hp_label, _ICON_BUILDING)
-	_add_icon_before_label(_enemy_hp_label, _ICON_BUILDING)
+	_add_icon_before_label(_player_hp_label, _ICON_HP)
+	_add_icon_before_label(_enemy_hp_label, _ICON_HP)
 
 
 func _add_icon_before_label(label: Label, texture: Texture2D) -> void:
@@ -160,6 +162,20 @@ func _add_icon_before_label(label: Label, texture: Texture2D) -> void:
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(icon)
 	parent.move_child(icon, label.get_index())
+
+
+func _add_attack_button_icon() -> void:
+	var icon: TextureRect = TextureRect.new()
+	icon.name = "AttackIcon"
+	icon.texture = _ICON_ATTACK
+	icon.custom_minimum_size = Vector2(24, 24)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_FIT_HEIGHT
+	icon.position = Vector2(38, 6)
+	icon.size = Vector2(24, 24)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_attack_button.add_child(icon)
+	_attack_button.move_child(icon, 0)
 
 
 func _update_upgrade_button() -> void:
