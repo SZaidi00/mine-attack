@@ -4,6 +4,9 @@ extends Node
 const _Constants = preload("res://scripts/autoload/constants.gd")
 const _REJECT_POPUP: PackedScene = preload("res://scenes/effects/reject_popup.tscn")
 
+enum ViewMode { SURFACE, UNDERGROUND }
+signal view_mode_changed(mode: ViewMode)
+
 @export var camera: Camera2D
 @export var selection_box: ColorRect
 
@@ -16,7 +19,9 @@ var _zoom_max: float = 2.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
-var _underground_view: bool = true
+var _view_mode: ViewMode = ViewMode.SURFACE
+var _last_surface_cam_pos: Vector2 = Vector2(0, -150)
+var _last_underground_cam_pos: Vector2 = Vector2(0, 400)
 
 
 func _ready() -> void:
@@ -26,7 +31,36 @@ func _ready() -> void:
 		# drag-release landing inside it would be swallowed by the GUI and
 		# _unhandled_input would never finish the selection.
 		selection_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_init_view_positions()
 	call_deferred("_validate_setup")
+
+
+func _init_view_positions() -> void:
+	if camera == null:
+		return
+	# The scene author can set a starting camera position; if it looks like a
+	# surface position, treat it as the saved surface view, otherwise default.
+	if camera.position.y < 100:
+		_last_surface_cam_pos = camera.position
+	else:
+		_last_surface_cam_pos = Vector2(camera.position.x, -150)
+	var entry: Node2D = _player_mine_entry()
+	if entry:
+		_last_underground_cam_pos = entry.call("get_underground_position")
+	else:
+		_last_underground_cam_pos = Vector2(_last_surface_cam_pos.x, 400)
+	# Apply the initial view mode so the camera is consistent on first frame.
+	if _view_mode == ViewMode.SURFACE:
+		camera.position = _last_surface_cam_pos
+	else:
+		camera.position = _last_underground_cam_pos
+
+
+func _player_mine_entry() -> Node2D:
+	for entry in get_tree().get_nodes_in_group("mine_entries"):
+		if entry.get("team") == GameManager.Team.PLAYER:
+			return entry
+	return null
 
 
 ## Phase 1 startup validation: fail loudly when the scene or groups the
@@ -352,18 +386,21 @@ func upgrade_miner() -> void:
 
 
 func _toggle_view() -> void:
-	set_view(not _underground_view)
+	# View switching is disabled; both layers are always visible.
+	pass
 
 
 func set_view(underground: bool) -> void:
-	if camera == null:
-		return
-	_underground_view = underground
-	camera.position.y = 400.0 if _underground_view else -150.0
+	# View switching is disabled; both layers are always visible.
+	pass
 
 
 func is_underground_view() -> bool:
-	return _underground_view
+	return _view_mode == ViewMode.UNDERGROUND
+
+
+func get_current_view_mode() -> ViewMode:
+	return _view_mode
 
 
 func set_stance(stance: String) -> void:

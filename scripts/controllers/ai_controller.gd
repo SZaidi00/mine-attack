@@ -83,7 +83,7 @@ func _run_mining() -> void:
 	for unit in get_tree().get_nodes_in_group(team_name()):
 		if not unit.data.is_miner:
 			continue
-		if unit._state != Unit.State.IDLE and unit._state != Unit.State.MOVE:
+		if _is_busy(unit):
 			continue
 		if unit.carried_coin >= unit.data.carry_capacity:
 			unit.deposit_coin()
@@ -91,7 +91,7 @@ func _run_mining() -> void:
 			var ore: Vector2i = _find_best_ore(unit)
 			if ore != Vector2i(-9999, -9999):
 				unit.mine_cell(ore)
-			else:
+			elif unit.carried_coin > 0:
 				unit.deposit_coin()
 
 
@@ -187,7 +187,7 @@ func _attempt_wall_breach() -> void:
 	# Send 30% of idle miners to breach the nearest wall cell.
 	var idle_miners: Array = []
 	for unit in get_tree().get_nodes_in_group(team_name()):
-		if unit.data.is_miner and (unit._state == Unit.State.IDLE or unit._state == Unit.State.MOVE):
+		if unit.data.is_miner and not _is_busy(unit):
 			idle_miners.append(unit)
 	var breach_count: int = int(idle_miners.size() * 0.3)
 	var wall_cells: Array[Vector2i] = _grid.get_wall_cells()
@@ -221,6 +221,12 @@ func _find_best_ore(unit: Unit) -> Vector2i:
 				continue
 			# If wall is still up, stick to own side.
 			if _grid.get_wall_hp() > 0 and pos.x * team_dir < -2:
+				continue
+			# Respect miner reservations and this miner's no-path blacklist so
+			# the AI doesn't re-order tiles the miner already failed to reach.
+			if not _grid.is_cell_claimable(pos, unit.get_instance_id()):
+				continue
+			if unit.is_cell_blacklisted(pos):
 				continue
 			var dist: float = center.distance_to(pos)
 			var score: float = cell.coin_value - dist * 0.5
@@ -276,3 +282,12 @@ func _get_enemy_building() -> Node2D:
 
 func team_name() -> String:
 	return "player" if team == GameManager.Team.PLAYER else "enemy"
+
+
+## True while a unit is in a transition state that the AI tick should not override.
+func _is_busy(unit: Unit) -> bool:
+	match unit._state:
+		Unit.State.IDLE, Unit.State.MOVE:
+			return false
+		_:
+			return true

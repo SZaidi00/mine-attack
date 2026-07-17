@@ -14,6 +14,7 @@ const _BUILDING_TEXTURES: Dictionary = {
 signal hp_changed(current: int, maximum: int)
 signal queue_changed(entries: Array)
 signal destroyed(team: GameManager.Team)
+signal coin_deposited(team: GameManager.Team, amount: int)
 
 @export var team: GameManager.Team = GameManager.Team.PLAYER
 @export var max_hp: int = _Constants.PLAYER_BUILDING_HP
@@ -25,6 +26,7 @@ var _hp: int = max_hp
 var _queue: Array = []  # { id: String, data: UnitData, remaining: float }
 var _resources: Dictionary = {}
 var _destroyed: bool = false
+var _deposit_point: Marker2D
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -38,7 +40,21 @@ func _ready() -> void:
 	_resources["archer"] = preload("res://scripts/resources/units/archer.tres")
 	_resources["wizard"] = preload("res://scripts/resources/units/wizard.tres")
 	_mark_footprint_solid()
+	_add_deposit_point()
+	_connect_view_mode()
 	queue_redraw()
+
+
+func _connect_view_mode() -> void:
+	var pc: PlayerController = get_node_or_null("/root/Main/PlayerController")
+	if pc:
+		if not pc.view_mode_changed.is_connected(_on_view_mode_changed):
+			pc.view_mode_changed.connect(_on_view_mode_changed)
+		_on_view_mode_changed(pc.get_current_view_mode())
+
+
+func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
+	visible = (mode == PlayerController.ViewMode.SURFACE)
 
 
 func _mark_footprint_solid() -> void:
@@ -67,6 +83,12 @@ func get_bounds_rect() -> Rect2:
 func get_footprint_cell_rect() -> Rect2i:
 	var origin: Vector2i = _grid.world_to_grid(global_position)
 	return Rect2i(origin.x - width_cells / 2, origin.y - height_cells, width_cells, height_cells)
+
+
+## World position where miners stand to deposit cargo: on the walkable surface
+## row just outside the building's front edge (the side facing the mine).
+func get_deposit_point() -> Vector2:
+	return _deposit_point.global_position
 
 
 func _process(delta: float) -> void:
@@ -117,13 +139,53 @@ func _spawn_front(_unit_id: String, data: UnitData) -> void:
 	unit.position = _spawn_position()
 	get_node("/root/Main/Units").add_child(unit)
 	# Make sure miners head straight into the shaft as soon as they spawn.
-	if data_copy.is_miner and unit.has_method("enter_mine"):
-		unit.call("enter_mine")
+	if data_copy.is_miner and unit.has_method("climb_down_ladder"):
+		unit.call("climb_down_ladder")
 
 
 func _spawn_position() -> Vector2:
 	var dir: float = 1.0 if team == GameManager.Team.PLAYER else -1.0
-	return global_position + Vector2(dir * (width_cells * GridWorld.CELL_SIZE / 2.0 + 24), 0)
+	var base: Vector2 = global_position + Vector2(dir * (width_cells * GridWorld.CELL_SIZE / 2.0 + 24), 0)
+	# Phase 3.4: slight spawn offset so multiple trained units don't stack into one sprite.
+	return base + Vector2(randf_range(-8, 8), randf_range(-6, 6))
+
+
+func _add_deposit_point() -> void:
+	_deposit_point = Marker2D.new()
+	_deposit_point.name = "DepositPoint"
+	var dir: float = 1.0 if team == GameManager.Team.PLAYER else -1.0
+	# On the walkable surface row, just outside the front edge facing the mine.
+	_deposit_point.position = Vector2(
+		dir * (width_cells * GridWorld.CELL_SIZE / 2.0 + GridWorld.CELL_SIZE * 0.5),
+		GridWorld.CELL_SIZE * 0.5
+	)
+	add_child(_deposit_point)
+
+
+## Miner deposit entry point (Phase 3.1): cargo is cashed in at the building
+## after the visible surface walk, not at the mine shaft.
+func deposit(unit: Node2D) -> void:
+	if unit == null:
+		DebugLog.log_reject("Building %d" % get_instance_id(), "deposit", "null unit")
+		return
+	var unit_data = unit.get("data")
+	if unit_data == null or not unit_data.is_miner:
+		return
+	var carried: int = unit.get("carried_coin")
+	if carried > 0:
+		DebugLog.log_command("Building %d" % get_instance_id(), "deposit", "team=%s amount=%d" % ["PLAYER" if team == GameManager.Team.PLAYER else "ENEMY", carried])
+		EconomyManager.add_coin(team, carried)
+		EconomyManager.mine_coin(team, carried)
+		coin_deposited.emit(team, carried)
+		unit.set("carried_coin", 0)
+		_spawn_coin_popup(carried)
+
+
+func _spawn_coin_popup(amount: int) -> void:
+	var popup: CoinPopup = preload("res://scenes/effects/coin_popup.tscn").instantiate()
+	popup.setup(amount)
+	popup.global_position = get_deposit_point() + Vector2(0, -30)
+	get_tree().current_scene.add_child(popup)
 
 
 func take_damage(amount: int) -> void:

@@ -101,6 +101,7 @@ mine-attack/
 - `World/PlayerBuilding` and `World/EnemyBuilding` — bases for each team.
 - `World/PlayerMineEntry` and `World/EnemyMineEntry` — mine shafts.
 - `Camera2D` — player camera, panned/zoomed by `PlayerController`.
+- `PlayerController.ViewMode` — the single source of truth for surface vs. underground view. Toggling view emits `view_mode_changed(mode)`, which `GridWorld`, `Building`, `MineEntry`, and `Unit` consume to show/hide the appropriate visuals.
 - `Units` — runtime container for all spawned units.
 - `Projectiles` — runtime container for arrows and fireballs.
 - `PlayerController` — handles player input, selection, commands, and camera.
@@ -149,7 +150,7 @@ Global singletons accessible from any script via their class name.
 - `player_controller.gd`
   - Handles selection box, single/box selection (with Shift add-to-selection), camera pan/zoom, hotkeys.
   - Issues context-sensitive commands on right-click: attack, mine, breach wall, enter/exit mine, move.
-  - Supports view toggle (Tab / Surface / Underground buttons) and pause (Space / Esc toggles `get_tree().paused`).
+  - Supports view toggle (Tab / Surface / Underground buttons) and pause (Space / Esc toggles `get_tree().paused`). `set_view(underground)` saves/restores the camera position and emits `view_mode_changed(mode)` so `GridWorld`, `Building`, `MineEntry`, and `Unit` update their visibility together.
   - Provides UI callbacks: `train_unit(unit_id)`, `upgrade_miner()`, `set_stance(stance)`, `set_view(underground)`.
   - Stances: `"attack"` (rush enemy building), `"defend"` (stop), `"garrison"` (toggle mine).
 
@@ -157,43 +158,51 @@ Global singletons accessible from any script via their class name.
   - Tick-driven AI with separate timers for economy (`ENEMY_DECISION_INTERVAL` = 2s), mining (1s), attack waves (`ENEMY_ATTACK_WAVE_INTERVAL` = 18s), and aggression updates (`ENEMY_AGGRESSION_INTERVAL` = 10s).
   - Maintains an `_aggression_level` (`"defend"`, `"balanced"`, `"push"`) based on relative fighter counts.
   - Defends building when enemy units are nearby.
-  - Selects ore based on distance, value, and side ownership.
+  - Selects ore based on distance, value, and side ownership, skipping cells reserved by other miners or blacklisted as unreachable by that miner.
   - Attempts central wall breach when pushing and no accessible unmined tiles remain.
 
 ### `scripts/world/`
 
 - `grid_world.gd`
   - `CellType` enum: `EMPTY`, `SURFACE_GROUND`, `DIRT`, `ORE`, `WALL`.
-  - `Cell` inner class holds type, hp, max_hp, layer, miner level requirement, coin value, wall flag.
+  - `Cell` inner class holds type, hp, max_hp, layer, miner level requirement, coin value, wall flag, and a `claimed_by` miner reservation.
   - Procedural map generation with 7 underground layers (3 rows per layer, `ROWS_PER_LAYER = 3`), layer-specific tile HP and ore coin values, entry shafts at x = -15 and x = 15, and border walls.
   - Map bounds: `GRID_X_MIN = -40` to `GRID_X_MAX = 40`, `GRID_Y_MIN = 0` to `GRID_Y_MAX = 21`.
   - Central wall is a single shared 2000 HP objective spanning all layers at `x = -1, 0, 1`.
   - Uses `AStarGrid2D` for pathfinding.
-  - `damage_cell()` applies mining damage and returns coin when destroyed; wall damage reduces the shared wall HP pool and scales with miner level.
+  - `damage_cell()` applies mining damage and returns coin when destroyed; wall damage reduces the shared wall HP pool and scales with miner level. Partially damaged cells show a brief flash, dust puffs, and a small HP bar so active mining is visible; destroyed tiles burst dust and clear their A* solid in the same transaction.
+  - Cell reservations (`claim_cell` / `release_cell` / `is_cell_claimable`) let miners spread across tiles instead of dogpiling one (Phase 3.3).
+  - Splits rendering by `PlayerController.ViewMode`: surface view draws only the sky, surface ground, and surface row; underground view draws the underground background, ceiling, and all subterranean tiles.
 
 - `building.gd`
   - Training queue with `queue_unit(unit_id)` and `cancel_queue(index)` (100% refund).
   - Default building HP is 5000 (`PLAYER_BUILDING_HP` / `ENEMY_BUILDING_HP`).
   - Spawns units at the building front and automatically sends miners into the mine.
-  - Emits `hp_changed`, `queue_changed`, `destroyed`.
+  - Emits `hp_changed`, `queue_changed`, `destroyed`, `coin_deposited`.
+  - Owns the miner deposit point (Phase 3.1): a `DepositPoint` Marker2D just outside the front edge on the surface row; `deposit(unit)` converts carried coin into team coin and spawns the coin popup there.
   - Draws a team-specific building sprite and a health bar above it.
   - Marks its footprint as solid on the grid by writing directly into `GridWorld._cells` and `_astar`.
+  - Visible only in `PlayerController.ViewMode.SURFACE`; hidden in underground view.
+  - Phase 3.4: spawns units with a slight randomized offset so training bursts don't perfectly overlap.
 
 - `mine_entry.gd`
   - Teleports units between surface and underground positions.
-  - `deposit(unit)` converts carried coin into team coin.
+  - `deposit(unit)` converts carried coin into team coin — legacy fallback only; the main loop deposits at the building (see `unit.deposit_coin()`).
   - Draws the mine entry sprite from `frost_mines_assets/props/mine_entry.png`.
+  - Visible only in `PlayerController.ViewMode.SURFACE`; hidden in underground view.
 
 ### `scripts/units/`
 
 - `unit.gd`
   - Large state machine: `IDLE`, `MOVE`, `ATTACK`, `MINE`, `DEPOSIT`, `ENTER_MINE`, `EXIT_MINE`, `DEAD`.
   - Command API: `move_to`, `attack_unit`, `attack_building`, `mine_cell`, `deposit_coin`, `enter_mine`, `exit_mine`, `stop`.
-  - Miners auto-enter mine on spawn, auto-seek diggable cells when idle, and flee toward friendly fighters or the mine entry when attacked.
+  - Miners auto-enter mine on spawn, auto-seek diggable cells when idle, and flee toward friendly fighters or the mine entry when attacked (fleeing to the shaft's underground position when attacked below ground). When cargo is full (or nothing diggable remains), miners surface and walk to their building's deposit point to cash in before heading back down (Phase 3.1).
+  - Mining seek (Phase 3.3): nearest diggable cell wins with a slight ore-value preference; the miner-level gate is enforced at seek time; targeted cells are reserved via `claimed_by`; cells that can't be pathed to go on a per-miner 10s blacklist; when nothing diggable remains, the miner idles near the surface entry and re-scans every 5s instead of thrashing.
   - Fighters auto-attack nearby enemies (fighters → building → enemy miners on own side) and patrol underground when idle.
   - Fighters move at 60% speed while underground.
   - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`).
-  - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected, use `frost_mines_assets/effects/selection_ring.png` for selection, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage.
+  - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected, use `frost_mines_assets/effects/selection_ring.png` for selection, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage. Unit visibility follows `PlayerController.ViewMode` — surface units hide in underground view and vice-versa.
+  - Phase 3.4 traffic: each unit gets a small `_movement_offset` applied to miner deposit and mine-entry targets, and `_follow_path()` applies soft repulsion from nearby friendly units so surface parades don't stack into a single sprite.
 
 - `projectile.gd`
   - Homing arrow / fireball projectile.

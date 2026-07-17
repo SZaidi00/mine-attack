@@ -3,7 +3,7 @@ extends Node2D
 
 signal died(unit)
 
-enum State { IDLE, MOVE, ATTACK, MINE, DEPOSIT, ENTER_MINE, EXIT_MINE, DEAD }
+enum State { IDLE, MOVE, ATTACK, MINE, DEPOSIT, ENTER_MINE, EXIT_MINE, CLIMB_UP, CLIMB_DOWN, DEAD }
 
 const _HP_BAR_BG: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_unit_bg.png")
 const _HP_BAR_GREEN: Texture2D = preload("res://frost_mines_assets/ui/hp_bar_unit_green.png")
@@ -24,6 +24,11 @@ const _MINER_TEXTURES: Dictionary = {
 
 const _SELECTION_RING: Texture2D = preload("res://frost_mines_assets/effects/selection_ring.png")
 const _IMPACT_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/impact_hit.png")
+
+# How long a cell stays on this miner's no-path blacklist before a retry.
+const _UNREACHABLE_FORGET_MS: int = 10000
+# Idle wait near the surface entry before re-scanning an exhausted mine.
+const _EXHAUSTED_RETRY_SEC: float = 5.0
 
 @export var data: UnitData
 @export var team: GameManager.Team = GameManager.Team.PLAYER
@@ -49,6 +54,19 @@ var _hit_flash_timer: float = 0.0
 var _dead_timer: float = 0.0
 var _flee_timer: float = 0.0
 var _flee_target: Vector2 = Vector2.ZERO
+# Set when the miner still has cargo but nothing left to dig; the next surface
+# idle tick sends it to the building deposit point instead of back down.
+var _deposit_requested: bool = false
+# Phase 3.3: cells this miner failed to path to (Vector2i -> Time.get_ticks_msec()
+# when marked). Forgotten after a cooldown so newly connected pockets are retried.
+var _unreachable_cells: Dictionary = {}
+# Set when a seek scan found no diggable target; the miner waits near the
+# surface entry and retries periodically instead of thrashing down and up.
+var _mine_exhausted: bool = false
+var _exhausted_retry_timer: float = 0.0
+# Phase 3.4: small per-unit offset applied to deposit and mine-entry targets
+# so multiple miners do not stack into a single sprite on the surface parade.
+var _movement_offset: Vector2 = Vector2.ZERO
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -62,6 +80,8 @@ func _ready() -> void:
 	add_to_group("units")
 	_add_hover_area()
 	add_to_group(team_name())
+	_movement_offset = Vector2(randf_range(-8, 8), randf_range(-6, 6))
+	_connect_view_mode()
 	queue_redraw()
 	# Spawners (the building) are responsible for issuing the first command.
 	# This avoids double-ordering a miner before its first _process tick.
@@ -94,6 +114,10 @@ func _process(delta: float) -> void:
 
 	if data.is_miner:
 		_apply_miner_upgrade()
+		if _mine_exhausted:
+			_exhausted_retry_timer -= delta
+			if _exhausted_retry_timer <= 0.0:
+				_mine_exhausted = false
 		if _state == State.IDLE:
 			_handle_idle_miner()
 	elif data.is_fighter and _state == State.IDLE:
@@ -111,6 +135,10 @@ func _process(delta: float) -> void:
 			_process_enter_mine(delta)
 		State.EXIT_MINE:
 			_process_exit_mine(delta)
+		State.CLIMB_UP:
+			_process_climb_up(delta)
+		State.CLIMB_DOWN:
+			_process_climb_down(delta)
 
 
 # ---------- Commands ----------
@@ -177,24 +205,43 @@ func mine_cell(grid_pos: Vector2i) -> void:
 	DebugLog.log_command("Unit %d" % get_instance_id(), "mine_cell", str(grid_pos))
 	_clear_target()
 	_target_cell = grid_pos
+	# Reserve the tile so other auto-seeking miners pick a different one.
+	_grid.claim_cell(grid_pos, get_instance_id())
 	_set_state(State.MINE, "mine_cell command")
 	# Move adjacent.
 	var adj: Vector2 = _nearest_adjacent_world(grid_pos)
 	_repath(adj)
+	if _path.is_empty():
+		_path.append(adj)
+	if not _path_reaches(adj):
+		_mark_cell_unreachable(grid_pos)
+		_set_state(State.IDLE, "mine target unreachable")
 
 
 func deposit_coin() -> void:
 	if data == null or not data.is_miner:
 		DebugLog.log_reject("Unit %d" % get_instance_id(), "deposit_coin", "not a miner")
 		return
-	DebugLog.log_command("Unit %d" % get_instance_id(), "deposit_coin", "cargo=%d" % carried_coin)
+	if carried_coin <= 0:
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "deposit_coin", "cargo empty")
+		return
 	_clear_target()
+	if is_underground:
+		# Deposits happen at the building on the surface; climb the ladder out,
+		# then _handle_idle_miner sends us to the deposit point.
+		DebugLog.log_command("Unit %d" % get_instance_id(), "deposit_coin", "cargo=%d" % carried_coin)
+		climb_up_ladder()
+		_deposit_requested = true
+		return
+	var building: Node2D = _friendly_building()
+	if building == null:
+		# Base destroyed (game over); stay idle without log-spamming every tick.
+		_set_state(State.IDLE, "no building for deposit")
+		return
+	DebugLog.log_command("Unit %d" % get_instance_id(), "deposit_coin", "cargo=%d" % carried_coin)
 	_set_state(State.DEPOSIT, "deposit command")
-	var entry: Node2D = _nearest_friendly_mine_entry()
-	if entry:
-		_repath(entry.global_position)
-	else:
-		_set_state(State.IDLE, "no mine entry for deposit")
+	_target_position = building.call("get_deposit_point") + _movement_offset
+	_repath(_target_position)
 
 
 func enter_mine() -> void:
@@ -203,10 +250,11 @@ func enter_mine() -> void:
 	_set_state(State.ENTER_MINE, "enter_mine command")
 	var entry: Node2D = _nearest_friendly_mine_entry()
 	if entry:
-		_repath(entry.global_position)
+		var entry_target: Vector2 = entry.global_position + _movement_offset
+		_repath(entry_target)
 		# If A* can't find a route, walk straight to the shaft instead of freezing.
 		if _path.is_empty():
-			_path.append(entry.global_position)
+			_path.append(entry_target)
 	else:
 		_set_state(State.IDLE, "no mine entry")
 
@@ -217,8 +265,29 @@ func exit_mine() -> void:
 	_set_state(State.EXIT_MINE, "exit_mine command")
 	var entry: Node2D = _nearest_friendly_mine_entry()
 	if entry:
-		_repath(entry.call("get_underground_position"))
+		var underground_target: Vector2 = entry.call("get_underground_position") + _movement_offset
+		_repath(underground_target)
+		if _path.is_empty():
+			_path.append(underground_target)
 	else:
+		_set_state(State.IDLE, "no mine entry")
+
+
+func climb_up_ladder() -> void:
+	DebugLog.log_command("Unit %d" % get_instance_id(), "climb_up_ladder")
+	_clear_target()
+	_set_state(State.CLIMB_UP, "climb_up_ladder command")
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry == null:
+		_set_state(State.IDLE, "no mine entry")
+
+
+func climb_down_ladder() -> void:
+	DebugLog.log_command("Unit %d" % get_instance_id(), "climb_down_ladder")
+	_clear_target()
+	_set_state(State.CLIMB_DOWN, "climb_down_ladder command")
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry == null:
 		_set_state(State.IDLE, "no mine entry")
 
 
@@ -251,7 +320,9 @@ func _spawn_damage_popup(amount: int) -> void:
 
 func _follow_path(delta: float) -> void:
 	if _path.is_empty() or _path_index >= _path.size():
-		_set_state(State.IDLE, "path empty/start")
+		# Climb states handle arrival themselves; don't drop back to IDLE.
+		if _state != State.CLIMB_UP and _state != State.CLIMB_DOWN:
+			_set_state(State.IDLE, "path empty/start")
 		return
 	var target: Vector2 = _path[_path_index]
 	var dir: Vector2 = target - global_position
@@ -259,7 +330,8 @@ func _follow_path(delta: float) -> void:
 	if dist <= 2.0:
 		_path_index += 1
 		if _path_index >= _path.size():
-			_set_state(State.IDLE, "path completed")
+			if _state != State.CLIMB_UP and _state != State.CLIMB_DOWN:
+				_set_state(State.IDLE, "path completed")
 			return
 		target = _path[_path_index]
 		dir = target - global_position
@@ -268,7 +340,32 @@ func _follow_path(delta: float) -> void:
 	if is_underground and data.is_fighter:
 		speed *= 0.6
 	var step: float = speed * delta
-	global_position += dir.normalized() * min(step, dist)
+	var move: Vector2 = dir.normalized() * min(step, dist)
+	# Phase 3.4: soft separation so same-team units don't hard-collide or stack.
+	# Skip separation while walking to a ladder; it can push the unit away from
+	# the exact ladder bottom/top and make it oscillate around the arrival threshold.
+	if _state != State.CLIMB_UP and _state != State.CLIMB_DOWN:
+		var separation: Vector2 = _compute_separation()
+		if separation != Vector2.ZERO:
+			move += separation.normalized() * min(step * 0.6, separation.length())
+	global_position += move
+
+
+## Phase 3.4: push away from nearby friendly units to avoid stacking and
+## single-file parade artifacts. This is a soft steering nudge, not physics.
+func _compute_separation() -> Vector2:
+	var sep: Vector2 = Vector2.ZERO
+	var radius: float = 22.0
+	var radius_sq: float = radius * radius
+	for unit in get_tree().get_nodes_in_group(team_name()):
+		if unit == self or unit._state == State.DEAD:
+			continue
+		var offset: Vector2 = global_position - unit.global_position
+		var dist_sq: float = offset.length_squared()
+		if dist_sq > 0.001 and dist_sq < radius_sq:
+			# Stronger repulsion as units get closer.
+			sep += offset.normalized() * (radius - sqrt(dist_sq))
+	return sep
 
 
 func _process_attack(delta: float) -> void:
@@ -346,12 +443,18 @@ func _process_mine(delta: float) -> void:
 		deposit_coin()
 		return
 	if data.miner_level < cell.miner_level_required:
+		_release_claim()
 		_set_state(State.IDLE, "miner level too low")
 		return
 
 	var cell_world: Vector2 = _grid.grid_to_world(_target_cell)
 	if global_position.distance_to(cell_world) > GridWorld.CELL_SIZE * 1.5:
-		_repath(_nearest_adjacent_world(_target_cell))
+		var adj: Vector2 = _nearest_adjacent_world(_target_cell)
+		_repath(adj)
+		if not _path_reaches(adj):
+			_mark_cell_unreachable(_target_cell)
+			_set_state(State.IDLE, "mine target unreachable")
+			return
 		_follow_path(delta)
 		return
 
@@ -371,16 +474,20 @@ func _process_mine(delta: float) -> void:
 
 
 func _process_deposit(delta: float) -> void:
-	var entry: Node2D = _nearest_friendly_mine_entry()
-	if entry == null:
-		_set_state(State.IDLE, "no mine entry")
+	var building: Node2D = _friendly_building()
+	if building == null:
+		_set_state(State.IDLE, "no building for deposit")
 		return
-	var target_pos: Vector2 = entry.global_position if not is_underground else entry.call("get_underground_position")
+	var target_pos: Vector2 = building.call("get_deposit_point")
 	if global_position.distance_to(target_pos) > GridWorld.CELL_SIZE:
 		_repath(target_pos)
+		# Fallback: walk straight to the deposit point if pathfinding fails.
+		if _path.is_empty():
+			_path.append(target_pos)
 		_follow_path(delta)
 		return
-	entry.call("deposit", self)
+	building.call("deposit", self)
+	_deposit_requested = false
 	_set_state(State.IDLE, "deposit complete")
 
 
@@ -389,7 +496,7 @@ func _process_enter_mine(delta: float) -> void:
 	if entry == null:
 		_set_state(State.IDLE, "no mine entry")
 		return
-	if global_position.distance_to(entry.global_position) > GridWorld.CELL_SIZE:
+	if global_position.distance_to(entry.global_position) > GridWorld.CELL_SIZE * 0.5:
 		_repath(entry.global_position)
 		# Fallback: walk straight to the mine entry if pathfinding fails.
 		if _path.is_empty():
@@ -397,6 +504,7 @@ func _process_enter_mine(delta: float) -> void:
 		_follow_path(delta)
 		return
 	entry.call("enter_mine", self)
+	_refresh_visibility()
 	_set_state(State.IDLE, "entered mine")
 
 
@@ -405,12 +513,86 @@ func _process_exit_mine(delta: float) -> void:
 	if entry == null:
 		_set_state(State.IDLE, "no mine entry")
 		return
-	if global_position.distance_to(entry.call("get_underground_position")) > GridWorld.CELL_SIZE:
-		_repath(entry.call("get_underground_position"))
+	var target: Vector2 = entry.call("get_underground_position")
+	if global_position.distance_to(target) > GridWorld.CELL_SIZE * 0.5:
+		_repath(target)
+		if _path.is_empty():
+			_path.append(target)
 		_follow_path(delta)
 		return
 	entry.call("exit_mine", self)
+	_refresh_visibility()
 	_set_state(State.IDLE, "exited mine")
+
+
+func _process_climb_up(delta: float) -> void:
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry == null:
+		_set_state(State.IDLE, "no mine entry")
+		return
+
+	var ladder_bottom: Vector2 = entry.call("get_ladder_bottom")
+	var ladder_top: Vector2 = entry.call("get_ladder_top")
+
+	# Phase 1: path to the bottom of the ladder. Once the path completes,
+	# transition to the climb even if separation nudged us slightly past the
+	# arrival threshold.
+	var path_completed: bool = not _path.is_empty() and _path_index >= _path.size()
+	if global_position.distance_to(ladder_bottom) > 8.0 and not path_completed:
+		_repath(ladder_bottom)
+		if _path.is_empty():
+			_path.append(ladder_bottom)
+		_follow_path(delta)
+		return
+
+	# Phase 2: climb straight up, keeping horizontal alignment with the ladder.
+	_path.clear()
+	var dir: Vector2 = ladder_top - global_position
+	if dir.length() <= 8.0:
+		entry.call("exit_mine_climb", self)
+		_refresh_visibility()
+		_set_state(State.IDLE, "climbed out")
+		return
+
+	var climb_speed: float = data.speed * 0.9
+	var step: float = min(climb_speed * delta, dir.length())
+	global_position.x = ladder_top.x
+	global_position.y += sign(dir.y) * step
+
+
+func _process_climb_down(delta: float) -> void:
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry == null:
+		_set_state(State.IDLE, "no mine entry")
+		return
+
+	var ladder_top: Vector2 = entry.call("get_ladder_top")
+	var ladder_bottom: Vector2 = entry.call("get_ladder_bottom")
+
+	# Phase 1: path to the top of the ladder. Once the path completes,
+	# transition to the climb even if separation nudged us slightly past the
+	# arrival threshold.
+	var path_completed: bool = not _path.is_empty() and _path_index >= _path.size()
+	if global_position.distance_to(ladder_top) > 8.0 and not path_completed:
+		_repath(ladder_top)
+		if _path.is_empty():
+			_path.append(ladder_top)
+		_follow_path(delta)
+		return
+
+	# Phase 2: climb straight down, keeping horizontal alignment with the ladder.
+	_path.clear()
+	var dir: Vector2 = ladder_bottom - global_position
+	if dir.length() <= 8.0:
+		entry.call("enter_mine_climb", self)
+		_refresh_visibility()
+		_set_state(State.IDLE, "climbed in")
+		return
+
+	var climb_speed: float = data.speed * 0.9
+	var step: float = min(climb_speed * delta, dir.length())
+	global_position.x = ladder_top.x
+	global_position.y += sign(dir.y) * step
 
 
 # ---------- Helpers ----------
@@ -425,12 +607,50 @@ func _set_state(new_state: State, reason: String = "") -> void:
 
 
 func _clear_target() -> void:
+	_release_claim()
 	_target_unit = null
 	_target_building = null
 	_target_cell = Vector2i(-9999, -9999)
 	_target_position = Vector2.ZERO
 	_path.clear()
 	_path_index = 0
+
+
+func _release_claim() -> void:
+	if _target_cell != Vector2i(-9999, -9999):
+		_grid.release_cell(_target_cell, get_instance_id())
+
+
+## True when the current A* path ends on the target cell or one of its
+## orthogonal/diagonal neighbours. find_path() redirects blocked endpoints to
+## the nearest walkable cell, so a non-empty path can stop one cell short even
+## though the miner can still stand next to the tile and dig.
+func _path_reaches(world_target: Vector2) -> bool:
+	if _path.is_empty():
+		return false
+	var end_grid: Vector2i = _grid.world_to_grid(_path[_path.size() - 1])
+	var target_grid: Vector2i = _grid.world_to_grid(world_target)
+	var diff: Vector2i = (end_grid - target_grid).abs()
+	return diff.x <= 1 and diff.y <= 1
+
+
+## Blacklists a cell this miner cannot path to and drops its reservation, so
+## the next seek picks a different candidate instead of thrashing on this one.
+func _mark_cell_unreachable(grid_pos: Vector2i) -> void:
+	DebugLog.log_reject("Unit %d" % get_instance_id(), "mine_cell", "no path to " + str(grid_pos))
+	_unreachable_cells[grid_pos] = Time.get_ticks_msec()
+	_release_claim()
+
+
+## True while the cell is on this miner's no-path blacklist (the AI consults
+## this so it doesn't re-order cells the miner already failed to reach).
+func is_cell_blacklisted(grid_pos: Vector2i) -> bool:
+	if not _unreachable_cells.has(grid_pos):
+		return false
+	if Time.get_ticks_msec() - _unreachable_cells[grid_pos] >= _UNREACHABLE_FORGET_MS:
+		_unreachable_cells.erase(grid_pos)
+		return false
+	return true
 
 
 func _repath(target_world: Vector2) -> void:
@@ -486,12 +706,16 @@ func _spawn_reject_popup(at: Vector2) -> void:
 
 
 func _handle_idle_miner() -> void:
-	# Full miners should deposit. Surface miners should enter the shaft first.
-	# Underground miners look for the next cell to dig.
-	if carried_coin >= data.carry_capacity:
+	# Full miners (and miners flagged with nothing left to dig) deposit at the
+	# building. When the mine is exhausted, wait near the surface entry until
+	# the retry timer fires. Otherwise surface miners climb down the ladder and
+	# underground miners look for the next cell to dig.
+	if carried_coin >= data.carry_capacity or (_deposit_requested and carried_coin > 0):
 		deposit_coin()
+	elif _mine_exhausted:
+		_idle_near_mine_entry()
 	elif not is_underground:
-		enter_mine()
+		climb_down_ladder()
 	else:
 		_find_and_mine()
 
@@ -499,69 +723,72 @@ func _handle_idle_miner() -> void:
 func _find_and_mine() -> void:
 	var center: Vector2i = _grid.world_to_grid(global_position)
 	var team_dir: int = _team_dir()
+	var id: int = get_instance_id()
+	var now_ms: int = Time.get_ticks_msec()
 
-	# Helper closure: score a candidate cell.
+	# Scan the whole own side (both sides once the wall is down) so no corner
+	# of the mine is starved. Nearest diggable cell wins, with a slight
+	# preference for higher ore value at similar distance (Phase 3.3 DECISION).
+	var wall_intact: bool = _grid.get_wall_hp() > 0
+	var x_lo: int = GridWorld.X_MIN if team_dir == -1 or not wall_intact else 2
+	var x_hi: int = GridWorld.X_MAX if team_dir == 1 or not wall_intact else -2
+
 	var best: Vector2i = Vector2i(-9999, -9999)
 	var best_score: float = 999999.0
-	var best_reachable: bool = false
-
-	# Scan forward into the team's own side first so ties are broken toward the
-	# center wall rather than back toward the friendly building.
-	var x_start: int = 16 if team_dir == -1 else -16
-	var x_end: int = -17 if team_dir == -1 else 17
-	var x_step: int = -1 if team_dir == -1 else 1
-
-	var scan := func(types: Array, reachable_only: bool) -> void:
-		for x in range(x_start, x_end, x_step):
-			for y in range(-2, 16):
-				var pos: Vector2i = center + Vector2i(x, y)
-				var cell: GridWorld.Cell = _grid.get_cell(pos)
-				if cell == null or not (cell.type in types):
+	for x in range(x_lo, x_hi + 1):
+		for y in range(1, GridWorld.Y_MAX + 1):
+			var pos: Vector2i = Vector2i(x, y)
+			var cell: GridWorld.Cell = _grid.get_cell(pos)
+			if cell == null:
+				continue
+			if cell.type != GridWorld.CellType.DIRT and cell.type != GridWorld.CellType.ORE:
+				continue
+			# Level gate enforced at seek time so miners never path to tiles
+			# they can never dig.
+			if data.miner_level < cell.miner_level_required:
+				continue
+			# Skip tiles another miner reserved.
+			if not _grid.is_cell_claimable(pos, id):
+				continue
+			# Skip tiles this miner recently failed to reach.
+			if _unreachable_cells.has(pos):
+				if now_ms - _unreachable_cells[pos] < _UNREACHABLE_FORGET_MS:
 					continue
-				if cell.type == GridWorld.CellType.SURFACE_GROUND:
-					continue
-				if data.miner_level < cell.miner_level_required:
-					continue
-				# Stick to own side of the mine until the central wall is breached.
-				if _grid.get_wall_hp() > 0 and pos.x * team_dir < -2:
-					continue
-				var reachable: bool = _has_empty_neighbor(pos)
-				if reachable_only and not reachable:
-					continue
-				var dist: float = center.distance_to(pos)
-				# Prefer reachable cells, then ore over dirt, then closer.
-				var is_ore: bool = cell.type == GridWorld.CellType.ORE
-				var score: float = dist - (100.0 if reachable else 0.0) - (50.0 if is_ore else 0.0)
-				if score < best_score:
-					best_score = score
-					best = pos
-					best_reachable = reachable
-
-	# First try reachable ore.
-	scan.call([GridWorld.CellType.ORE], true)
-	# Then reachable dirt to keep digging forward.
-	if best == Vector2i(-9999, -9999):
-		best_score = 999999.0
-		scan.call([GridWorld.CellType.DIRT], true)
-	# Last resort: any ore.
-	if best == Vector2i(-9999, -9999):
-		best_score = 999999.0
-		scan.call([GridWorld.CellType.ORE], false)
-	# Fallback: any diggable dirt.
-	if best == Vector2i(-9999, -9999):
-		best_score = 999999.0
-		scan.call([GridWorld.CellType.DIRT], false)
+				_unreachable_cells.erase(pos)
+			# Fully surrounded tiles can't be stood next to yet.
+			if not _has_empty_neighbor(pos):
+				continue
+			var score: float = center.distance_to(pos) - cell.coin_value * 0.1
+			if score < best_score:
+				best_score = score
+				best = pos
 
 	if best != Vector2i(-9999, -9999):
 		mine_cell(best)
+		return
+
+	# Nothing diggable remains in range: cash in any cargo, then wait near the
+	# surface entry instead of thrashing down and up the shaft.
+	_mine_exhausted = true
+	_exhausted_retry_timer = _EXHAUSTED_RETRY_SEC
+	if carried_coin > 0:
+		deposit_coin()
 	else:
-		# No diggable target in range; regroup near the mine entry.
-		var entry: Node2D = _nearest_friendly_mine_entry()
-		if entry:
-			if is_underground:
-				move_to(entry.call("get_underground_position"))
-			else:
-				move_to(entry.global_position)
+		_idle_near_mine_entry()
+
+
+## Exhausted-mine idle: surface and wait near the entry until the retry timer
+## re-opens the seek. Movement goes through normal commands so the state log
+## explains what the miner is doing.
+func _idle_near_mine_entry() -> void:
+	if is_underground:
+		climb_up_ladder()
+		return
+	var entry: Node2D = _nearest_friendly_mine_entry()
+	if entry == null:
+		return
+	if global_position.distance_to(entry.global_position) > GridWorld.CELL_SIZE * 2.0:
+		move_to(entry.global_position)
 
 
 func _has_empty_neighbor(grid_pos: Vector2i) -> bool:
@@ -586,6 +813,7 @@ func _nearest_friendly_mine_entry() -> Node2D:
 func _die() -> void:
 	_set_state(State.DEAD, "death")
 	_dead_timer = 1.0
+	_release_claim()
 	# Enemy miners killed underground drop half their cargo as a collectible pickup.
 	if data.is_miner and is_underground and team != GameManager.Team.PLAYER and carried_coin > 0:
 		var dropped: int = maxi(1, floori(carried_coin * 0.5))
@@ -608,7 +836,27 @@ func _deferred_enter_mine_check() -> void:
 	if data == null or not data.is_miner:
 		return
 	if not is_underground and _state == State.IDLE:
-		enter_mine()
+		climb_down_ladder()
+
+
+func _connect_view_mode() -> void:
+	var pc: PlayerController = get_node_or_null("/root/Main/PlayerController")
+	if pc:
+		if not pc.view_mode_changed.is_connected(_on_view_mode_changed):
+			pc.view_mode_changed.connect(_on_view_mode_changed)
+		_refresh_visibility()
+
+
+func _refresh_visibility() -> void:
+	var pc: PlayerController = get_node_or_null("/root/Main/PlayerController")
+	if pc == null:
+		return
+	_on_view_mode_changed(pc.get_current_view_mode())
+
+
+func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
+	# Surface and underground are shown simultaneously; keep the unit visible.
+	visible = true
 
 
 func team_name() -> String:
@@ -628,14 +876,18 @@ func _is_enemy_underground(world_pos: Vector2) -> bool:
 func _start_flee() -> void:
 	_flee_timer = 3.0
 	var friendly_fighter: Unit = _nearest_friendly_fighter()
-	if friendly_fighter != null and global_position.distance_to(friendly_fighter.global_position) <= 300:
+	# Only flee to a fighter on the same level; A* can't cross the
+	# surface/underground boundary, so a surface fighter can't save a miner
+	# underground (and vice versa).
+	if friendly_fighter != null and friendly_fighter.is_underground == is_underground and global_position.distance_to(friendly_fighter.global_position) <= 300:
 		_flee_target = friendly_fighter.global_position
 	else:
 		var entry: Node2D = _nearest_friendly_mine_entry()
 		if entry == null:
 			_flee_timer = 0.0
 			return
-		_flee_target = entry.global_position
+		# Flee to the shaft on the level we're currently on.
+		_flee_target = entry.call("get_underground_position") if is_underground else entry.global_position
 	_clear_target()
 	_target_position = _flee_target
 	_set_state(State.MOVE, "flee")
@@ -757,6 +1009,13 @@ func _get_enemy_building() -> Node2D:
 	return null
 
 
+func _friendly_building() -> Node2D:
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.get("team") == team:
+			return b
+	return null
+
+
 func _add_hover_area() -> void:
 	var area: Area2D = Area2D.new()
 	area.name = "HoverArea"
@@ -791,10 +1050,14 @@ func _apply_miner_upgrade() -> void:
 		data.max_hp += 15
 		data.mining_rate += 2.0
 	hp += 10
+	# New layers unlocked: stale no-path marks and the exhausted flag may now
+	# be wrong, so reset the seek state and let the miner re-scan.
+	_unreachable_cells.clear()
+	_mine_exhausted = false
 	queue_redraw()
 
 
-func _draw_pickaxe() -> void:
+func _draw_pickaxe(draw_body: bool = true) -> void:
 	# Base pose: pickaxe held at the miner's side.
 	var pivot: Vector2 = Vector2(4, 4)
 	var base_rotation: float = -PI / 4.0
@@ -820,13 +1083,14 @@ func _draw_pickaxe() -> void:
 			lunge = Vector2(cos(aim_angle), sin(aim_angle)) * 3.0
 
 	pivot += lunge
-	draw_set_transform(pivot, base_rotation + swing, Vector2.ONE)
-	# Handle.
-	draw_line(Vector2.ZERO, Vector2(12, -12), GameManager.COLOR_STEEL, 2.5)
-	# Pick head.
-	draw_rect(Rect2(7, -16, 10, 5), GameManager.COLOR_STEEL, true)
-	draw_line(Vector2(8, -18), Vector2(16, -14), Color.WHITE, 2.0)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if draw_body:
+		draw_set_transform(pivot, base_rotation + swing, Vector2.ONE)
+		# Handle.
+		draw_line(Vector2.ZERO, Vector2(12, -12), GameManager.COLOR_STEEL, 2.5)
+		# Pick head.
+		draw_rect(Rect2(7, -16, 10, 5), GameManager.COLOR_STEEL, true)
+		draw_line(Vector2(8, -18), Vector2(16, -14), Color.WHITE, 2.0)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	# Spark burst on the strike impact.
 	if _state == State.MINE and (_mine_hit_flash > 0.0 or striking):
@@ -895,10 +1159,8 @@ func _draw() -> void:
 		draw_rect(Rect2(-size / 2.0, -size / 2.0, size, size), color, true)
 		draw_rect(Rect2(-size / 2.0, -size / 2.0, size, size), GameManager.COLOR_SHADOW, false, 1.0)
 
-		# Weapon / class indicator.
-		if data.is_miner:
-			_draw_pickaxe()
-		elif data.unit_name == "Swordsman":
+		# Weapon / class indicator (fallback body).
+		if data.unit_name == "Swordsman":
 			draw_line(Vector2(4, 4), Vector2(16, -8), Color.WHITE, 3.0)
 		elif data.unit_name == "Archer":
 			draw_arc(Vector2(10, 0), 7, -PI / 2, PI / 2, 8, GameManager.COLOR_RUST, 2.0)
@@ -906,6 +1168,11 @@ func _draw() -> void:
 		elif data.unit_name == "Wizard":
 			draw_line(Vector2(6, 6), Vector2(12, -14), GameManager.COLOR_RUST, 2.0)
 			draw_circle(Vector2(12, -16), 4, Color.PURPLE)
+
+	# Miner pickaxe animation and spark burst. Drawn on top of sprites as well
+	# so the mining strike is readable even when textured miners are used.
+	if data.is_miner:
+		_draw_pickaxe(sprite_texture == null)
 
 	# Impact hit flash.
 	if _hit_flash_timer > 0:
