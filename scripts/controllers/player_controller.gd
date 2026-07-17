@@ -22,6 +22,10 @@ var _underground_view: bool = true
 func _ready() -> void:
 	if selection_box:
 		selection_box.visible = false
+		# The box is purely visual: it must never consume mouse events, or a
+		# drag-release landing inside it would be swallowed by the GUI and
+		# _unhandled_input would never finish the selection.
+		selection_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	call_deferred("_validate_setup")
 
 
@@ -292,11 +296,17 @@ func _enemy_unit_at(world_pos: Vector2) -> Unit:
 
 
 func _building_at(world_pos: Vector2) -> Node2D:
+	# Pick against the building's full body rect (base plus sprite height)
+	# instead of a radius around its base point, so clicks anywhere on the
+	# building register as building clicks.
 	var best: Node2D = null
 	var best_dist: float = 999999.0
 	for building in get_tree().get_nodes_in_group("buildings"):
-		var d: float = building.global_position.distance_to(world_pos)
-		if d < building.get("width_cells") * GridWorld.CELL_SIZE / 2.0 and d < best_dist:
+		var rect: Rect2 = building.call("get_bounds_rect")
+		if not rect.has_point(world_pos):
+			continue
+		var d: float = building.global_position.distance_squared_to(world_pos)
+		if d < best_dist:
 			best_dist = d
 			best = building
 	return best
