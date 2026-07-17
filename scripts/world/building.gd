@@ -24,12 +24,14 @@ signal destroyed(team: GameManager.Team)
 var _hp: int = max_hp
 var _queue: Array = []  # { id: String, data: UnitData, remaining: float }
 var _resources: Dictionary = {}
+var _destroyed: bool = false
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
 
 func _ready() -> void:
 	_hp = max_hp
+	_destroyed = false
 	add_to_group("buildings")
 	_resources["miner"] = preload("res://scripts/resources/units/miner.tres")
 	_resources["swordsman"] = preload("res://scripts/resources/units/swordsman.tres")
@@ -68,6 +70,8 @@ func get_footprint_cell_rect() -> Rect2i:
 
 
 func _process(delta: float) -> void:
+	if _destroyed:
+		return
 	if _queue.is_empty():
 		return
 	var current = _queue[0]
@@ -123,12 +127,16 @@ func _spawn_position() -> Vector2:
 
 
 func take_damage(amount: int) -> void:
+	if _destroyed:
+		return
 	_hp -= amount
 	hp_changed.emit(_hp, max_hp)
 	queue_redraw()
 	_spawn_damage_popup(amount)
 	if _hp <= 0:
 		_hp = 0
+		_destroyed = true
+		remove_from_group("buildings")
 		destroyed.emit(team)
 		var winner: GameManager.Team = GameManager.Team.PLAYER if team == GameManager.Team.ENEMY else GameManager.Team.ENEMY
 		GameManager.declare_winner(winner)

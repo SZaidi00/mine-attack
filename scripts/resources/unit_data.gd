@@ -13,10 +13,17 @@ extends Resource
 
 @export var max_hp: int = 50
 @export var speed: float = 100.0
-@export var damage: int = 10
 @export var attack_range: float = 32.0
-@export var attack_speed: float = 1.0
 @export var sight_range: float = 250.0
+
+# Combat: cooldown-based discrete hits (Phase 2).
+# DPS = damage_per_hit / attack_cooldown.
+@export var damage_per_hit: float = 10.0
+@export var attack_cooldown: float = 1.0
+
+# Ranged units only.
+@export var projectile_speed: float = 300.0
+@export var aoe_radius: float = 0.0
 
 # Mining only
 @export var miner_level: int = 1

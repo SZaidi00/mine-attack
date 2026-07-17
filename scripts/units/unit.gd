@@ -281,7 +281,7 @@ func _process_attack(delta: float) -> void:
 		target_pos = _target_unit.global_position
 		range_pos = target_pos
 		target_alive = true
-	elif _target_building != null and is_instance_valid(_target_building):
+	elif _target_building != null and is_instance_valid(_target_building) and _target_building.is_in_group("buildings"):
 		# Measure range to the closest point on the building's body rect, not
 		# its center, so melee units engage at the edge of the footprint.
 		var rect: Rect2 = _target_building.call("get_bounds_rect")
@@ -305,13 +305,14 @@ func _process_attack(delta: float) -> void:
 
 	_path.clear()
 	if _attack_timer <= 0:
-		_attack_timer = 1.0 / data.attack_speed
+		_attack_timer = data.attack_cooldown
+		var hit_damage: int = roundi(data.damage_per_hit)
 		if data.attack_range <= 35.0:
 			# Melee
 			if _target_unit != null:
-				_target_unit.take_damage(data.damage)
+				_target_unit.take_damage(hit_damage)
 			elif _target_building != null:
-				_target_building.call("take_damage", data.damage)
+				_target_building.call("take_damage", hit_damage)
 		else:
 			# Ranged projectile: aim at the point the range was measured to
 			# (the enemy unit, or the closest point on the building's rect).
@@ -322,8 +323,10 @@ func _spawn_projectile(target_pos: Vector2) -> void:
 	var proj: Node2D = preload("res://scenes/projectile.tscn").instantiate()
 	proj.position = global_position
 	proj.set("team", team)
-	proj.set("damage", data.damage)
+	proj.set("damage", roundi(data.damage_per_hit))
 	proj.set("is_fireball", data.unit_name == "Wizard")
+	proj.set("speed", data.projectile_speed)
+	proj.set("aoe_radius", data.aoe_radius)
 	proj.set("target_position", target_pos)
 	# Try to find the actual target node for homing.
 	if _target_unit != null and is_instance_valid(_target_unit):
@@ -360,7 +363,7 @@ func _process_mine(delta: float) -> void:
 	if _mine_timer <= 0:
 		_mine_timer = 1.0 / data.mining_rate
 		_mine_hit_flash = 0.08
-		var dmg: int = max(1, data.damage)
+		var dmg: int = max(1, roundi(data.damage_per_hit))
 		var coin: int = _grid.damage_cell(_target_cell, dmg, data.miner_level)
 		if coin > 0:
 			carried_coin = min(data.carry_capacity, carried_coin + coin)
@@ -583,11 +586,22 @@ func _nearest_friendly_mine_entry() -> Node2D:
 func _die() -> void:
 	_set_state(State.DEAD, "death")
 	_dead_timer = 1.0
+	# Enemy miners killed underground drop half their cargo as a collectible pickup.
+	if data.is_miner and is_underground and team != GameManager.Team.PLAYER and carried_coin > 0:
+		var dropped: int = maxi(1, floori(carried_coin * 0.5))
+		_spawn_coin_pickup(dropped)
 	remove_from_group("units")
 	remove_from_group(team_name())
 	EconomyManager.remove_population(team, data.population)
 	died.emit(self)
 	queue_redraw()
+
+
+func _spawn_coin_pickup(amount: int) -> void:
+	var pickup: Node2D = preload("res://scenes/effects/coin_pickup.tscn").instantiate()
+	pickup.global_position = global_position
+	pickup.set("coin_value", amount)
+	get_tree().current_scene.add_child(pickup)
 
 
 func _deferred_enter_mine_check() -> void:

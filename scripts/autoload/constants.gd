@@ -26,11 +26,9 @@ const TRAIN_TIMES: Dictionary = {
 }
 
 # ─── UNIT STATS ───
-const FIGHTER_STATS: Dictionary = {
-	"swordsman": { "hp": 150, "dps": 15, "range": 30, "speed": 80, "attack_cooldown": 0.5 },
-	"archer": { "hp": 80, "dps": 12, "range": 150, "speed": 70, "attack_cooldown": 1.0, "proj_speed": 300 },
-	"wizard": { "hp": 60, "dps": 25, "range": 120, "speed": 50, "attack_cooldown": 1.5, "aoe_radius": 40 }
-}
+# Fighter stats are authoritative in scripts/resources/units/*.tres.
+# (The old FIGHTER_STATS dictionary was removed in Phase 2 to avoid a second
+# source of truth.)
 
 const MINER_STATS: Dictionary = {
 	1: { "hp": 50, "speed": 60, "mine_dps": 10, "carry": 20, "max_layer": 2 },

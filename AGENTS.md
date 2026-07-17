@@ -130,7 +130,7 @@ Global singletons accessible from any script via their class name.
   - `MINER_STATS`: per-level HP, speed, mining DPS, carry capacity, and max layer.
   - `MINER_UPGRADE_COSTS`: level 2 → 500, level 3 → 1500.
   - Building HP, wall HP, layer data, grid bounds, and input action `StringName` constants.
-  - Note: `FIGHTER_STATS` is defined but unused; live fighter stats come from the `.tres` resource files.
+  - Fighter stats are stored in `UnitData` resources under `scripts/resources/units/*.tres`; `FIGHTER_STATS` was removed in Phase 2 to keep a single source of truth.
 
 - `game_manager.gd`
   - `enum Team { PLAYER, ENEMY }`
@@ -356,7 +356,7 @@ If you add tests, consider using [GUT](https://github.com/bitwes/Gut) (Godot Uni
 - **Export presets mismatch:** The README mentions Windows, macOS, and Linux exports, but only the Web preset is configured.
 - **Resources are duplicated at spawn:** `building.gd` calls `data.duplicate(true)` so each unit gets its own mutable `UnitData`. Upgrades mutate that copy in `unit.gd`.
 - **Autoloads survive scene reload:** `hud.gd` explicitly calls `GameManager.reset()` and `EconomyManager.reset()` before `get_tree().reload_current_scene()` so a new match starts fresh.
-- **Fighter stats come from `.tres` resources:** `Constants.FIGHTER_STATS` exists but is not used at runtime; the `.tres` files are the source of truth.
+- **Fighter stats come from `.tres` resources:** `Constants.FIGHTER_STATS` was removed in Phase 2; `scripts/resources/units/*.tres` are the sole source of truth. Combat uses cooldown-based discrete hits (`damage_per_hit` / `attack_cooldown`).
 
 ---
 

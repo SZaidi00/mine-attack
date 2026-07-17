@@ -3,10 +3,11 @@ extends Node2D
 const _ARROW_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/projectile_arrow.png")
 const _BLAST_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/projectile_blast.png")
 
-@export var speed: float = 400.0
+@export var speed: float = 300.0
 @export var damage: int = 10
 @export var is_fireball: bool = false
 @export var team: GameManager.Team = GameManager.Team.PLAYER
+@export var aoe_radius: float = 40.0
 
 var target_position: Vector2 = Vector2.ZERO
 var homing_target: Node2D = null
@@ -38,20 +39,20 @@ func _update_target_position() -> void:
 
 
 func _impact() -> void:
-	var radius: float = 40.0 if is_fireball else 8.0
+	var hit_radius: float = aoe_radius if is_fireball else 8.0
 	var pos: Vector2 = global_position
 	for unit in get_tree().get_nodes_in_group("units"):
 		if unit.get("team") == team:
 			continue
-		if unit.global_position.distance_to(pos) <= radius:
+		if unit.global_position.distance_to(pos) <= hit_radius:
 			unit.take_damage(damage)
 	if not is_fireball:
 		return
-	# Splash also damages buildings.
+	# Splash also damages buildings within the same area.
 	for building in get_tree().get_nodes_in_group("buildings"):
 		if building.get("team") == team:
 			continue
-		if building.global_position.distance_to(pos) <= radius + 40:
+		if building.global_position.distance_to(pos) <= hit_radius:
 			building.call("take_damage", damage)
 
 
