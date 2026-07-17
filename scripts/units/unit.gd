@@ -117,35 +117,67 @@ func _process(delta: float) -> void:
 
 func move_to(world_pos: Vector2) -> void:
 	if data.is_fighter and _is_enemy_underground(world_pos):
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "move_to", "enemy underground territory")
+		_spawn_reject_popup(world_pos)
 		return
 	_clear_target()
 	_target_position = world_pos
-	_state = State.MOVE
 	_repath(world_pos)
+	if _path.is_empty():
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "move_to", "no path to " + str(world_pos))
+		_spawn_reject_popup(world_pos)
+		_set_state(State.IDLE, "move target unreachable")
+		return
+	DebugLog.log_command("Unit %d" % get_instance_id(), "move_to", str(world_pos))
+	_set_state(State.MOVE, "move_to command")
 
 
 func attack_unit(target) -> void:
-	if target == null or target.team == team:
+	if target == null:
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "attack_unit", "null target")
+		return
+	if target.team == team:
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "attack_unit", "friendly target")
 		return
 	_clear_target()
+	_repath(target.global_position)
+	if _path.is_empty():
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "attack_unit", "no path to target")
+		_spawn_reject_popup(target.global_position)
+		_set_state(State.IDLE, "attack target unreachable")
+		return
+	DebugLog.log_command("Unit %d" % get_instance_id(), "attack_unit", "target=%d" % target.get_instance_id())
 	_target_unit = target
-	_state = State.ATTACK
+	_set_state(State.ATTACK, "attack_unit command")
 
 
 func attack_building(target: Node2D) -> void:
 	if target == null:
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "attack_building", "null target")
 		return
+	# Path to a standing spot at the building's base; the footprint itself is
+	# not a valid path target.
+	var stand: Vector2 = _building_stand_point(target)
 	_clear_target()
+	_repath(stand)
+	if _path.is_empty():
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "attack_building", "no path to building")
+		_spawn_reject_popup(target.global_position)
+		_set_state(State.IDLE, "building unreachable")
+		return
+	DebugLog.log_command("Unit %d" % get_instance_id(), "attack_building", "target=%d" % target.get_instance_id())
 	_target_building = target
-	_state = State.ATTACK
+	_set_state(State.ATTACK, "attack_building command")
 
 
 func mine_cell(grid_pos: Vector2i) -> void:
 	if data == null or not data.is_miner:
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "mine_cell", "not a miner")
 		return
+	DebugLog.log_command("Unit %d" % get_instance_id(), "mine_cell", str(grid_pos))
 	_clear_target()
 	_target_cell = grid_pos
-	_state = State.MINE
+	_set_state(State.MINE, "mine_cell command")
 	# Move adjacent.
 	var adj: Vector2 = _nearest_adjacent_world(grid_pos)
 	_repath(adj)
@@ -153,19 +185,22 @@ func mine_cell(grid_pos: Vector2i) -> void:
 
 func deposit_coin() -> void:
 	if data == null or not data.is_miner:
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "deposit_coin", "not a miner")
 		return
+	DebugLog.log_command("Unit %d" % get_instance_id(), "deposit_coin", "cargo=%d" % carried_coin)
 	_clear_target()
-	_state = State.DEPOSIT
+	_set_state(State.DEPOSIT, "deposit command")
 	var entry: Node2D = _nearest_friendly_mine_entry()
 	if entry:
 		_repath(entry.global_position)
 	else:
-		_state = State.IDLE
+		_set_state(State.IDLE, "no mine entry for deposit")
 
 
 func enter_mine() -> void:
+	DebugLog.log_command("Unit %d" % get_instance_id(), "enter_mine")
 	_clear_target()
-	_state = State.ENTER_MINE
+	_set_state(State.ENTER_MINE, "enter_mine command")
 	var entry: Node2D = _nearest_friendly_mine_entry()
 	if entry:
 		_repath(entry.global_position)
@@ -173,22 +208,24 @@ func enter_mine() -> void:
 		if _path.is_empty():
 			_path.append(entry.global_position)
 	else:
-		_state = State.IDLE
+		_set_state(State.IDLE, "no mine entry")
 
 
 func exit_mine() -> void:
+	DebugLog.log_command("Unit %d" % get_instance_id(), "exit_mine")
 	_clear_target()
-	_state = State.EXIT_MINE
+	_set_state(State.EXIT_MINE, "exit_mine command")
 	var entry: Node2D = _nearest_friendly_mine_entry()
 	if entry:
 		_repath(entry.call("get_underground_position"))
 	else:
-		_state = State.IDLE
+		_set_state(State.IDLE, "no mine entry")
 
 
 func stop() -> void:
+	DebugLog.log_command("Unit %d" % get_instance_id(), "stop")
 	_clear_target()
-	_state = State.IDLE
+	_set_state(State.IDLE, "stop command")
 	_path.clear()
 
 
@@ -214,7 +251,7 @@ func _spawn_damage_popup(amount: int) -> void:
 
 func _follow_path(delta: float) -> void:
 	if _path.is_empty() or _path_index >= _path.size():
-		_state = State.IDLE
+		_set_state(State.IDLE, "path empty/start")
 		return
 	var target: Vector2 = _path[_path_index]
 	var dir: Vector2 = target - global_position
@@ -222,7 +259,7 @@ func _follow_path(delta: float) -> void:
 	if dist <= 2.0:
 		_path_index += 1
 		if _path_index >= _path.size():
-			_state = State.IDLE
+			_set_state(State.IDLE, "path completed")
 			return
 		target = _path[_path_index]
 		dir = target - global_position
@@ -237,20 +274,32 @@ func _follow_path(delta: float) -> void:
 func _process_attack(delta: float) -> void:
 	_attack_timer -= delta
 	var target_pos: Vector2 = Vector2.ZERO
+	var range_pos: Vector2 = Vector2.ZERO  # Point the attack range is measured to.
 	var target_alive: bool = false
 
 	if _target_unit != null and is_instance_valid(_target_unit) and _target_unit._state != State.DEAD:
 		target_pos = _target_unit.global_position
+		range_pos = target_pos
 		target_alive = true
 	elif _target_building != null and is_instance_valid(_target_building):
-		target_pos = _target_building.global_position
+		# Measure range to the closest point on the building's body rect, not
+		# its center, so melee units engage at the edge of the footprint.
+		var rect: Rect2 = _target_building.call("get_bounds_rect")
+		range_pos = _closest_point_on_rect(rect, global_position)
+		target_pos = _building_stand_point(_target_building)
 		target_alive = true
 	else:
-		_state = State.IDLE
+		_set_state(State.IDLE, "target lost")
 		return
 
-	if global_position.distance_to(target_pos) > data.attack_range:
-		_repath(target_pos)
+	if global_position.distance_to(range_pos) > data.attack_range:
+		# Re-path only when there is no path or the destination has moved
+		# significantly (moving unit targets), not every physics frame.
+		if _path.is_empty() or _path[_path.size() - 1].distance_to(target_pos) > GridWorld.CELL_SIZE * 0.75:
+			_repath(target_pos)
+		if _path.is_empty():
+			_set_state(State.IDLE, "attack target unreachable")
+			return
 		_follow_path(delta)
 		return
 
@@ -264,8 +313,9 @@ func _process_attack(delta: float) -> void:
 			elif _target_building != null:
 				_target_building.call("take_damage", data.damage)
 		else:
-			# Ranged projectile.
-			_spawn_projectile(target_pos)
+			# Ranged projectile: aim at the point the range was measured to
+			# (the enemy unit, or the closest point on the building's rect).
+			_spawn_projectile(range_pos)
 
 
 func _spawn_projectile(target_pos: Vector2) -> void:
@@ -287,13 +337,13 @@ func _process_mine(delta: float) -> void:
 	var cell: GridWorld.Cell = _grid.get_cell(_target_cell)
 	if cell == null or cell.type == GridWorld.CellType.EMPTY:
 		# Already mined; idle or find next ore.
-		_state = State.IDLE
+		_set_state(State.IDLE, "cell mined")
 		return
 	if carried_coin >= data.carry_capacity:
 		deposit_coin()
 		return
 	if data.miner_level < cell.miner_level_required:
-		_state = State.IDLE
+		_set_state(State.IDLE, "miner level too low")
 		return
 
 	var cell_world: Vector2 = _grid.grid_to_world(_target_cell)
@@ -320,7 +370,7 @@ func _process_mine(delta: float) -> void:
 func _process_deposit(delta: float) -> void:
 	var entry: Node2D = _nearest_friendly_mine_entry()
 	if entry == null:
-		_state = State.IDLE
+		_set_state(State.IDLE, "no mine entry")
 		return
 	var target_pos: Vector2 = entry.global_position if not is_underground else entry.call("get_underground_position")
 	if global_position.distance_to(target_pos) > GridWorld.CELL_SIZE:
@@ -328,13 +378,13 @@ func _process_deposit(delta: float) -> void:
 		_follow_path(delta)
 		return
 	entry.call("deposit", self)
-	_state = State.IDLE
+	_set_state(State.IDLE, "deposit complete")
 
 
 func _process_enter_mine(delta: float) -> void:
 	var entry: Node2D = _nearest_friendly_mine_entry()
 	if entry == null:
-		_state = State.IDLE
+		_set_state(State.IDLE, "no mine entry")
 		return
 	if global_position.distance_to(entry.global_position) > GridWorld.CELL_SIZE:
 		_repath(entry.global_position)
@@ -344,23 +394,32 @@ func _process_enter_mine(delta: float) -> void:
 		_follow_path(delta)
 		return
 	entry.call("enter_mine", self)
-	_state = State.IDLE
+	_set_state(State.IDLE, "entered mine")
 
 
 func _process_exit_mine(delta: float) -> void:
 	var entry: Node2D = _nearest_friendly_mine_entry()
 	if entry == null:
-		_state = State.IDLE
+		_set_state(State.IDLE, "no mine entry")
 		return
 	if global_position.distance_to(entry.call("get_underground_position")) > GridWorld.CELL_SIZE:
 		_repath(entry.call("get_underground_position"))
 		_follow_path(delta)
 		return
 	entry.call("exit_mine", self)
-	_state = State.IDLE
+	_set_state(State.IDLE, "exited mine")
 
 
 # ---------- Helpers ----------
+
+func _set_state(new_state: State, reason: String = "") -> void:
+	if _state == new_state:
+		return
+	var from: String = State.keys()[_state]
+	var to: String = State.keys()[new_state]
+	DebugLog.log_state("Unit %d" % get_instance_id(), from, to, reason)
+	_state = new_state
+
 
 func _clear_target() -> void:
 	_target_unit = null
@@ -396,6 +455,31 @@ func _nearest_adjacent_world(grid_pos: Vector2i) -> Vector2:
 				best_dist = d
 				best = pos
 	return best
+
+
+func _closest_point_on_rect(rect: Rect2, point: Vector2) -> Vector2:
+	return Vector2(
+		clampf(point.x, rect.position.x, rect.end.x),
+		clampf(point.y, rect.position.y, rect.end.y)
+	)
+
+
+## Where to stand to attack a building: on the walkable surface row at its
+## base, horizontally clamped to the building's span.
+func _building_stand_point(building: Node2D) -> Vector2:
+	var rect: Rect2 = building.call("get_bounds_rect")
+	var x: float = clampf(global_position.x, rect.position.x, rect.end.x)
+	return Vector2(x, rect.end.y + GridWorld.CELL_SIZE * 0.5)
+
+
+## Flashes a red X where a command was rejected. Player-team only: command
+## feedback is UI for the player, not noise around AI units.
+func _spawn_reject_popup(at: Vector2) -> void:
+	if team != GameManager.Team.PLAYER:
+		return
+	var popup: Node2D = preload("res://scenes/effects/reject_popup.tscn").instantiate()
+	popup.global_position = at
+	get_tree().current_scene.add_child(popup)
 
 
 func _handle_idle_miner() -> void:
@@ -497,7 +581,7 @@ func _nearest_friendly_mine_entry() -> Node2D:
 
 
 func _die() -> void:
-	_state = State.DEAD
+	_set_state(State.DEAD, "death")
 	_dead_timer = 1.0
 	remove_from_group("units")
 	remove_from_group(team_name())
@@ -540,14 +624,14 @@ func _start_flee() -> void:
 		_flee_target = entry.global_position
 	_clear_target()
 	_target_position = _flee_target
-	_state = State.MOVE
+	_set_state(State.MOVE, "flee")
 	_repath(_flee_target)
 
 
 func _continue_flee() -> void:
 	if _flee_target == Vector2.ZERO:
 		return
-	_state = State.MOVE
+	_set_state(State.MOVE, "continue flee")
 	_repath(_flee_target)
 
 

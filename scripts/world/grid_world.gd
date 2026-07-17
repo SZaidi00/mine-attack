@@ -66,6 +66,8 @@ func _ready() -> void:
 
 
 func _generate_map() -> void:
+	if Constants.DEBUG and Constants.DEBUG_SEED >= 0:
+		seed(Constants.DEBUG_SEED)
 	# Surface ground.
 	for x in range(X_MIN, X_MAX + 1):
 		_set_cell(Vector2i(x, 0), Cell.new(CellType.SURFACE_GROUND, 0, 99, 9999, 0))
@@ -159,6 +161,54 @@ func has_cell(grid_pos: Vector2i) -> bool:
 	return _cells.has(grid_pos)
 
 
+## True when the cell is inside the pathfinding region and not solid.
+func is_walkable(grid_pos: Vector2i) -> bool:
+	return _astar.is_in_boundsv(grid_pos) and not _astar.is_point_solid(grid_pos)
+
+
+## Returns the walkable cell closest to to_cell, searching outward in
+## Chebyshev rings up to max_radius. Returns to_cell unchanged when it is
+## already walkable or when nothing walkable is found (check with is_walkable).
+func nearest_walkable_cell(to_cell: Vector2i, max_radius: int = 4) -> Vector2i:
+	if is_walkable(to_cell):
+		return to_cell
+	var best: Vector2i = to_cell
+	var best_dist: float = INF
+	for r in range(1, max_radius + 1):
+		for dx in range(-r, r + 1):
+			for dy in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue  # Only the outer ring of each radius.
+				var candidate: Vector2i = to_cell + Vector2i(dx, dy)
+				if not is_walkable(candidate):
+					continue
+				var d: float = Vector2(candidate).distance_squared_to(Vector2(to_cell))
+				if d < best_dist:
+					best_dist = d
+					best = candidate
+		if best_dist < INF:
+			break  # The first ring with any hit is the nearest one.
+	return best
+
+
+## Returns the walkable cells forming the ring just outside rect (grid coords).
+## Used as interaction cells for reaching multi-cell structures.
+func cells_adjacent_to_rect(rect: Rect2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for x in range(rect.position.x - 1, rect.end.x + 1):
+		for y in [rect.position.y - 1, rect.end.y]:
+			_add_if_walkable(cells, Vector2i(x, y))
+	for y in range(rect.position.y, rect.end.y):
+		for x in [rect.position.x - 1, rect.end.x]:
+			_add_if_walkable(cells, Vector2i(x, y))
+	return cells
+
+
+func _add_if_walkable(cells: Array[Vector2i], grid_pos: Vector2i) -> void:
+	if is_walkable(grid_pos) and not cells.has(grid_pos):
+		cells.append(grid_pos)
+
+
 func world_to_grid(world_pos: Vector2) -> Vector2i:
 	return Vector2i(floor(world_pos.x / CELL_SIZE), floor(world_pos.y / CELL_SIZE))
 
@@ -173,6 +223,15 @@ func find_path(from_world: Vector2, to_world: Vector2) -> PackedVector2Array:
 	var start: Vector2i = world_to_grid(from_world)
 	var end: Vector2i = world_to_grid(to_world)
 	if not _astar.is_in_boundsv(start) or not _astar.is_in_boundsv(end):
+		return PackedVector2Array()
+	# Units and targets can sit on solid cells (a target cell that is an undug
+	# tile, a unit pushed onto a blocked cell). Redirect to the nearest walkable
+	# cell instead of failing the whole command.
+	if not is_walkable(start):
+		start = nearest_walkable_cell(start, 3)
+	if not is_walkable(end):
+		end = nearest_walkable_cell(end, 6)
+	if not is_walkable(start) or not is_walkable(end):
 		return PackedVector2Array()
 	var grid_path: PackedVector2Array = _astar.get_point_path(start, end)
 	# Convert from cell-center positions to world positions.

@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/controllers/player_controller.gd" id="4_player"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="5_hud"]
 [ext_resource type="Script" path="res://scripts/controllers/ai_controller.gd" id="6_ai"]
+[ext_resource type="PackedScene" path="res://scenes/ui/debug_overlay.tscn" id="7_debug_overlay"]
 
 [node name="Main" type="Node2D"]
 
@@ -56,3 +57,5 @@ offset_right = 100.0
 offset_bottom = 100.0
 
 [node name="HUD" parent="UI" instance=ExtResource("5_hud")]
+
+[node name="DebugOverlay" parent="." instance=ExtResource("7_debug_overlay")]

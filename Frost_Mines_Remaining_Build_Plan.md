@@ -74,7 +74,7 @@ Global panel (top-left, behind a `PanelContainer`):
 ### Acceptance Criteria — Phase 0
 
 - [ ] F3 shows every unit's live state, target line, and path.
-- [ ] Right-clicking anything produces exactly one log line describing the resolved command.
+- [ ] Right-clicking anything produces exactly one log line describing the resolved command. (Known Phase 0 exception: the fall-through resolver can also log a wall/diggable probe with 0 matching units before the final command line — acceptable here; Phase 1 makes resolution exclusive.)
 - [ ] Every state transition and rejection appears in the log with a reason.
 - [ ] Map layout is identical across two runs with debug seed set.
 
@@ -92,6 +92,7 @@ Reproduce the reported bug: spawn a Swordsman → select → right-click enemy b
 
 | # | Hypothesis | How to confirm | Where |
 |---|-----------|----------------|-------|
+| H0 | Input pipeline dead: `player_controller.gd` fails to compile (or `_unhandled_input` never fires) → no selection, commands, camera pan, or Tab view toggle at all | Click with nothing selected: log shows **zero** lines — not even the "no selected units" reject | Script load errors in the console; `player_controller.gd` |
 | H1 | Stance button not wired: `hud.gd` never calls `player_controller.set_stance("attack")`, or the signal isn't connected in the scene | Click Attack; no log line at all | `hud.gd`, `hud.tscn` signal connections |
 | H2 | Stance filters the wrong group: e.g. commands sent to `"units"` but miners included / fighters excluded, or it only commands *selected* units while stance is meant to command *all* fighters | Log shows command issued to 0 units or wrong units | `player_controller.set_stance()` |
 | H3 | Right-click target detection misses: enemy building not in `"buildings"` group, or the Area2D hitbox has wrong collision layer/mask so the pick query returns nothing | Log shows `RMB -> move` (ground) instead of `attack` when clicking the building | `building.tscn` collision setup, group membership, `player_controller` pick logic |
@@ -101,6 +102,8 @@ Reproduce the reported bug: spawn a Swordsman → select → right-click enemy b
 | H7 | `move_and_slide()` blocked: unit collision layers make fighters collide with the building's StaticBody2D and stop short, outside range | Unit visibly stuck against building edge | `unit.tscn` collision layers |
 
 Expect the true cause to be **H3+H4 or H4+H5 combined**: right-click resolves to "move", and even a correct attack command can't path to a solid target cell.
+
+> **Update (2026-07-16): H0 was the confirmed root cause.** `player_controller.gd` called `Camera2D.project_position()`/`unproject_position()` — Camera3D-only APIs — so the script failed to compile and the entire player input pipeline (selection, commands, camera, Tab view toggle) was dead. This alone explains both reported symptoms: attacks could never be issued, and underground mining could never be seen. Fixed by converting through `get_viewport().get_canvas_transform()`; verify H1–H7 anyway once input is confirmed working.
 
 ### 1.2 Implementation fixes
 

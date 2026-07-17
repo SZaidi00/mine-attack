@@ -53,12 +53,27 @@ func _mark_footprint_solid() -> void:
 					_grid._astar.set_point_solid(pos, true)
 
 
+## World-space rect of the building body: its base sits at global_position and
+## it extends width_cells wide and height_cells tall upward. Attack ranges are
+## measured against this rect, not the center point.
+func get_bounds_rect() -> Rect2:
+	var size: Vector2 = Vector2(width_cells * GridWorld.CELL_SIZE, height_cells * GridWorld.CELL_SIZE)
+	return Rect2(global_position - Vector2(size.x / 2.0, size.y), size)
+
+
+## Grid-space rect of the cells the building body occupies.
+func get_footprint_cell_rect() -> Rect2i:
+	var origin: Vector2i = _grid.world_to_grid(global_position)
+	return Rect2i(origin.x - width_cells / 2, origin.y - height_cells, width_cells, height_cells)
+
+
 func _process(delta: float) -> void:
 	if _queue.is_empty():
 		return
 	var current = _queue[0]
 	current.remaining -= delta
 	if current.remaining <= 0.0:
+		DebugLog.log_command("Building %d" % get_instance_id(), "training_complete", current.id)
 		_spawn_front(current.id, current.data)
 		_queue.pop_front()
 		queue_changed.emit(_queue)
@@ -66,15 +81,20 @@ func _process(delta: float) -> void:
 
 func queue_unit(unit_id: String) -> bool:
 	if not _resources.has(unit_id):
+		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "unknown unit_id " + unit_id)
 		return false
 	var data: UnitData = _resources[unit_id]
 	if not EconomyManager.can_afford(team, data.cost):
+		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "cannot afford " + unit_id)
 		return false
 	if not EconomyManager.can_add_population(team, data.population):
+		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "population cap")
 		return false
 	if not EconomyManager.spend_coin(team, data.cost):
+		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "spend failed " + unit_id)
 		return false
 	_queue.append({ "id": unit_id, "data": data, "remaining": data.train_time })
+	DebugLog.log_command("Building %d" % get_instance_id(), "queue_unit", unit_id)
 	queue_changed.emit(_queue)
 	return true
 
@@ -127,10 +147,12 @@ func get_queue() -> Array:
 
 func cancel_queue(index: int) -> bool:
 	if _queue.is_empty() or index < 0 or index >= _queue.size():
+		DebugLog.log_reject("Building %d" % get_instance_id(), "cancel_queue", "invalid index %d" % index)
 		return false
 	var entry = _queue[index]
 	EconomyManager.add_coin(team, entry.data.cost)
 	_queue.remove_at(index)
+	DebugLog.log_command("Building %d" % get_instance_id(), "cancel_queue", "%s refund=%d" % [entry.id, entry.data.cost])
 	queue_changed.emit(_queue)
 	return true
 

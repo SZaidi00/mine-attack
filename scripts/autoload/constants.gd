@@ -1,5 +1,9 @@
 extends Node
 
+# ─── DEBUG ───
+const DEBUG: bool = true
+const DEBUG_SEED: int = 12345
+
 # ─── ECONOMY ───
 const STARTING_COIN: int = 150
 const MAX_UNITS: int = 100

@@ -30,12 +30,14 @@ func get_surface_position() -> Vector2:
 
 func deposit(unit: Node2D) -> void:
 	if unit == null:
+		DebugLog.log_reject("MineEntry %d" % get_instance_id(), "deposit", "null unit")
 		return
 	var data = unit.get("data")
 	if data == null or not data.is_miner:
 		return
 	var carried: int = unit.get("carried_coin")
 	if carried > 0:
+		DebugLog.log_command("MineEntry %d" % get_instance_id(), "deposit", "team=%s amount=%d" % ["PLAYER" if team == GameManager.Team.PLAYER else "ENEMY", carried])
 		EconomyManager.add_coin(team, carried)
 		EconomyManager.mine_coin(team, carried)
 		coin_deposited.emit(team, carried)
@@ -52,14 +54,18 @@ func _spawn_coin_popup(amount: int) -> void:
 
 func enter_mine(unit: Node2D) -> void:
 	if unit == null:
+		DebugLog.log_reject("MineEntry %d" % get_instance_id(), "enter_mine", "null unit")
 		return
+	DebugLog.log_command("MineEntry %d" % get_instance_id(), "enter_mine", "unit=%d" % unit.get_instance_id())
 	unit.global_position = _underground_position
 	unit.set("is_underground", true)
 
 
 func exit_mine(unit: Node2D) -> void:
 	if unit == null:
+		DebugLog.log_reject("MineEntry %d" % get_instance_id(), "exit_mine", "null unit")
 		return
+	DebugLog.log_command("MineEntry %d" % get_instance_id(), "exit_mine", "unit=%d" % unit.get_instance_id())
 	unit.global_position = global_position
 	unit.set("is_underground", false)
 

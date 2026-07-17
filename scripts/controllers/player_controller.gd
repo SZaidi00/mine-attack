@@ -2,6 +2,7 @@ class_name PlayerController
 extends Node
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
+const _REJECT_POPUP: PackedScene = preload("res://scenes/effects/reject_popup.tscn")
 
 @export var camera: Camera2D
 @export var selection_box: ColorRect
@@ -21,6 +22,33 @@ var _underground_view: bool = true
 func _ready() -> void:
 	if selection_box:
 		selection_box.visible = false
+	call_deferred("_validate_setup")
+
+
+## Phase 1 startup validation: fail loudly when the scene or groups the
+## command pipeline depends on are missing, instead of at the first click.
+func _validate_setup() -> void:
+	var problems: Array[String] = []
+	var buildings: Array = get_tree().get_nodes_in_group("buildings")
+	if buildings.size() < 2:
+		problems.append("expected 2 nodes in 'buildings' group, found %d" % buildings.size())
+	var entries: Array = get_tree().get_nodes_in_group("mine_entries")
+	if entries.size() < 2:
+		problems.append("expected 2 nodes in 'mine_entries' group, found %d" % entries.size())
+	for path in ["/root/Main/World/GridWorld", "/root/Main/Units", "/root/Main/Projectiles", "/root/Main/Camera2D"]:
+		if get_node_or_null(path) == null:
+			problems.append("missing node " + path)
+	for b in buildings:
+		if not b.has_method("get_bounds_rect"):
+			problems.append("building %d lacks get_bounds_rect()" % b.get_instance_id())
+	for b in buildings:
+		if not b.is_in_group("buildings"):
+			problems.append("building %d missing 'buildings' group" % b.get_instance_id())
+	if problems.is_empty():
+		DebugLog.log_command("PlayerController", "startup validation", "OK")
+	for p in problems:
+		push_error("PlayerController startup validation: " + p)
+		DebugLog.log_reject("PlayerController", "startup validation", p)
 
 
 func _process(delta: float) -> void:
@@ -137,7 +165,7 @@ func _box_select(start: Vector2, end: Vector2) -> void:
 	var min_p: Vector2 = Vector2(min(start.x, end.x), min(start.y, end.y))
 	var max_p: Vector2 = Vector2(max(start.x, end.x), max(start.y, end.y))
 	for unit in get_tree().get_nodes_in_group("player"):
-		var sp: Vector2 = camera.unproject_position(unit.global_position)
+		var sp: Vector2 = get_viewport().get_canvas_transform() * unit.global_position
 		if sp.x >= min_p.x and sp.x <= max_p.x and sp.y >= min_p.y and sp.y <= max_p.y:
 			units.append(unit)
 	if Input.is_key_pressed(KEY_SHIFT):
@@ -162,48 +190,61 @@ func _select_units(units: Array) -> void:
 
 
 func _issue_command(screen_pos: Vector2) -> void:
+	# Drop dead units from the selection before issuing anything.
+	_selected_units = _selected_units.filter(func(u): return is_instance_valid(u))
 	if _selected_units.is_empty():
+		DebugLog.log_reject("PlayerController", "RMB command", "no selected units")
 		return
 	var world_pos: Vector2 = _screen_to_world(screen_pos)
+	var grid_pos: Vector2i = _grid.world_to_grid(world_pos)
 
-	# Enemy unit/building clicked -> attack with fighters.
+	# Resolution order is deterministic and exclusive: exactly one command (or
+	# one rejection) is produced per right-click.
+	# 1. Enemy unit clicked -> attack with fighters.
 	var enemy_unit: Unit = _enemy_unit_at(world_pos)
 	if enemy_unit != null:
-		for u in _selected_units:
-			if u.data.is_fighter:
-				u.attack_unit(enemy_unit)
+		var fighters: Array = _filter_fighters(_selected_units)
+		if fighters.is_empty():
+			_reject_command("attack_unit", "no fighters selected", world_pos)
+			return
+		DebugLog.log_command("PlayerController", "attack_unit", "target=%d fighters=%d" % [enemy_unit.get_instance_id(), fighters.size()])
+		for u in fighters:
+			u.attack_unit(enemy_unit)
 		return
+
+	# 2. Enemy building clicked -> attack with fighters.
 	var enemy_building: Node2D = _enemy_building_at(world_pos)
 	if enemy_building != null:
-		for u in _selected_units:
-			if u.data.is_fighter:
-				u.attack_building(enemy_building)
+		var fighters: Array = _filter_fighters(_selected_units)
+		if fighters.is_empty():
+			_reject_command("attack_building", "no fighters selected", world_pos)
+			return
+		DebugLog.log_command("PlayerController", "attack_building", "target=%d fighters=%d" % [enemy_building.get_instance_id(), fighters.size()])
+		for u in fighters:
+			u.attack_building(enemy_building)
 		return
 
-	# Central wall clicked -> breach with miners.
-	var grid_pos: Vector2i = _grid.world_to_grid(world_pos)
-	if _grid.is_central_wall(grid_pos):
-		var any_miner: bool = false
-		for u in _selected_units:
-			if u.data.is_miner:
-				u.mine_cell(grid_pos)
-				any_miner = true
-		if any_miner:
-			return
+	# 3. Central wall clicked with miners selected -> breach.
+	var miners: Array = _filter_miners(_selected_units)
+	if _grid.is_central_wall(grid_pos) and not miners.is_empty():
+		DebugLog.log_command("PlayerController", "breach_wall", "cell=%s miners=%d" % [str(grid_pos), miners.size()])
+		for u in miners:
+			u.mine_cell(grid_pos)
+		return
 
-	# Diggable cell clicked -> mine with miners.
-	if _grid.has_cell(grid_pos) and _grid.get_cell(grid_pos).type != GridWorld.CellType.SURFACE_GROUND:
-		var any_miner: bool = false
-		for u in _selected_units:
-			if u.data.is_miner:
-				u.mine_cell(grid_pos)
-				any_miner = true
-		if any_miner:
-			return
+	# 4. Diggable cell clicked with miners selected -> mine it.
+	var cell: GridWorld.Cell = _grid.get_cell(grid_pos)
+	var diggable: bool = cell != null and (cell.type == GridWorld.CellType.DIRT or cell.type == GridWorld.CellType.ORE)
+	if diggable and not miners.is_empty():
+		DebugLog.log_command("PlayerController", "mine_cell", "cell=%s miners=%d" % [str(grid_pos), miners.size()])
+		for u in miners:
+			u.mine_cell(grid_pos)
+		return
 
-	# Mine entry clicked -> deposit (miners with coin), enter, or exit mine.
+	# 5. Own mine entry clicked -> deposit (miners with coin), enter, or exit.
 	var entry: Node2D = _mine_entry_at(world_pos)
 	if entry != null and entry.get("team") == GameManager.Team.PLAYER:
+		DebugLog.log_command("PlayerController", "mine_entry", "entry=%d units=%d" % [entry.get_instance_id(), _selected_units.size()])
 		for u in _selected_units:
 			if u.data.is_miner and u.carried_coin > 0:
 				u.deposit_coin()
@@ -213,15 +254,23 @@ func _issue_command(screen_pos: Vector2) -> void:
 				u.enter_mine()
 		return
 
-	# Default move.
+	# 6. Default: move.
+	DebugLog.log_command("PlayerController", "move_to", "pos=%s units=%d" % [str(world_pos), _selected_units.size()])
 	for u in _selected_units:
 		u.move_to(world_pos)
 
 
+func _reject_command(action: String, reason: String, at: Vector2) -> void:
+	DebugLog.log_reject("PlayerController", action, reason)
+	var popup: Node2D = _REJECT_POPUP.instantiate()
+	popup.global_position = at
+	get_tree().current_scene.add_child(popup)
+
+
 func _screen_to_world(screen_pos: Vector2) -> Vector2:
-	if camera == null:
-		return screen_pos
-	return camera.project_position(screen_pos, 0)
+	# Camera2D has no project_position() (that is a Camera3D API); convert via
+	# the viewport's canvas transform, which also handles zoom and stretch.
+	return get_viewport().get_canvas_transform().affine_inverse() * screen_pos
 
 
 func _unit_at(world_pos: Vector2) -> Unit:
@@ -308,26 +357,38 @@ func is_underground_view() -> bool:
 
 
 func set_stance(stance: String) -> void:
-	if stance == "attack":
-		# Move all selected fighters toward enemy building.
-		var enemy_building: Node2D = null
-		for b in get_tree().get_nodes_in_group("buildings"):
-			if b.get("team") != GameManager.Team.PLAYER:
-				enemy_building = b
-				break
-		if enemy_building != null:
-			for u in _selected_units:
-				if u.data.is_fighter:
-					u.attack_building(enemy_building)
-	elif stance == "defend":
-		for u in _selected_units:
-			u.stop()
-	elif stance == "garrison":
-		for u in _selected_units:
-			if u.is_underground:
-				u.exit_mine()
-			else:
-				u.enter_mine()
+	# [DECISION] Stances are army-wide orders to every living player fighter;
+	# right-click issues orders to the current selection only.
+	var fighters: Array = _filter_fighters(get_tree().get_nodes_in_group("player"))
+	if fighters.is_empty():
+		DebugLog.log_reject("PlayerController", "set_stance " + stance, "no fighters")
+		return
+	match stance:
+		"attack":
+			var enemy_building: Node2D = null
+			for b in get_tree().get_nodes_in_group("buildings"):
+				if b.get("team") != GameManager.Team.PLAYER:
+					enemy_building = b
+					break
+			if enemy_building == null:
+				DebugLog.log_reject("PlayerController", "set_stance attack", "no enemy building")
+				return
+			DebugLog.log_command("PlayerController", "stance attack", "fighters=%d" % fighters.size())
+			for u in fighters:
+				u.attack_building(enemy_building)
+		"defend":
+			DebugLog.log_command("PlayerController", "stance defend", "fighters=%d" % fighters.size())
+			for u in fighters:
+				u.stop()
+		"garrison":
+			DebugLog.log_command("PlayerController", "stance garrison", "fighters=%d" % fighters.size())
+			for u in fighters:
+				if u.is_underground:
+					u.exit_mine()
+				else:
+					u.enter_mine()
+		_:
+			DebugLog.log_reject("PlayerController", "set_stance", "unknown stance " + stance)
 
 
 func get_selected_units() -> Array:

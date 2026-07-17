@@ -53,6 +53,7 @@ mine-attack/
 │   ├── projectile.tscn        # Arrow / fireball projectile scene
 │   ├── unit.tscn              # Unit scene (miner/fighter)
 │   ├── ui/hud.tscn            # In-game UI
+│   ├── ui/debug_overlay.tscn  # Phase 0 debug overlay scene
 │   └── effects/               # Floating text popups
 │       ├── coin_popup.tscn
 │       └── damage_popup.tscn
@@ -60,7 +61,8 @@ mine-attack/
     ├── autoload/              # Global singletons
     │   ├── constants.gd       # Centralized balance and input constants
     │   ├── game_manager.gd    # Game state, teams, colors, win/loss
-    │   └── economy_manager.gd # Coin, population, miner upgrades, stats
+    │   ├── economy_manager.gd # Coin, population, miner upgrades, stats
+    │   └── debug_log.gd       # Phase 0 ring-buffer logger
     ├── controllers/           # High-level gameplay controllers
     │   ├── ai_controller.gd   # Enemy AI logic
     │   └── player_controller.gd # Input, selection, camera, commands
@@ -73,6 +75,7 @@ mine-attack/
     │       └── wizard.tres
     ├── ui/                    # UI logic
     │   ├── hud.gd             # HUD updates and button callbacks
+    │   ├── debug_overlay.gd   # Phase 0 F3 debug overlay
     │   ├── layer_indicator.gd # Accessible underground layer indicator
     │   ├── training_queue_panel.gd # Training queue display and cancel
     │   └── unit_button.gd     # Train button with cost/disable/shake
@@ -107,9 +110,10 @@ mine-attack/
 
 Autoload singletons (configured in `project.godot`, loaded in this order):
 
-- `Constants` — centralized balance numbers and input action names.
+- `Constants` — centralized balance numbers and input action names. Added in Phase 0: `DEBUG` flag and `DEBUG_SEED` for deterministic testing.
 - `GameManager` — global game state, `Team` enum, shared color palette, match timer, win/loss signals.
 - `EconomyManager` — coin balances, population counts, miner upgrade levels, units trained, coin mined. Emits `coin_changed`, `population_changed`, `miner_level_changed`, `stats_changed`.
+- `DebugLog` — Phase 0 ring-buffer logger used by the debug overlay and command/state logging.
 
 ---
 
@@ -222,6 +226,22 @@ Global singletons accessible from any script via their class name.
 1. Open the project root in **Godot 4.7+**.
 2. Press **F5** or run the main scene `res://scenes/main.tscn` (configured as `run/main_scene` in `project.godot`).
 
+### Debug tooling (Phase 0)
+
+A debug overlay is wired into `scenes/main.tscn` as `DebugOverlay`; it frees itself at startup when `Constants.DEBUG` is `false`, so release builds exclude it.
+
+- **Toggle:** `F3` (`toggle_debug` input action).
+- **Per-unit overlay:** current state text above the unit, target line, active A* path polyline, and miner cargo `carried / capacity`.
+- **Global panel (top-left):** FPS, match time, unit counts, coin totals, miner levels, game-active flag, AI aggression level, and the most recent debug-log lines.
+- **Debug buttons:** +500 coin, spawn swordsman/miner, teleport selected units to cursor, force underground view, clear log.
+
+`scripts/autoload/debug_log.gd` is a ring-buffer logger. Log categories include `command`, `state`, `reject`, `economy`, `combat`, `mine`, `ai`, and `general`. Logging is fully disabled (no buffer, no output) when `Constants.DEBUG` is `false`; when `true`, lines are kept in the buffer and printed to the editor output with a color prefix.
+
+`scripts/autoload/constants.gd` defines:
+
+- `DEBUG` — gates all debug output and tooling. Set to `false` for release builds.
+- `DEBUG_SEED` — seeds the global RNG in `GridWorld._generate_map()` so ore layout is identical across runs.
+
 ### Export
 
 The project has one configured export preset in `export_presets.cfg`:
@@ -282,6 +302,7 @@ Defined in `project.godot` under `[input]`:
 | `train_wizard` | `4` |
 | `toggle_view` | Tab |
 | `pause` | Space / Esc |
+| `toggle_debug` | F3 |
 | Add to selection | Shift + click / drag |
 
 ---
