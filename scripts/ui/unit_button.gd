@@ -89,6 +89,8 @@ func _on_queue_changed(_entries: Array) -> void:
 func _update_state() -> void:
 	var can_afford: bool = false
 	var has_space: bool = false
+	var queue_full: bool = false
+	var pop_maxed: bool = false
 
 	var player_coin: int = EconomyManager.get_coin(GameManager.Team.PLAYER)
 	can_afford = player_coin >= _Constants.COSTS.get(unit_id, 999999)
@@ -96,12 +98,22 @@ func _update_state() -> void:
 	var building: Node2D = _get_player_building()
 	if building:
 		var queue: Array = building.call("get_queue")
-		var queue_count: int = queue.size()
 		var current_pop: int = EconomyManager.get_population(GameManager.Team.PLAYER)
 		# One more unit must still fit under the cap.
-		has_space = queue_count < _Constants.MAX_QUEUE_SIZE and current_pop < _Constants.MAX_UNITS
+		queue_full = queue.size() >= _Constants.MAX_QUEUE_SIZE
+		pop_maxed = current_pop >= _Constants.MAX_UNITS
+		has_space = not queue_full and not pop_maxed
 
 	disabled = not (can_afford and has_space)
+	# Explain why the button is disabled instead of going silently grey.
+	if pop_maxed:
+		tooltip_text = "POPULATION MAX (%d/%d)" % [EconomyManager.get_population(GameManager.Team.PLAYER), _Constants.MAX_UNITS]
+	elif queue_full:
+		tooltip_text = "Queue full (%d/%d)" % [_Constants.MAX_QUEUE_SIZE, _Constants.MAX_QUEUE_SIZE]
+	elif not can_afford:
+		tooltip_text = "Not enough coin (%d needed)" % _Constants.COSTS.get(unit_id, 0)
+	else:
+		tooltip_text = ""
 	_apply_style()
 
 

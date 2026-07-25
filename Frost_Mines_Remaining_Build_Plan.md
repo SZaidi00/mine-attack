@@ -266,7 +266,7 @@ With several miners, the entry → building path becomes a single-file parade. A
 
 ---
 
-## Phase 4 — Training Queue, Economy & Miner Upgrades
+— Training Queue, Economy & Miner Upgrades
 
 **Goal:** The economic shell around the loop is airtight: queue behaves, money behaves, upgrades behave.
 

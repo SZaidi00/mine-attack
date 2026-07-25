@@ -386,13 +386,24 @@ func upgrade_miner() -> void:
 
 
 func _toggle_view() -> void:
-	# View switching is disabled; both layers are always visible.
-	pass
+	set_view(_view_mode == ViewMode.SURFACE)
 
 
+## Both layers are always rendered, so the view toggle is a camera bookmark:
+## it saves the camera position of the view being left and jumps to the last
+## position of the requested view (surface base / own mine underground).
 func set_view(underground: bool) -> void:
-	# View switching is disabled; both layers are always visible.
-	pass
+	var new_mode: ViewMode = ViewMode.UNDERGROUND if underground else ViewMode.SURFACE
+	if new_mode == _view_mode or camera == null:
+		return
+	if _view_mode == ViewMode.SURFACE:
+		_last_surface_cam_pos = camera.position
+	else:
+		_last_underground_cam_pos = camera.position
+	_view_mode = new_mode
+	camera.position = _last_underground_cam_pos if underground else _last_surface_cam_pos
+	DebugLog.log_command("PlayerController", "set_view", "UNDERGROUND" if underground else "SURFACE")
+	view_mode_changed.emit(_view_mode)
 
 
 func is_underground_view() -> bool:

@@ -184,9 +184,12 @@ func _update_upgrade_button() -> void:
 	if cost < 0:
 		_upgrade_button.text = "Upgrade Miner\nMax Level"
 		_upgrade_button.disabled = true
+		_upgrade_button.tooltip_text = "Miners are fully upgraded"
 	else:
 		_upgrade_button.text = "Upgrade Miner\nLv %d → %d | %d" % [level, level + 1, cost]
-		_upgrade_button.disabled = false
+		var affordable: bool = EconomyManager.can_afford(GameManager.Team.PLAYER, cost)
+		_upgrade_button.disabled = not affordable
+		_upgrade_button.tooltip_text = "" if affordable else "Not enough coin (%d needed)" % cost
 
 
 func _upgrade_miner() -> void:

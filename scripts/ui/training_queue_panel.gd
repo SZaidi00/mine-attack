@@ -79,6 +79,22 @@ func _on_queue_changed(_entries: Array) -> void:
 		return
 	var queue: Array = _building.call("get_queue")
 
+	# In-progress unit (index 0): cancellable too, with a 100% refund.
+	if not queue.is_empty():
+		var current = queue[0]
+		var current_btn: Button = Button.new()
+		current_btn.text = "✕ " + current.id.capitalize().substr(0, 3)
+		current_btn.tooltip_text = "Cancel in-progress training and refund %d coin" % current.data.cost
+		current_btn.custom_minimum_size = Vector2(70, 40)
+		current_btn.add_theme_font_size_override("font_size", 11)
+		current_btn.add_theme_color_override("font_color", Color("#f87171"))
+		current_btn.add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_PRESSED))
+		current_btn.add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_HOVER))
+		current_btn.add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_NORMAL))
+		current_btn.pressed.connect(_cancel_queue.bind(0))
+		_queue_container.add_child(current_btn)
+		_queue_buttons.append(current_btn)
+
 	for i in range(1, queue.size()):
 		var entry = queue[i]
 		var btn: Button = Button.new()
