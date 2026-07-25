@@ -271,15 +271,17 @@ A debug overlay is wired into `scenes/main.tscn` as `DebugOverlay`; it frees its
 
 The project has one configured export preset in `export_presets.cfg`:
 
-- **Web** — exports to `build/MineAttack.html`.
+- **Web** — exports to `build/MineAttack.html`. The preset excludes `addons/*` and `tests/*` (GUT is dev tooling and must not ship in the release pck).
 
 Runnable presets are configured for **macOS** and **Web** in the `[runnable_presets]` section, but only the Web preset is defined. To export from the command line:
 
 ```bash
-godot --headless --export-release "Web" build/MineAttack.html
+godot --headless --path . --export-release "Web" build/MineAttack.html
 ```
 
-> Note: There is no automated test suite, CI/CD pipeline, or dependency manager. Godot itself is the only build tool required.
+> Export templates: the engine (4.7.1.stable) looks in `~/Library/Application Support/Godot/export_templates/4.7.1.stable/`. This machine has the 4.7.0 templates under `4.7.stable/` with a `4.7.1.stable` symlink pointing at them — works for dev smoke builds, but for a release download the exact `Godot_v4.7.1-stable_export_templates.tpz`.
+
+> Note: There is no CI/CD pipeline or dependency manager. Godot itself is the only build tool required; tests run via GUT (see §Testing).
 
 ---
 
@@ -369,9 +371,31 @@ Defined in `project.godot` under `[input]`:
 
 ## Testing
 
-There is currently no automated test framework, unit test suite, or integration test in the repository. Testing is done manually by running the project in the Godot editor.
+The project uses [GUT](https://github.com/bitwes/Gut) 9.6.1 (committed under `addons/gut/`). The suite lives in `tests/` and boots the real `main.tscn`, so it exercises the actual building/grid/unit wiring:
 
-If you add tests, consider using [GUT](https://github.com/bitwes/Gut) (Godot Unit Testing), the most common GDScript testing framework, and document the run command here.
+- `tests/test_economy.gd` — spend/refund/upgrade math, cap guards, team wallet separation.
+- `tests/test_building_queue.gd` — FIFO order, queue-cap rejection, cancel refunds (queued + in-progress).
+- `tests/test_grid_world.gd` — ore trickle totals, A* clearing on destruction, level gates, wall shared-HP pool, `nearest_walkable_cell`/`cells_adjacent_to_rect` around the building footprint, no tile regen.
+- `tests/test_unit_guards.gd` — fighter `mine_cell` rejected, enemy mine entry rejected, unreachable mine target blacklisted, empty-cargo deposit rejected.
+
+Run the suite headless (exits nonzero on failure):
+
+```bash
+godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit
+```
+
+### The Match Script (manual regression checklist)
+
+GUT covers logic, not feel or input. Run this ~15-minute playthrough in the editor before any export:
+
+1. Train 2 miners → confirm the full visible cycle: descend, dig (gold trickles per swing), surface, walk to the building, deposit popup, repeat.
+2. Train 1 of each fighter → right-click the enemy building → all engage; enemy HP drops.
+3. Queue 5 units → 6th rejected (shake + tooltip); cancel a queued and an in-progress unit → exact refunds.
+4. Upgrade miners to L2 → they begin digging layer 3; sprite swaps; layer indicator highlights.
+5. Tab-toggle (camera slide) during every activity; check snow, dust motes, lantern glow, and deep-layer shimmer.
+6. Garrison fighters; force the wall to low HP (debug overlay) → breach → cross-side combat works.
+7. Let the AI attack; defend; counterattack; win → slow-mo collapse → VICTORY panel → Play Again resets cleanly.
+8. Repeat on Hard. Lose on purpose once → DEFEAT flow. Pause mid-fight → menu works, resume works.
 
 ---
 
