@@ -106,7 +106,11 @@ func _process(delta: float) -> void:
 	if _queue.is_empty():
 		return
 	var current = _queue[0]
-	current.remaining -= delta
+	# AI difficulty scales training speed (rates, never rules); players are 1.0.
+	var train_time_mult: float = 1.0
+	if team == GameManager.Team.ENEMY:
+		train_time_mult = maxf(0.05, GameManager.get_ai_train_time_multiplier())
+	current.remaining -= delta / train_time_mult
 	if current.remaining <= 0.0:
 		DebugLog.log_command("Building %d" % get_instance_id(), "training_complete", current.id)
 		_spawn_front(current.id, current.data)
@@ -185,12 +189,16 @@ func deposit(unit: Node2D) -> void:
 		return
 	var carried: int = unit.get("carried_coin")
 	if carried > 0:
-		DebugLog.log_command("Building %d" % get_instance_id(), "deposit", "team=%s amount=%d" % ["PLAYER" if team == GameManager.Team.PLAYER else "ENEMY", carried])
-		EconomyManager.add_coin(team, carried)
-		EconomyManager.mine_coin(team, carried)
-		coin_deposited.emit(team, carried)
+		# AI difficulty scales deposit income (rates, never rules); players 1.0.
+		var amount: int = carried
+		if team == GameManager.Team.ENEMY:
+			amount = roundi(carried * GameManager.get_ai_coin_multiplier())
+		DebugLog.log_command("Building %d" % get_instance_id(), "deposit", "team=%s amount=%d" % ["PLAYER" if team == GameManager.Team.PLAYER else "ENEMY", amount])
+		EconomyManager.add_coin(team, amount)
+		EconomyManager.mine_coin(team, amount)
+		coin_deposited.emit(team, amount)
 		unit.set("carried_coin", 0)
-		_spawn_coin_popup(carried)
+		_spawn_coin_popup(amount)
 
 
 func _spawn_coin_popup(amount: int) -> void:

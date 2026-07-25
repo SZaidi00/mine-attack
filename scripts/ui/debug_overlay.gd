@@ -4,7 +4,7 @@ extends CanvasLayer
 ## Renders unit states, target lines, paths, cargo, and a global stats/log panel.
 
 const PANEL_WIDTH: float = 320.0
-const PANEL_HEIGHT: float = 420.0
+const PANEL_HEIGHT: float = 470.0
 
 var _overlay_visible: bool = true
 var _reveal_underground: bool = false
@@ -137,6 +137,20 @@ func _build_panel() -> void:
 	_add_button(button_grid, "Reveal Underground", _on_reveal_underground)
 	_add_button(button_grid, "Clear Log", _on_clear_log)
 
+	# Difficulty selector (Phase 6 placeholder until the Phase 7 main menu).
+	var diff_row: HBoxContainer = HBoxContainer.new()
+	var diff_label: Label = Label.new()
+	diff_label.text = "Difficulty:"
+	diff_row.add_child(diff_label)
+	var diff_option: OptionButton = OptionButton.new()
+	diff_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for diff_name in GameManager.Difficulty.keys():
+		diff_option.add_item(diff_name.capitalize())
+	diff_option.selected = GameManager.difficulty
+	diff_option.item_selected.connect(_on_difficulty_selected)
+	diff_row.add_child(diff_option)
+	vbox.add_child(diff_row)
+
 	var style: StyleBoxFlat = StyleBoxFlat.new()
 	style.bg_color = Color(0.05, 0.05, 0.08, 0.85)
 	style.border_width_left = 1
@@ -166,6 +180,7 @@ func _update_stats() -> void:
 	text += "Coin: P=%d E=%d\n" % [EconomyManager.get_coin(GameManager.Team.PLAYER), EconomyManager.get_coin(GameManager.Team.ENEMY)]
 	text += "Miner Lv: P=%d E=%d\n" % [EconomyManager.get_miner_level(GameManager.Team.PLAYER), EconomyManager.get_miner_level(GameManager.Team.ENEMY)]
 	text += "Game active: %s\n" % str(GameManager.game_active)
+	text += "Difficulty: %s\n" % GameManager.Difficulty.keys()[GameManager.difficulty].capitalize()
 	if ai:
 		text += "AI aggression: %s\n" % ai._aggression_level
 
@@ -249,6 +264,10 @@ func _on_reveal_underground() -> void:
 
 func _on_clear_log() -> void:
 	DebugLog.clear()
+
+
+func _on_difficulty_selected(index: int) -> void:
+	GameManager.set_difficulty(index as GameManager.Difficulty)
 
 
 func _get_player_building() -> Node2D:

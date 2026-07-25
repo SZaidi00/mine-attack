@@ -342,7 +342,14 @@ func _follow_path(delta: float) -> void:
 	var target: Vector2 = _path[_path_index]
 	var dir: Vector2 = target - global_position
 	var dist: float = dir.length()
-	if dist <= 2.0:
+	# Arrive when within one movement step of the point (or 2px, whichever is
+	# larger). Without the step-aware threshold, a large delta (lag spike, high
+	# time scale) plus the separation nudge can orbit the point forever without
+	# ever coming within 2px at the start of a frame.
+	var step: float = data.speed * delta
+	if is_underground and data.is_fighter:
+		step *= 0.6
+	if dist <= maxf(2.0, step):
 		_path_index += 1
 		if _path_index >= _path.size():
 			if _state != State.CLIMB_UP and _state != State.CLIMB_DOWN:
@@ -351,10 +358,6 @@ func _follow_path(delta: float) -> void:
 		target = _path[_path_index]
 		dir = target - global_position
 		dist = dir.length()
-	var speed: float = data.speed
-	if is_underground and data.is_fighter:
-		speed *= 0.6
-	var step: float = speed * delta
 	var move: Vector2 = dir.normalized() * min(step, dist)
 	# Phase 3.4: soft separation so same-team units don't hard-collide or stack.
 	# Skip separation while walking to a ladder; it can push the unit away from

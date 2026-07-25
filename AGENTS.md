@@ -134,8 +134,11 @@ Global singletons accessible from any script via their class name.
   - Fighter stats are stored in `UnitData` resources under `scripts/resources/units/*.tres`; `FIGHTER_STATS` was removed in Phase 2 to keep a single source of truth.
 
 - `game_manager.gd`
-  - `enum Team { PLAYER, ENEMY }`
+  - `enum Team { PLAYER, ENEMY }`, `enum Difficulty { EASY, NORMAL, HARD, NIGHTMARE }`
   - Constants: team colors (`COLOR_PLAYER`, `COLOR_ENEMY`), terrain colors.
+  - `DIFFICULTY_MODIFIERS`: per-difficulty AI multipliers — `coin` (deposit income), `train_time` (training duration), `upgrade_speed` (economy decision rate), `push_ratio`/`defend_ratio` (aggression thresholds). Fair-play rule: rates only, never rules (same unit stats, queue cap, pop cap).
+  - `difficulty` persists across `reset()` so Play Again keeps the choice; set via the debug overlay dropdown (Phase 6) or main menu (Phase 7).
+  - Accessors: `get_ai_coin_multiplier()`, `get_ai_train_time_multiplier()`, `get_ai_upgrade_speed()`, `get_aggression_thresholds()`.
   - `signal game_over(winner: Team)`
   - `game_active: bool`, `match_time: float`
   - `declare_winner(winner: Team)`, `reset()`
@@ -155,8 +158,8 @@ Global singletons accessible from any script via their class name.
   - Stances: `"attack"` (rush enemy building), `"defend"` (stop), `"garrison"` (toggle mine).
 
 - `ai_controller.gd`
-  - Tick-driven AI with separate timers for economy (`ENEMY_DECISION_INTERVAL` = 2s), mining (1s), attack waves (`ENEMY_ATTACK_WAVE_INTERVAL` = 18s), and aggression updates (`ENEMY_AGGRESSION_INTERVAL` = 10s).
-  - Maintains an `_aggression_level` (`"defend"`, `"balanced"`, `"push"`) based on relative fighter counts.
+  - Tick-driven AI with separate timers for economy (`ENEMY_DECISION_INTERVAL` = 2s, scaled by the difficulty `upgrade_speed`), mining (1s), attack waves (`ENEMY_ATTACK_WAVE_INTERVAL` = 18s), and aggression updates (`ENEMY_AGGRESSION_INTERVAL` = 10s).
+  - Maintains an `_aggression_level` (`"defend"`, `"balanced"`, `"push"`) based on relative fighter counts; the push/defend ratios come from the difficulty modifiers.
   - Defends building when enemy units are nearby.
   - Selects ore based on distance, value, and side ownership, skipping cells reserved by other miners or blacklisted as unreachable by that miner.
   - Attempts central wall breach when pushing and no accessible unmined tiles remain.
@@ -176,7 +179,7 @@ Global singletons accessible from any script via their class name.
   - Draws both layers every frame — sky, surface ground, and the surface row, plus the underground background, ceiling, and all subterranean tiles — so surface and underground activity are visible simultaneously.
 
 - `building.gd`
-  - Training queue with `queue_unit(unit_id)` and `cancel_queue(index)` (100% refund).
+  - Training queue with `queue_unit(unit_id)` and `cancel_queue(index)` (100% refund). The AI building's training speed and deposit income scale with the difficulty modifiers; the player is always ×1.0.
   - Default building HP is 5000 (`PLAYER_BUILDING_HP` / `ENEMY_BUILDING_HP`).
   - Spawns units at the building front and automatically sends miners into the mine.
   - Emits `hp_changed`, `queue_changed`, `destroyed`, `coin_deposited`.
@@ -202,7 +205,7 @@ Global singletons accessible from any script via their class name.
   - Fighters move at 60% speed while underground.
   - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`).
   - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected, use `frost_mines_assets/effects/selection_ring.png` for selection, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage. Units are always visible in both views (surface and underground render simultaneously).
-  - Phase 3.4 traffic: each unit gets a small `_movement_offset` applied to miner deposit and mine-entry targets, and `_follow_path()` applies soft repulsion from nearby friendly units so surface parades don't stack into a single sprite.
+  - Phase 3.4 traffic: each unit gets a small `_movement_offset` applied to miner deposit and mine-entry targets, and `_follow_path()` applies soft repulsion from nearby friendly units so surface parades don't stack into a single sprite. Path arrival is step-aware (`max(2px, speed * delta)`) so large deltas (lag spikes, high `Engine.time_scale`) can't orbit a path point forever against the separation nudge.
 
 - `projectile.gd`
   - Homing arrow / fireball projectile.
@@ -242,7 +245,7 @@ A debug overlay is wired into `scenes/main.tscn` as `DebugOverlay`; it frees its
 - **Toggle:** `F3` (`toggle_debug` input action).
 - **Per-unit overlay:** current state text above the unit, target line, active A* path polyline, and miner cargo `carried / capacity`.
 - **Global panel (top-left):** FPS, match time, unit counts, coin totals, miner levels, game-active flag, AI aggression level, and the most recent debug-log lines.
-- **Debug buttons:** +500 coin, spawn swordsman/miner, teleport selected units to cursor, force underground view, clear log.
+- **Debug buttons:** +500 coin, spawn swordsman/miner, teleport selected units to cursor, force underground view, clear log, and a difficulty dropdown (Easy/Normal/Hard/Nightmare — sets `GameManager.difficulty`).
 
 `scripts/autoload/debug_log.gd` is a ring-buffer logger. Log categories include `command`, `state`, `reject`, `economy`, `combat`, `mine`, `ai`, and `general`. Logging is fully disabled (no buffer, no output) when `Constants.DEBUG` is `false`; when `true`, lines are kept in the buffer and printed to the editor output with a color prefix.
 
@@ -339,6 +342,14 @@ Defined in `project.godot` under `[input]`:
 - **Mining requires being inside the mine:** `mine_cell` only executes while the miner is underground. A mine order given to a surface miner (right-click ore/wall, AI ore orders) is deferred: the miner rides the ladder down first, then `_handle_idle_miner` re-issues the pending cell. Ore yields are sized so each side's layers can fund the 500 / 1500 miner upgrades before the next tier unlocks.
 - **Central wall:** A 3-tile thick wall at `x = -1, 0, 1` spans all layers and shares a single 2000 HP pool. Miners on either team can breach it with an explicit right-click command. Wall damage scales with miner level.
 - **Win condition:** Destroy the enemy building.
+- **AI difficulty** (`GameManager.DIFFICULTY_MODIFIERS`; rates only, never rules):
+
+  | Difficulty | AI coin × | Train time × | Decision rate × | Aggression bias |
+  |------------|-----------|--------------|------------------|-----------------|
+  | Easy | 0.8 | 1.0 | 0.7 | Defensive (push 2.0×, defend 0.75×) |
+  | Normal | 1.0 | 1.0 | 1.0 | Balanced (push 1.5×, defend 0.5×) |
+  | Hard | 1.2 | 0.9 | 1.2 | Aggressive (push 1.3×, defend 0.4×) |
+  | Nightmare | 1.5 | 0.8 | 1.5 | Very aggressive (push 1.1×, defend 0.25×) |
 
 ---
 

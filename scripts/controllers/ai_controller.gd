@@ -6,7 +6,6 @@ const _Constants = preload("res://scripts/autoload/constants.gd")
 @export var team: GameManager.Team = GameManager.Team.ENEMY
 
 var _economy_tick: float = 0.0
-var _economy_interval: float = _Constants.ENEMY_DECISION_INTERVAL
 var _mining_tick: float = 0.0
 var _mining_interval: float = 1.0
 var _attack_tick: float = 0.0
@@ -24,7 +23,9 @@ func _process(delta: float) -> void:
 		return
 
 	_economy_tick += delta
-	if _economy_tick >= _economy_interval:
+	# Upgrade speed scales the decision rate (higher difficulty = faster ticks).
+	var economy_interval: float = _Constants.ENEMY_DECISION_INTERVAL / maxf(0.05, GameManager.get_ai_upgrade_speed())
+	if _economy_tick >= economy_interval:
 		_economy_tick = 0.0
 		_run_economy()
 
@@ -139,9 +140,12 @@ func _update_aggression_level() -> void:
 	var my_fighters: int = enemy_fighters if team == GameManager.Team.ENEMY else player_fighters
 	var their_fighters: int = player_fighters if team == GameManager.Team.ENEMY else enemy_fighters
 
-	if my_fighters > their_fighters * 1.5:
+	# Difficulty sets the aggression bias: defensive AIs need a bigger lead to
+	# push and give up defense sooner; aggressive ones push on a slim lead.
+	var thresholds: Vector2 = GameManager.get_aggression_thresholds()
+	if my_fighters > their_fighters * thresholds.x:
 		_aggression_level = "push"
-	elif my_fighters < their_fighters * 0.5:
+	elif my_fighters < their_fighters * thresholds.y:
 		_aggression_level = "defend"
 	else:
 		_aggression_level = "balanced"

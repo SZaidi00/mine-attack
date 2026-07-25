@@ -96,6 +96,11 @@ const ENEMY_DECISION_INTERVAL: float = 2.0
 const ENEMY_AGGRESSION_INTERVAL: float = 10.0
 const ENEMY_ATTACK_WAVE_INTERVAL: float = 18.0
 
+# ─── AI DIFFICULTY ───
+# The DIFFICULTY_MODIFIERS table lives in game_manager.gd (keyed by
+# GameManager.Difficulty; Constants loads before GameManager so it cannot
+# reference the enum here).
+
 # ─── INPUT ACTIONS ───
 const INPUT_SELECT: StringName = &"lmb"
 const INPUT_COMMAND: StringName = &"rmb"
