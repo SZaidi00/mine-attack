@@ -6,11 +6,7 @@ This file is written for AI coding agents that need to understand and modify the
 
 ## Project overview
 
-MineAttack is a single-player 2D RTS with a post-apocalyptic, Frostpunk-inspired aesthetic. The player mines underground ore, trains an army, and destroys the enemy base. The design blends:
-
-- Mining and unit-training loop inspired by *Stick War: Legacy*.
-- Layered, upgrade-gated digging inspired by *SteamWorld Dig*.
-- Cold, industrial visuals inspired by *Frostpunk*.
+MineAttack is a single-player 2D RTS with a post-apocalyptic, Frostpunk-inspired aesthetic. The player mines underground ore, trains an army, and destroys the enemy base. The design blends the mining/unit-training loop of *Stick War: Legacy*, the layered, upgrade-gated digging of *SteamWorld Dig*, and the cold industrial visuals of *Frostpunk*.
 
 The game is fully local (no networking or server). The player controls the blue **PLAYER** team on the left; a simple scripted AI controls the red **ENEMY** team on the right. The win condition is destroying the enemy building.
 
@@ -25,15 +21,7 @@ The game is fully local (no networking or server). The player controls the blue 
 - **Target platforms:** Web (primary configured export). `export_presets.cfg` lists runnable presets for both **macOS** and **Web**, but only the Web preset is actually defined.
 - **Version control:** Git with LF-normalized text files (`.gitattributes`)
 
-Key configuration files:
-
-| File | Purpose |
-|------|---------|
-| `project.godot` | Godot project settings, autoloads, input map, display, rendering, physics |
-| `export_presets.cfg` | Godot export presets (Web only, despite runnable preset references) |
-| `.editorconfig` | UTF-8 charset directive |
-| `.gitignore` | Ignores `.godot/` and `android/` |
-| `.gitattributes` | Normalizes line endings to LF for text files |
+Key configuration files: `project.godot` (project settings, autoloads, input map, display, rendering, physics) and `export_presets.cfg` (Web export preset).
 
 ---
 
@@ -41,56 +29,21 @@ Key configuration files:
 
 ```
 mine-attack/
-├── project.godot              # Godot project entry point
-├── export_presets.cfg         # Export configuration
-├── icon.svg                   # Project icon
-├── README.md                  # Human-facing README
+├── project.godot / export_presets.cfg / icon.svg / README.md
 ├── Frost_Mines_Complete_Implementation_Guide.md  # Design reference
 ├── scenes/                    # Godot scene files (.tscn)
 │   ├── main.tscn              # Root gameplay scene (loaded from the main menu)
-│   ├── building.tscn          # Base building scene
-│   ├── mine_entry.tscn        # Mine entrance / exit scene
-│   ├── projectile.tscn        # Arrow / fireball projectile scene
-│   ├── unit.tscn              # Unit scene (miner/fighter)
-│   ├── ui/main_menu.tscn      # Main menu (project entry point): title, difficulty, Play
-│   ├── ui/hud.tscn            # In-game UI
-│   ├── ui/debug_overlay.tscn  # Phase 0 debug overlay scene
-│   └── effects/               # Floating text popups
-│       ├── coin_popup.tscn
-│       └── damage_popup.tscn
-└── scripts/                   # GDScript source files
-    ├── autoload/              # Global singletons
-    │   ├── constants.gd       # Centralized balance and input constants
-    │   ├── game_manager.gd    # Game state, teams, colors, difficulty, win/loss
-    │   ├── economy_manager.gd # Coin, population, miner upgrades, stats
-    │   ├── debug_log.gd       # Phase 0 ring-buffer logger
-    │   └── audio_manager.gd   # Procedural SFX + ambience (no audio assets)
-    ├── controllers/           # High-level gameplay controllers
-    │   ├── ai_controller.gd   # Enemy AI logic
-    │   └── player_controller.gd # Input, selection, camera, commands
-    ├── resources/             # Custom Resource definitions and data
-    │   ├── unit_data.gd       # UnitData resource script
-    │   └── units/             # Unit stat resources
-    │       ├── miner.tres
-    │       ├── swordsman.tres
-    │       ├── archer.tres
-    │       └── wizard.tres
-    ├── ui/                    # UI logic
-    │   ├── hud.gd             # HUD updates and button callbacks
-    │   ├── debug_overlay.gd   # Phase 0 F3 debug overlay
-    │   ├── layer_indicator.gd # Accessible underground layer indicator
-    │   ├── training_queue_panel.gd # Training queue display and cancel
-    │   └── unit_button.gd     # Train button with cost/disable/shake
-    ├── effects/               # Floating text effects
-    │   ├── coin_popup.gd      # Coin deposit popup
-    │   └── damage_popup.gd    # Damage number popup
-    ├── units/                 # Unit behavior
-    │   ├── unit.gd            # Main unit state machine
-    │   └── projectile.gd      # Projectile movement and damage
-    └── world/                 # World and level logic
-        ├── grid_world.gd      # Tile grid, pathfinding, map generation
-        ├── building.gd        # Base building: training queue, spawning, damage
-        └── mine_entry.gd      # Mine shaft enter/exit/deposit logic
+│   ├── building.tscn / mine_entry.tscn / projectile.tscn / unit.tscn
+│   ├── ui/                    # main_menu (project entry point), hud, debug_overlay
+│   └── effects/               # coin_popup, damage_popup (floating text popups)
+└── scripts/                   # GDScript source (details in §Code organization)
+    ├── autoload/      # constants, game_manager, economy_manager, debug_log, audio_manager
+    ├── controllers/   # ai_controller, player_controller
+    ├── resources/     # unit_data.gd + units/*.tres (miner, swordsman, archer, wizard)
+    ├── ui/            # hud, debug_overlay, layer_indicator, training_queue_panel, unit_button
+    ├── effects/       # coin_popup, damage_popup
+    ├── units/         # unit.gd (state machine), projectile.gd
+    └── world/         # grid_world, building, mine_entry
 ```
 
 ---
@@ -401,9 +354,7 @@ GUT covers logic, not feel or input. Run this ~15-minute playthrough in the edit
 
 ## Security considerations
 
-- This is a fully offline, single-player game. There is no network code, authentication, saved game serialization, or external data ingestion beyond Godot's built-in scene/resource loading.
-- No sensitive files (passwords, API keys, certificates) are present.
-- Be cautious if adding online features later: Godot's `HTTPRequest` or third-party networking would introduce new trust boundaries.
+Fully offline, single-player game: no network code, authentication, saved-game serialization, or secrets. Adding online features later (e.g. `HTTPRequest` or third-party networking) would introduce new trust boundaries.
 
 ---
 
@@ -426,11 +377,4 @@ GUT covers logic, not feel or input. Run this ~15-minute playthrough in the edit
 
 ## Useful files to read first
 
-When starting work on a feature, read these files in order:
-
-1. `project.godot` — input, autoloads, display.
-2. `scenes/main.tscn` — scene hierarchy.
-3. `scripts/autoload/game_manager.gd` and `scripts/autoload/economy_manager.gd` — global state.
-4. `scripts/world/grid_world.gd` — map and pathfinding.
-5. `scripts/units/unit.gd` — unit state machine and commands.
-6. `scripts/controllers/player_controller.gd` and `scripts/controllers/ai_controller.gd` — how the game is driven.
+`project.godot` (input, autoloads, display) → `scenes/main.tscn` (scene hierarchy) → `scripts/autoload/game_manager.gd` + `economy_manager.gd` (global state) → `scripts/world/grid_world.gd` (map, pathfinding) → `scripts/units/unit.gd` (unit state machine, commands) → `scripts/controllers/player_controller.gd` + `ai_controller.gd` (how the game is driven).
