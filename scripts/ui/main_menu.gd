@@ -68,6 +68,7 @@ func _add_menu_button(parent: Control, text: String, callback: Callable) -> void
 	btn.add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_NORMAL))
 	btn.add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_HOVER))
 	btn.add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_PRESSED))
+	btn.pressed.connect(func(): AudioManager.play("click"))
 	btn.pressed.connect(callback)
 	parent.add_child(btn)
 

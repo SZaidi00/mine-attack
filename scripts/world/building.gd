@@ -213,6 +213,7 @@ func deposit(unit: Node2D) -> void:
 		coin_deposited.emit(team, amount)
 		unit.set("carried_coin", 0)
 		_spawn_coin_popup(amount)
+		AudioManager.play("coin", get_deposit_point(), -4.0)
 
 
 func _spawn_coin_popup(amount: int) -> void:
@@ -229,12 +230,16 @@ func take_damage(amount: int) -> void:
 	hp_changed.emit(_hp, max_hp)
 	queue_redraw()
 	_spawn_damage_popup(amount)
+	# Alarm once the base is critical.
+	if _hp > 0 and _hp < max_hp * 0.25:
+		AudioManager.play("alarm", global_position, -2.0)
 	if _hp <= 0:
 		_hp = 0
 		_destroyed = true
 		_queue.clear()
 		remove_from_group("buildings")
 		destroyed.emit(team)
+		AudioManager.play("blast", global_position, 2.0)
 		_start_collapse()
 		var winner: GameManager.Team = GameManager.Team.PLAYER if team == GameManager.Team.ENEMY else GameManager.Team.ENEMY
 		GameManager.declare_winner(winner)

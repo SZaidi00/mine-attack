@@ -66,6 +66,8 @@ var _central_wall_cells: Array[Vector2i] = []
 
 var _view_mode: PlayerController.ViewMode = PlayerController.ViewMode.SURFACE
 var _cell_flash: Dictionary = {}  # Vector2i -> remaining flash time
+# Drives the magma/crystal shimmer redraws on the deep layers (Phase 8).
+var _shimmer_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -149,6 +151,11 @@ func _process(delta: float) -> void:
 	if not expired.is_empty():
 		for pos in expired:
 			_cell_flash.erase(pos)
+		queue_redraw()
+	# Deep-layer shimmer (magma flicker L5-6, crystal pulse L7) at ~8fps.
+	_shimmer_timer += delta
+	if _shimmer_timer >= 0.12:
+		_shimmer_timer = 0.0
 		queue_redraw()
 
 
@@ -573,6 +580,14 @@ func _draw_underground() -> void:
 			_draw_dust_puffs(rect, flash_alpha)
 		if cell.hp > 0 and cell.hp < cell.max_hp:
 			_draw_cell_hp_bar(rect, float(cell.hp) / float(cell.max_hp))
+
+		# Deep-layer ambience: magma flicker on layers 5-6, crystal pulse on 7.
+		if cell.layer >= 5 and (cell.type == CellType.DIRT or cell.type == CellType.ORE):
+			var wave: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 350.0 + float(hash(pos) % 100))
+			if cell.layer >= 7:
+				draw_rect(rect, Color(0.4, 0.9, 1.0, 0.05 + 0.08 * wave), true)
+			else:
+				draw_rect(rect, Color(1.0, 0.45, 0.15, 0.04 + 0.07 * wave), true)
 
 	# Dust burst for cells destroyed since the last redraw (already erased
 	# from _cells, so the main loop above skips them).

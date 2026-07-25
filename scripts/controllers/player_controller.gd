@@ -22,9 +22,18 @@ var _zoom_max: float = 2.0
 var _view_mode: ViewMode = ViewMode.SURFACE
 var _last_surface_cam_pos: Vector2 = Vector2(0, -150)
 var _last_underground_cam_pos: Vector2 = Vector2(0, 400)
+# Camera slide target after a view toggle (INF = not sliding).
+var _view_slide_target: Vector2 = Vector2.INF
+# Screen shake strength, decaying to 0; driven by building damage/destruction.
+var _shake_strength: float = 0.0
 
 
 func _ready() -> void:
+	# The camera export is assigned in main.tscn, but scene exports resolved
+	# from NodePaths can be null in some contexts (e.g. headless harnesses) —
+	# fall back to the well-known path instead of dying silently.
+	if camera == null:
+		camera = get_node_or_null("/root/Main/Camera2D")
 	if selection_box:
 		selection_box.visible = false
 		# The box is purely visual: it must never consume mouse events, or a
@@ -32,7 +41,26 @@ func _ready() -> void:
 		# _unhandled_input would never finish the selection.
 		selection_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_init_view_positions()
+	_connect_building_shake()
 	call_deferred("_validate_setup")
+
+
+## Screen shake (Phase 8): small rumble on every building hit, a big one when
+## either building falls.
+func _connect_building_shake() -> void:
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.has_signal("hp_changed"):
+			b.hp_changed.connect(_on_building_shake_hit)
+		if b.has_signal("destroyed"):
+			b.destroyed.connect(_on_building_shake_destroyed)
+
+
+func _on_building_shake_hit(_current: int, _maximum: int) -> void:
+	_shake_strength = maxf(_shake_strength, 3.0)
+
+
+func _on_building_shake_destroyed(_team: GameManager.Team) -> void:
+	_shake_strength = maxf(_shake_strength, 20.0)
 
 
 func _init_view_positions() -> void:
@@ -102,6 +130,21 @@ func _process(delta: float) -> void:
 	if Input.is_action_pressed(_Constants.INPUT_CAMERA_UP):
 		move.y -= 1
 	camera.position += move.normalized() * _camera_speed * delta / camera.zoom
+	# Camera slide after a view toggle; any manual pan cancels it.
+	if _view_slide_target != Vector2.INF:
+		if move != Vector2.ZERO:
+			_view_slide_target = Vector2.INF
+		else:
+			camera.position = camera.position.lerp(_view_slide_target, minf(1.0, delta * 6.0))
+			if camera.position.distance_to(_view_slide_target) < 4.0:
+				camera.position = _view_slide_target
+				_view_slide_target = Vector2.INF
+	# Screen shake decays back to a clean zero offset.
+	if _shake_strength > 0.2:
+		camera.offset = Vector2(randf_range(-_shake_strength, _shake_strength), randf_range(-_shake_strength, _shake_strength))
+		_shake_strength = move_toward(_shake_strength, 0.0, delta * 30.0)
+	elif camera.offset != Vector2.ZERO:
+		camera.offset = Vector2.ZERO
 	# Clamp camera within world bounds. Only clamp when the viewport is smaller
 	# than the playable area; otherwise the whole world is visible and the player
 	# should be free to pan (e.g. to follow surface/underground views).
@@ -406,7 +449,8 @@ func set_view(underground: bool) -> void:
 	else:
 		_last_underground_cam_pos = camera.position
 	_view_mode = new_mode
-	camera.position = _last_underground_cam_pos if underground else _last_surface_cam_pos
+	# Slide to the bookmark instead of snapping (Phase 8 game feel).
+	_view_slide_target = _last_underground_cam_pos if underground else _last_surface_cam_pos
 	DebugLog.log_command("PlayerController", "set_view", "UNDERGROUND" if underground else "SURFACE")
 	view_mode_changed.emit(_view_mode)
 

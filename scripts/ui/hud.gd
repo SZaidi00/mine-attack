@@ -55,6 +55,8 @@ func _ready() -> void:
 	_underground_button.pressed.connect(_set_view.bind(true))
 	$GameOverPanel/MarginContainer/VBoxContainer/QuitButton.pressed.connect(func(): get_tree().quit())
 	$GameOverPanel/MarginContainer/VBoxContainer/PlayAgainButton.pressed.connect(_play_again)
+	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _surface_button, _underground_button]:
+		btn.pressed.connect(func(): AudioManager.play("click"))
 
 	EconomyManager.coin_changed.connect(_on_economy_changed)
 	EconomyManager.population_changed.connect(_on_economy_changed)
@@ -135,6 +137,7 @@ func _add_pause_button(parent: Control, text: String, callback: Callable) -> voi
 	var btn: Button = Button.new()
 	btn.text = text
 	btn.custom_minimum_size = Vector2(180, 36)
+	btn.pressed.connect(func(): AudioManager.play("click"))
 	btn.pressed.connect(callback)
 	parent.add_child(btn)
 
@@ -315,7 +318,9 @@ func _initialize_hp_labels() -> void:
 
 
 func _get_player_controller() -> PlayerController:
-	return get_node_or_null("/root/Main/PlayerController")
+	# Explicit cast: during scene teardown the node may already be scriptless,
+	# and an implicit downcast would throw a return-type error every frame.
+	return get_node_or_null("/root/Main/PlayerController") as PlayerController
 
 
 func _get_player_building() -> Node2D:

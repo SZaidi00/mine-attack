@@ -74,7 +74,9 @@ func _on_pressed() -> void:
 	if _pc == null:
 		return
 	var success: bool = _pc.train_unit(unit_id)
-	if not success:
+	if success:
+		AudioManager.play("click")
+	else:
 		_shake()
 
 

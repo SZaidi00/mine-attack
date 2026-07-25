@@ -133,6 +133,9 @@ func _process(delta: float) -> void:
 			_handle_idle_miner()
 	elif data.is_fighter and _state == State.IDLE:
 		_handle_idle_fighter()
+	# Keep the selection ring pulsing and the lantern glow flickering.
+	if selected or (data.is_miner and is_underground):
+		queue_redraw()
 	match _state:
 		State.MOVE:
 			_follow_path(delta)
@@ -428,6 +431,7 @@ func _process_attack(delta: float) -> void:
 		var hit_damage: int = roundi(data.damage_per_hit)
 		if data.attack_range <= 35.0:
 			# Melee
+			AudioManager.play("sword", global_position, -8.0)
 			if _target_unit != null:
 				_target_unit.take_damage(hit_damage)
 			elif _target_building != null:
@@ -439,6 +443,7 @@ func _process_attack(delta: float) -> void:
 
 
 func _spawn_projectile(target_pos: Vector2) -> void:
+	AudioManager.play("blast" if data.unit_name == "Wizard" else "bow", global_position, -6.0)
 	var proj: Node2D = preload("res://scenes/projectile.tscn").instantiate()
 	proj.position = global_position
 	proj.set("team", team)
@@ -492,6 +497,7 @@ func _process_mine(delta: float) -> void:
 		_mine_hit_flash = 0.08
 		var dmg: int = max(1, data.mining_damage)
 		var coin: int = _grid.damage_cell(_target_cell, dmg, data.miner_level)
+		AudioManager.play("pickaxe", global_position, -10.0)
 		if coin > 0:
 			carried_coin = min(data.carry_capacity, carried_coin + coin)
 			queue_redraw()
@@ -1204,6 +1210,20 @@ func _draw_pickaxe(draw_body: bool = true) -> void:
 
 # ---------- Drawing ----------
 
+# Shared soft radial texture for the miner lantern glow (built once).
+static var _glow_texture: Texture2D = null
+
+
+static func _make_glow_texture() -> Texture2D:
+	var size: int = 64
+	var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var center: float = (size - 1) / 2.0
+	for x in range(size):
+		for y in range(size):
+			var d: float = Vector2(x - center, y - center).length() / center
+			img.set_pixel(x, y, Color(1, 1, 1, clampf(1.0 - d, 0.0, 1.0) ** 2))
+	return ImageTexture.create_from_image(img)
+
 func _get_unit_texture() -> Texture2D:
 	var textures: Array[Texture2D]
 	if team == GameManager.Team.PLAYER:
@@ -1240,10 +1260,19 @@ func _draw() -> void:
 		body_bottom = size / 2.0
 		selection_radius = size + 4.0
 
-	# Selection indicator.
+	# Lantern glow: a warm halo around miners working underground (Phase 8).
+	if data.is_miner and is_underground:
+		if _glow_texture == null:
+			_glow_texture = _make_glow_texture()
+		var flicker: float = 0.30 + 0.05 * sin(Time.get_ticks_msec() / 220.0 + get_instance_id() % 100)
+		var glow_size: float = 100.0
+		draw_texture_rect(_glow_texture, Rect2(-glow_size / 2.0, -glow_size / 2.0, glow_size, glow_size), false, Color(1.0, 0.85, 0.55, flicker))
+
+	# Selection indicator (gentle pulse).
 	if selected:
-		var ring_size: float = selection_radius * 2.0
-		draw_texture_rect(_SELECTION_RING, Rect2(-selection_radius, -selection_radius, ring_size, ring_size), false)
+		var pulse: float = 1.0 + 0.08 * sin(Time.get_ticks_msec() / 160.0)
+		var ring_radius: float = selection_radius * pulse
+		draw_texture_rect(_SELECTION_RING, Rect2(-ring_radius, -ring_radius, ring_radius * 2.0, ring_radius * 2.0), false)
 
 	# Body.
 	if sprite_texture != null:

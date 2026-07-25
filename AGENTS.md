@@ -61,9 +61,10 @@ mine-attack/
 └── scripts/                   # GDScript source files
     ├── autoload/              # Global singletons
     │   ├── constants.gd       # Centralized balance and input constants
-    │   ├── game_manager.gd    # Game state, teams, colors, win/loss
+    │   ├── game_manager.gd    # Game state, teams, colors, difficulty, win/loss
     │   ├── economy_manager.gd # Coin, population, miner upgrades, stats
-    │   └── debug_log.gd       # Phase 0 ring-buffer logger
+    │   ├── debug_log.gd       # Phase 0 ring-buffer logger
+    │   └── audio_manager.gd   # Procedural SFX + ambience (no audio assets)
     ├── controllers/           # High-level gameplay controllers
     │   ├── ai_controller.gd   # Enemy AI logic
     │   └── player_controller.gd # Input, selection, camera, commands
@@ -150,12 +151,19 @@ Global singletons accessible from any script via their class name.
   - Tracks coin, population, miner level, units trained, and coin mined per team.
   - `add_coin`, `spend_coin`, `can_afford`, population helpers, `upgrade_miner`, `get_miner_upgrade_cost`.
 
+- `audio_manager.gd`
+  - Procedural audio (Phase 8): the project ships no audio assets, so every sound is synthesized at startup into `AudioStreamWAV` (22.05 kHz 16-bit).
+  - SFX: `pickaxe`, `sword`, `bow`, `blast`, `coin`, `click`, `alarm`. Looping ambience: `wind`, `drips` on a quiet `Ambient` bus; one-shots use the `SFX` bus.
+  - `play(sound, world_pos, volume_db)`: flat players for UI (no position), a rotating pool of 12 `AudioStreamPlayer2D` for world sounds.
+  - Runs with `process_mode = ALWAYS` so ambience keeps playing while paused.
+
 ### `scripts/controllers/`
 
 - `player_controller.gd`
   - Handles selection box, single/box selection (with Shift add-to-selection), camera pan/zoom, hotkeys.
   - Issues context-sensitive commands on right-click: attack, mine, breach wall, enter/exit mine, move. Right-clicking the enemy mine entry is rejected with a log line and red-X popup — units can never enter the enemy mine.
-  - Supports camera view bookmarks (Tab / Surface / Underground buttons) and pause (Space / Esc toggles `get_tree().paused`). Both layers are always rendered, so `set_view(underground)` only saves the current camera position and jumps to the other view's last position (surface base ↔ own mine underground), emitting `view_mode_changed(mode)`.
+  - Supports camera view bookmarks (Tab / Surface / Underground buttons) and pause (Space / Esc toggles `get_tree().paused`). Both layers are always rendered, so `set_view(underground)` only saves the current camera position and slides the camera to the other view's last position (surface base ↔ own mine underground; manual pan cancels the slide), emitting `view_mode_changed(mode)`.
+  - Screen shake (Phase 8): connected to both buildings' `hp_changed` (small rumble) and `destroyed` (big shake), applied as a decaying `camera.offset`.
   - Provides UI callbacks: `train_unit(unit_id)`, `upgrade_miner()`, `set_stance(stance)`, `set_view(underground)`.
   - Stances: `"attack"` (rush enemy building), `"defend"` (stop), `"garrison"` (toggle mine).
 
@@ -174,7 +182,7 @@ Global singletons accessible from any script via their class name.
   - Procedural map generation with 7 underground layers (3 rows per layer, `ROWS_PER_LAYER = 3`), layer-specific tile HP and ore coin values, entry shafts at x = -15 and x = 15, and border walls.
   - Map bounds: `GRID_X_MIN = -40` to `GRID_X_MAX = 40`, `GRID_Y_MIN = 0` to `GRID_Y_MAX = 21`.
   - Central wall is a single shared 2000 HP objective spanning all layers at `x = -1, 0, 1`; an HP bar renders once it has taken damage, and at 0 HP every wall cell bursts dust and clears its A* solid in the same transaction.
-  - Ambient particles (Phase 5.1): slow falling snow over the surface and drifting dust motes underground, spawned in `_ready()` with a code-generated soft-dot texture.
+  - Ambient particles (Phase 5.1): slow falling snow over the surface and drifting dust motes underground, spawned in `_ready()` with a code-generated soft-dot texture. Deep-layer shimmer (Phase 8): magma flicker overlays on layers 5–6 and a crystal pulse on layer 7, redrawn at ~8 fps.
   - Uses `AStarGrid2D` for pathfinding.
   - `damage_cell()` applies mining damage and returns coin; ore tiles trickle gold on every swing (a share proportional to the damage dealt, with the remainder paid on destruction — each tile yields exactly `coin_value` total). Wall damage reduces the shared wall HP pool and scales with miner level. Partially damaged cells show a brief flash, dust puffs, and a small HP bar so active mining is visible; destroyed tiles burst dust and clear their A* solid in the same transaction.
   - Cell reservations (`claim_cell` / `release_cell` / `is_cell_claimable`) let miners spread across tiles instead of dogpiling one (Phase 3.3).
@@ -185,7 +193,7 @@ Global singletons accessible from any script via their class name.
   - Default building HP is 5000 (`PLAYER_BUILDING_HP` / `ENEMY_BUILDING_HP`).
   - Spawns units at the building front and automatically sends miners into the mine.
   - Emits `hp_changed`, `queue_changed`, `destroyed`, `coin_deposited`.
-  - On destruction: clears the queue, leaves the `"buildings"` group, plays a collapse (one-shot dust burst + squash/darken tween under the slow-mo), and hides its HP bar.
+  - On destruction: clears the queue, leaves the `"buildings"` group, plays a collapse (one-shot dust burst + squash/darken tween under the slow-mo), and hides its HP bar. Sounds: coin chime on deposit, alarm below 25% HP, blast on destruction.
   - Owns the miner deposit point (Phase 3.1): a `DepositPoint` Marker2D just outside the front edge on the surface row; `deposit(unit)` converts carried coin into team coin and spawns the coin popup there.
   - Draws a team-specific building sprite and a health bar above it.
   - Marks its footprint as solid on the grid by writing directly into `GridWorld._cells` and `_astar`.
@@ -208,7 +216,7 @@ Global singletons accessible from any script via their class name.
   - Fighters auto-attack nearby enemies (fighters → building → enemy miners on own side) and patrol underground when idle.
   - Fighters move at 60% speed while underground.
   - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`).
-  - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected, use `frost_mines_assets/effects/selection_ring.png` for selection, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage. Units are always visible in both views (surface and underground render simultaneously).
+  - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected, use `frost_mines_assets/effects/selection_ring.png` for selection (with a gentle pulse), a warm lantern glow when mining underground, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage. Units are always visible in both views (surface and underground render simultaneously). Mining swings, melee hits, and projectile launches play positional SFX via `AudioManager`.
   - Phase 3.4 traffic: each unit gets a small `_movement_offset` applied to miner deposit and mine-entry targets, and `_follow_path()` applies soft repulsion from nearby friendly units so surface parades don't stack into a single sprite. Path arrival is step-aware (`max(2px, speed * delta)`) so large deltas (lag spikes, high `Engine.time_scale`) can't orbit a path point forever against the separation nudge.
 
 - `projectile.gd`
@@ -384,6 +392,8 @@ If you add tests, consider using [GUT](https://github.com/bitwes/Gut) (Godot Uni
 - **Building footprint writes into `_cells` directly:** `building.gd` mutates `GridWorld._cells` and `_astar` directly rather than using a public API.
 - **No null-safe node access for UI:** `hud.gd` looks up the player controller and building at runtime with `get_node_or_null`; if the scene hierarchy changes, the HUD may silently stop updating.
 - **Export presets mismatch:** The README mentions Windows, macOS, and Linux exports, but only the Web preset is configured.
+- **Viewport is 2560×1440** (`window/size` in `project.godot`, stretch `canvas_items`/`expand`). Camera zoom range is 0.4–2.0; HUD layout is anchored, so larger viewports show more of the world rather than scaling the UI.
+- **Headless teardown spam:** in `-s` SceneTree harnesses, after `quit()` the script unregistration can race node teardown and spam `Trying to return a value of type 'Node' ... 'PlayerController'` from `hud._get_player_controller` (kept alive by `process_mode = ALWAYS`). Harness-only noise after the check result; normal boots and gameplay are clean.
 - **Resources are duplicated at spawn:** `building.gd` calls `data.duplicate(true)` so each unit gets its own mutable `UnitData`. Upgrades mutate that copy in `unit.gd`.
 - **Autoloads survive scene reload:** `hud.gd` explicitly calls `GameManager.reset()` and `EconomyManager.reset()` before `get_tree().reload_current_scene()` so a new match starts fresh.
 - **Fighter stats come from `.tres` resources:** `Constants.FIGHTER_STATS` was removed in Phase 2; `scripts/resources/units/*.tres` are the sole source of truth. Combat uses cooldown-based discrete hits (`damage_per_hit` / `attack_cooldown`).
