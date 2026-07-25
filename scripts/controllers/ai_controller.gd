@@ -58,6 +58,13 @@ func _run_economy() -> void:
 	var level: int = EconomyManager.get_miner_level(team)
 	var population: int = EconomyManager.get_population(team)
 
+	# Upgrade miners first: banking 500/1500 for the upgrade takes priority
+	# over expensive units, otherwise the AI never saves enough to advance.
+	if level == 1 and coin >= _Constants.MINER_UPGRADE_COSTS[2]:
+		EconomyManager.upgrade_miner(team)
+	elif level == 2 and coin >= _Constants.MINER_UPGRADE_COSTS[3]:
+		EconomyManager.upgrade_miner(team)
+
 	# Queue decisions (respecting queue size and population cap).
 	var queue_size: int = building.call("get_queue").size()
 	if queue_size < 3 and population < _Constants.MAX_UNITS:
@@ -71,12 +78,6 @@ func _run_economy() -> void:
 			building.call("queue_unit", "archer")
 		elif coin >= _Constants.COSTS["swordsman"]:
 			building.call("queue_unit", "swordsman")
-
-	# Upgrade miners.
-	if level == 1 and coin >= _Constants.MINER_UPGRADE_COSTS[2]:
-		EconomyManager.upgrade_miner(team)
-	elif level == 2 and coin >= _Constants.MINER_UPGRADE_COSTS[3]:
-		EconomyManager.upgrade_miner(team)
 
 
 func _run_mining() -> void:

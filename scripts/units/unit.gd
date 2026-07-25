@@ -64,6 +64,10 @@ var _unreachable_cells: Dictionary = {}
 # surface entry and retries periodically instead of thrashing down and up.
 var _mine_exhausted: bool = false
 var _exhausted_retry_timer: float = 0.0
+# Set when a mine command arrives while the miner is on the surface: digging
+# is only allowed from inside the mine, so the miner rides the ladder down
+# first and _handle_idle_miner re-issues this cell once underground.
+var _pending_mine_cell: Vector2i = Vector2i(-9999, -9999)
 # Phase 3.4: small per-unit offset applied to deposit and mine-entry targets
 # so multiple miners do not stack into a single sprite on the surface parade.
 var _movement_offset: Vector2 = Vector2.ZERO
@@ -205,6 +209,15 @@ func mine_cell(grid_pos: Vector2i) -> void:
 	if data == null or not data.is_miner:
 		DebugLog.log_reject("Unit %d" % get_instance_id(), "mine_cell", "not a miner")
 		return
+	if not is_underground:
+		# Digging is only allowed from inside the mine. Ride the ladder down
+		# first; _handle_idle_miner re-issues this cell once underground.
+		# (Set after climb_down_ladder because it clears targets.)
+		climb_down_ladder()
+		_pending_mine_cell = grid_pos
+		DebugLog.log_command("Unit %d" % get_instance_id(), "mine_cell", str(grid_pos) + " (deferred until underground)")
+		return
+	_pending_mine_cell = Vector2i(-9999, -9999)
 	DebugLog.log_command("Unit %d" % get_instance_id(), "mine_cell", str(grid_pos))
 	_clear_target()
 	_target_cell = grid_pos
@@ -652,6 +665,7 @@ func _clear_target() -> void:
 	_target_unit = null
 	_target_building = null
 	_target_cell = Vector2i(-9999, -9999)
+	_pending_mine_cell = Vector2i(-9999, -9999)
 	_target_position = Vector2.ZERO
 	_path.clear()
 	_path_index = 0
@@ -748,15 +762,17 @@ func _spawn_reject_popup(at: Vector2) -> void:
 
 func _handle_idle_miner() -> void:
 	# Full miners (and miners flagged with nothing left to dig) deposit at the
-	# building. When the mine is exhausted, wait near the surface entry until
-	# the retry timer fires. Otherwise surface miners climb down the ladder and
-	# underground miners look for the next cell to dig.
+	# building. Otherwise surface miners climb down the ladder — digging only
+	# happens inside the mine — and underground miners resume a pending mine
+	# command or look for the next cell to dig.
 	if carried_coin >= data.carry_capacity or (_deposit_requested and carried_coin > 0):
 		deposit_coin()
-	elif _mine_exhausted:
-		_idle_near_mine_entry()
 	elif not is_underground:
 		climb_down_ladder()
+	elif _pending_mine_cell != Vector2i(-9999, -9999):
+		mine_cell(_pending_mine_cell)
+	elif _mine_exhausted:
+		_idle_near_mine_entry()
 	else:
 		_find_and_mine()
 
@@ -1111,7 +1127,7 @@ func _apply_miner_upgrade() -> void:
 	data.miner_level = level
 	if level >= 2:
 		data.max_dig_layer = 4
-		data.carry_capacity += 5
+		data.carry_capacity += 10
 		data.max_hp += 10
 	if level >= 3:
 		data.max_dig_layer = 7

@@ -125,7 +125,7 @@ Autoload singletons (configured in `project.godot`, loaded in this order):
 Global singletons accessible from any script via their class name.
 
 - `constants.gd`
-  - Centralized balance numbers: `STARTING_COIN` (150), `MAX_UNITS` (100), `MAX_QUEUE_SIZE` (5).
+  - Centralized balance numbers: `STARTING_COIN` (500), `STARTING_MINERS` (2 free miners per base at match start), `MAX_UNITS` (100), `MAX_QUEUE_SIZE` (5).
   - `COSTS`: miner 50, swordsman 100, archer 150, wizard 250.
   - `TRAIN_TIMES`: miner 3.0s, swordsman 5.0s, archer 6.0s, wizard 10.0s.
   - `MINER_STATS`: per-level HP, speed, mining DPS, carry capacity, and max layer.
@@ -319,7 +319,8 @@ Defined in `project.godot` under `[input]`:
 ## Gameplay rules and balance
 
 - **Population cap:** 100 per team (`MAX_UNITS`).
-- **Starting coin:** 150 per team (`STARTING_COIN`).
+- **Starting coin:** 500 per team (`STARTING_COIN`).
+- **Starting units:** each base spawns 2 free miners at match start (`STARTING_MINERS`); they count toward population.
 - **Training queue cap:** 5 units (`MAX_QUEUE_SIZE`).
 - **Units:** Miner, Swordsman, Archer, Wizard.
 - **Unit costs / train times:**
@@ -328,13 +329,14 @@ Defined in `project.godot` under `[input]`:
   - Archer: 150 coin, 6.0s
   - Wizard: 250 coin, 10.0s
 - **Miner upgrades:**
-  - Level 2 costs 500, unlocks layers 3–4, +5 carry capacity, +10 HP, +1 mining rate.
-  - Level 3 costs 1500, unlocks layers 5–7, +10 carry capacity (cumulative), +15 HP, +2 mining rate.
+  - Level 2 costs 500, unlocks layers 3–4, +10 carry capacity (30 total), +10 HP, +1 mining rate.
+  - Level 3 costs 1500, unlocks layers 5–7, +10 carry capacity (40 total), +15 HP, +2 mining rate.
 - **Layers:**
   - 7 underground layers, 3 grid rows each (`ROWS_PER_LAYER = 3`, ~32 px per row).
-  - Layers 1–2: miner level 1, tile HP 50, ore coin 5–10 / 8–15.
-  - Layers 3–4: miner level 2, tile HP 75, ore coin 12–20 / 15–25.
-  - Layers 5–7: miner level 3, tile HP 100, ore coin 20–35 / 25–40 / 30–50.
+  - Layers 1–2: miner level 1, tile HP 50, ore coin 15–25 / 20–35.
+  - Layers 3–4: miner level 2, tile HP 75, ore coin 30–50 / 40–65.
+  - Layers 5–7: miner level 3, tile HP 100, ore coin 55–90 / 70–120 / 90–150.
+- **Mining requires being inside the mine:** `mine_cell` only executes while the miner is underground. A mine order given to a surface miner (right-click ore/wall, AI ore orders) is deferred: the miner rides the ladder down first, then `_handle_idle_miner` re-issues the pending cell. Ore yields are sized so each side's layers can fund the 500 / 1500 miner upgrades before the next tier unlocks.
 - **Central wall:** A 3-tile thick wall at `x = -1, 0, 1` spans all layers and shares a single 2000 HP pool. Miners on either team can breach it with an explicit right-click command. Wall damage scales with miner level.
 - **Win condition:** Destroy the enemy building.
 

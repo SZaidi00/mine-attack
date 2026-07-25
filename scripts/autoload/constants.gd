@@ -5,7 +5,8 @@ const DEBUG: bool = true
 const DEBUG_SEED: int = 12345
 
 # ─── ECONOMY ───
-const STARTING_COIN: int = 150
+const STARTING_COIN: int = 500
+const STARTING_MINERS: int = 2
 const MAX_UNITS: int = 100
 const MAX_QUEUE_SIZE: int = 5
 
@@ -33,7 +34,7 @@ const TRAIN_TIMES: Dictionary = {
 const MINER_STATS: Dictionary = {
 	1: { "hp": 50, "speed": 60, "mine_dps": 10, "carry": 20, "max_layer": 2 },
 	2: { "hp": 75, "speed": 70, "mine_dps": 15, "carry": 30, "max_layer": 4 },
-	3: { "hp": 100, "speed": 80, "mine_dps": 25, "carry": 50, "max_layer": 7 }
+	3: { "hp": 100, "speed": 80, "mine_dps": 25, "carry": 40, "max_layer": 7 }
 }
 
 # Authoritative mining swing stats per upgrade level. DPS = damage * swings.
@@ -62,15 +63,16 @@ const LAYERS: int = 7
 const LAYER_HEIGHT: int = 100
 const TILE_SIZE: int = 32
 
-# Layer coin ranges [min, max]
+# Layer coin ranges [min, max]. Sized so each side's layers yield enough for
+# the miner upgrades (500 / 1500) before the next tier unlocks.
 const LAYER_COIN_RANGES: Dictionary = {
-	1: Vector2i(5, 10),
-	2: Vector2i(8, 15),
-	3: Vector2i(12, 20),
-	4: Vector2i(15, 25),
-	5: Vector2i(20, 35),
-	6: Vector2i(25, 40),
-	7: Vector2i(30, 50)
+	1: Vector2i(15, 25),
+	2: Vector2i(20, 35),
+	3: Vector2i(30, 50),
+	4: Vector2i(40, 65),
+	5: Vector2i(55, 90),
+	6: Vector2i(70, 120),
+	7: Vector2i(90, 150)
 }
 
 # Layer tile HP

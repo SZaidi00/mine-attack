@@ -118,7 +118,7 @@ func _generate_map() -> void:
 				continue
 
 			# Ore chance rises with depth.
-			var is_ore: bool = randf() < (0.05 + layer * 0.03)
+			var is_ore: bool = randf() < (0.08 + layer * 0.04)
 			if is_ore:
 				var coin_range: Vector2i = _Constants.LAYER_COIN_RANGES[layer]
 				var coin: int = randi_range(coin_range.x, coin_range.y)

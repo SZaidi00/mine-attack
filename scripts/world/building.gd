@@ -43,6 +43,14 @@ func _ready() -> void:
 	_add_deposit_point()
 	_connect_view_mode()
 	queue_redraw()
+	call_deferred("_spawn_starting_miners")
+
+
+## Each base starts with free miners so the economy runs from the first
+## second. They still count toward the population cap.
+func _spawn_starting_miners() -> void:
+	for i in range(_Constants.STARTING_MINERS):
+		_spawn_front("miner", _resources["miner"])
 
 
 func _connect_view_mode() -> void:

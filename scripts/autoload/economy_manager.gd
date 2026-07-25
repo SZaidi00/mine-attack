@@ -119,6 +119,7 @@ func upgrade_miner(team: GameManager.Team) -> bool:
 	if not spend_coin(team, cost):
 		return false
 	_miner_level[team] = next_level
+	DebugLog.log_command("EconomyManager", "upgrade_miner", "team=%s level=%d cost=%d" % ["PLAYER" if team == GameManager.Team.PLAYER else "ENEMY", next_level, cost])
 	miner_level_changed.emit(team)
 	return true
 
