@@ -93,19 +93,28 @@ func _build_streams() -> void:
 	_streams["drips"] = _drip_loop(5.0)
 
 
-func _make_stream(frames: int) -> AudioStreamWAV:
+func _make_stream(frames: int, bytes: PackedByteArray) -> AudioStreamWAV:
+	# PackedByteArray is copy-on-write: mutating stream.data through the
+	# property getter silently detaches, leaving an EMPTY buffer (which made
+	# every sound silent on desktop and threw createBuffer(0 frames) on Web).
+	# Always fill a local array and assign it here, exactly once.
 	var stream: AudioStreamWAV = AudioStreamWAV.new()
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
 	stream.mix_rate = _MIX_RATE
 	stream.stereo = false
-	stream.data = PackedByteArray()
-	stream.data.resize(frames * 2)
+	stream.data = bytes
 	return stream
+
+
+func _new_buffer(frames: int) -> PackedByteArray:
+	var bytes: PackedByteArray = PackedByteArray()
+	bytes.resize(frames * 2)
+	return bytes
 
 
 func _tone(freq_start: float, freq_end: float, duration: float, volume: float, shape: String) -> AudioStreamWAV:
 	var frames: int = int(_MIX_RATE * duration)
-	var stream: AudioStreamWAV = _make_stream(frames)
+	var bytes: PackedByteArray = _new_buffer(frames)
 	var phase: float = 0.0
 	for i in range(frames):
 		var t: float = float(i) / frames
@@ -114,25 +123,25 @@ func _tone(freq_start: float, freq_end: float, duration: float, volume: float, s
 		var v: float = sin(phase * TAU)
 		if shape == "square":
 			v = signf(v) * 0.6
-		_write_sample(stream, i, v * env * volume)
-	return stream
+		_write_sample(bytes, i, v * env * volume)
+	return _make_stream(frames, bytes)
 
 
 func _noise(duration: float, volume: float) -> AudioStreamWAV:
 	var frames: int = int(_MIX_RATE * duration)
-	var stream: AudioStreamWAV = _make_stream(frames)
+	var bytes: PackedByteArray = _new_buffer(frames)
 	for i in range(frames):
 		var t: float = float(i) / frames
 		var env: float = (1.0 - t) * (1.0 - t)
-		_write_sample(stream, i, (randf() * 2.0 - 1.0) * env * volume)
-	return stream
+		_write_sample(bytes, i, (randf() * 2.0 - 1.0) * env * volume)
+	return _make_stream(frames, bytes)
 
 
 ## Two bright sine notes in sequence (deposit chime).
 func _coin_chime() -> AudioStreamWAV:
 	var notes: Array = [[990.0, 0.07], [1485.0, 0.1]]
 	var frames: int = int(_MIX_RATE * 0.2)
-	var stream: AudioStreamWAV = _make_stream(frames)
+	var bytes: PackedByteArray = _new_buffer(frames)
 	var offset: int = 0
 	for note in notes:
 		var note_frames: int = int(_MIX_RATE * note[1])
@@ -140,21 +149,22 @@ func _coin_chime() -> AudioStreamWAV:
 		for i in range(note_frames):
 			var t: float = float(i) / note_frames
 			phase += note[0] / _MIX_RATE
-			_write_sample(stream, offset + i, sin(phase * TAU) * (1.0 - t) * 0.4)
+			_write_sample(bytes, offset + i, sin(phase * TAU) * (1.0 - t) * 0.4)
 		offset += note_frames
-	return stream
+	return _make_stream(frames, bytes)
 
 
 ## Smoothed brown-ish noise, looped: low rumbling cave wind.
 func _wind_loop(duration: float) -> AudioStreamWAV:
 	var frames: int = int(_MIX_RATE * duration)
-	var stream: AudioStreamWAV = _make_stream(frames)
+	var bytes: PackedByteArray = _new_buffer(frames)
 	var smoothed: float = 0.0
 	for i in range(frames):
 		smoothed = lerpf(smoothed, randf() * 2.0 - 1.0, 0.02)
 		# Fade the loop seam so the wrap-around doesn't click.
 		var seam: float = minf(1.0, minf(i, frames - i) / (_MIX_RATE * 0.2))
-		_write_sample(stream, i, smoothed * 0.5 * seam)
+		_write_sample(bytes, i, smoothed * 0.5 * seam)
+	var stream: AudioStreamWAV = _make_stream(frames, bytes)
 	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	stream.loop_begin = 0
 	stream.loop_end = frames
@@ -164,7 +174,7 @@ func _wind_loop(duration: float) -> AudioStreamWAV:
 ## Mostly silence with a few bright water drips, looped.
 func _drip_loop(duration: float) -> AudioStreamWAV:
 	var frames: int = int(_MIX_RATE * duration)
-	var stream: AudioStreamWAV = _make_stream(frames)
+	var bytes: PackedByteArray = _new_buffer(frames)
 	var drip_times: Array = [0.4, 1.9, 3.6]
 	for start_t in drip_times:
 		var start_frame: int = int(_MIX_RATE * start_t)
@@ -173,14 +183,15 @@ func _drip_loop(duration: float) -> AudioStreamWAV:
 		for i in range(drip_frames):
 			var t: float = float(i) / drip_frames
 			phase += lerpf(1600.0, 700.0, t) / _MIX_RATE
-			_write_sample(stream, start_frame + i, sin(phase * TAU) * (1.0 - t) * 0.35)
+			_write_sample(bytes, start_frame + i, sin(phase * TAU) * (1.0 - t) * 0.35)
+	var stream: AudioStreamWAV = _make_stream(frames, bytes)
 	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	stream.loop_begin = 0
 	stream.loop_end = frames
 	return stream
 
 
-func _write_sample(stream: AudioStreamWAV, frame: int, value: float) -> void:
-	if frame < 0 or frame * 2 + 1 >= stream.data.size():
+func _write_sample(bytes: PackedByteArray, frame: int, value: float) -> void:
+	if frame < 0 or frame * 2 + 1 >= bytes.size():
 		return
-	stream.data.encode_s16(frame * 2, int(clampf(value, -1.0, 1.0) * 32767.0))
+	bytes.encode_s16(frame * 2, int(clampf(value, -1.0, 1.0) * 32767.0))
