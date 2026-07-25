@@ -19,6 +19,9 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	# Match over: freeze mid-flight.
+	if not GameManager.game_active:
+		return
 	_update_target_position()
 	var dir: Vector2 = target_position - global_position
 	var dist: float = dir.length()

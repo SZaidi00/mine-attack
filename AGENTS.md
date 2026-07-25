@@ -47,11 +47,12 @@ mine-attack/
 ├── README.md                  # Human-facing README
 ├── Frost_Mines_Complete_Implementation_Guide.md  # Design reference
 ├── scenes/                    # Godot scene files (.tscn)
-│   ├── main.tscn              # Root gameplay scene
+│   ├── main.tscn              # Root gameplay scene (loaded from the main menu)
 │   ├── building.tscn          # Base building scene
 │   ├── mine_entry.tscn        # Mine entrance / exit scene
 │   ├── projectile.tscn        # Arrow / fireball projectile scene
 │   ├── unit.tscn              # Unit scene (miner/fighter)
+│   ├── ui/main_menu.tscn      # Main menu (project entry point): title, difficulty, Play
 │   ├── ui/hud.tscn            # In-game UI
 │   ├── ui/debug_overlay.tscn  # Phase 0 debug overlay scene
 │   └── effects/               # Floating text popups
@@ -95,7 +96,7 @@ mine-attack/
 
 ## Runtime architecture
 
-`scenes/main.tscn` is the main scene configured in `project.godot`. It contains:
+`scenes/ui/main_menu.tscn` is the main scene configured in `project.godot`; its Play button sets `GameManager.difficulty` and loads `scenes/main.tscn`, which contains:
 
 - `World/GridWorld` — procedural 2D grid map with A* pathfinding.
 - `World/PlayerBuilding` and `World/EnemyBuilding` — bases for each team.
@@ -142,6 +143,7 @@ Global singletons accessible from any script via their class name.
   - `signal game_over(winner: Team)`
   - `game_active: bool`, `match_time: float`
   - `declare_winner(winner: Team)`, `reset()`
+  - `declare_winner` also runs the win cinematic: `Engine.time_scale = 0.3` slow-mo for 1 real second (wall-clock restore in `_process`), then the HUD game-over panel fades in. `reset()` always restores `time_scale = 1.0`.
 
 - `economy_manager.gd`
   - Reads balance values from `Constants`.
@@ -183,6 +185,7 @@ Global singletons accessible from any script via their class name.
   - Default building HP is 5000 (`PLAYER_BUILDING_HP` / `ENEMY_BUILDING_HP`).
   - Spawns units at the building front and automatically sends miners into the mine.
   - Emits `hp_changed`, `queue_changed`, `destroyed`, `coin_deposited`.
+  - On destruction: clears the queue, leaves the `"buildings"` group, plays a collapse (one-shot dust burst + squash/darken tween under the slow-mo), and hides its HP bar.
   - Owns the miner deposit point (Phase 3.1): a `DepositPoint` Marker2D just outside the front edge on the surface row; `deposit(unit)` converts carried coin into team coin and spawns the coin popup there.
   - Draws a team-specific building sprite and a health bar above it.
   - Marks its footprint as solid on the grid by writing directly into `GridWorld._cells` and `_astar`.
@@ -198,6 +201,7 @@ Global singletons accessible from any script via their class name.
 
 - `unit.gd`
   - Large state machine: `IDLE`, `MOVE`, `ATTACK`, `MINE`, `DEPOSIT`, `ENTER_MINE`, `EXIT_MINE`, `CLIMB_UP`, `CLIMB_DOWN`, `DEAD`.
+  - All AI/movement freezes when `GameManager.game_active` is false (match over); only the `DEAD` fade-out keeps running. Projectiles freeze mid-flight too.
   - Command API: `move_to`, `attack_unit`, `attack_building`, `mine_cell`, `deposit_coin`, `enter_mine`, `exit_mine`, `climb_up_ladder`, `climb_down_ladder`, `stop`. The ladder climbs are the auto-loop's way in and out of the mine; `enter_mine`/`exit_mine` teleport and remain as explicit-order fallbacks.
   - Miners auto-enter mine on spawn, auto-seek diggable cells when idle, and flee toward friendly fighters or the mine entry when attacked (fleeing to the shaft's underground position when attacked below ground). When cargo is full (or nothing diggable remains), miners surface and walk to their building's deposit point to cash in before heading back down (Phase 3.1).
   - Mining seek (Phase 3.3): ore always wins over dirt, nearest first; the miner-level gate is enforced at seek time; targeted cells are reserved via `claimed_by`; cells that can't be pathed to go on a per-miner 10s blacklist; when nothing diggable remains, miners with cargo surface to deposit while empty-handed miners wait near the shaft bottom and re-scan every 5s (or immediately on any `cell_destroyed` signal) instead of yo-yoing up and down.
@@ -219,7 +223,8 @@ Global singletons accessible from any script via their class name.
 
 ### `scripts/ui/`
 
-- `hud.gd` — wires non-training buttons to `PlayerController`, listens to economy signals, updates labels, toggles surface/underground view, shows game-over stats panel with Play Again and Quit, and adds icon sprites from `frost_mines_assets/icons/` to stat labels and the attack stance button.
+- `hud.gd` — wires non-training buttons to `PlayerController`, listens to economy signals, updates labels, toggles surface/underground view, shows the game-over stats panel (1.4s after `game_over`, fading in once the slow-mo collapse has played) with Play Again and Quit, and adds icon sprites from `frost_mines_assets/icons/` to stat labels and the attack stance button. Runs with `process_mode = ALWAYS` and owns the pause menu (full-screen dim: Resume / Restart / Quit / difficulty), synced to `get_tree().paused` — Space/Esc toggles it via `PlayerController`.
+- `main_menu.gd` — minimal main menu (title, difficulty dropdown, Play / Quit); Play sets `GameManager.difficulty` and switches to `main.tscn`.
 - `unit_button.gd` — train button with cost/train-time labels, affordability/disable state, and failure shake.
 - `training_queue_panel.gd` — shows currently training unit progress and queued units; both the in-progress unit and queued units can be cancelled (100% refund).
 - `layer_indicator.gd` — highlights accessible underground layers based on miner upgrade level.
@@ -236,7 +241,7 @@ Global singletons accessible from any script via their class name.
 ### Run in the editor
 
 1. Open the project root in **Godot 4.7+**.
-2. Press **F5** or run the main scene `res://scenes/main.tscn` (configured as `run/main_scene` in `project.godot`).
+2. Press **F5** — the main menu (`res://scenes/ui/main_menu.tscn`, configured as `run/main_scene` in `project.godot`) opens; pick a difficulty and press Play. To run the match scene directly, run `res://scenes/main.tscn`.
 
 ### Debug tooling (Phase 0)
 

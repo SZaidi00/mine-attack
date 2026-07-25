@@ -105,6 +105,10 @@ func _process(delta: float) -> void:
 			queue_free()
 		return
 
+	# Match over: freeze all unit AI and movement in place.
+	if not GameManager.game_active:
+		return
+
 	if _hit_flash_timer > 0:
 		_hit_flash_timer -= delta
 		if _hit_flash_timer <= 0:

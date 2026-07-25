@@ -32,6 +32,9 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 
 
 func _ready() -> void:
+	# The HUD must keep processing while the tree is paused so the pause menu
+	# stays visible and clickable (the classic pause-menu-pauses-itself bug).
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_ignore_mouse_recursive($TopBar)
 	_ignore_mouse_recursive($BottomBar)
 	_ignore_mouse_recursive(_game_over_panel)
@@ -65,6 +68,7 @@ func _ready() -> void:
 		enemy_building.hp_changed.connect(_on_building_hp_changed.bind(enemy_building))
 
 	GameManager.game_over.connect(_on_game_over)
+	_build_pause_menu()
 	_on_economy_changed(GameManager.Team.PLAYER)
 	_sync_view_buttons()
 	_initialize_hp_labels()
@@ -76,6 +80,70 @@ func _process(_delta: float) -> void:
 		_selection_label.text = "Selected: %d" % pc.get_selected_units().size()
 		_sync_view_buttons()
 	_update_upgrade_button()
+	# Keep the pause menu in sync with the tree state (pause is toggled from
+	# PlayerController via Space/Esc).
+	if _pause_panel != null and _pause_panel.visible != get_tree().paused:
+		_pause_panel.visible = get_tree().paused
+
+
+## Full-screen dim pause menu: resume / restart / quit + difficulty
+## placeholder (functional — applies to the AI immediately).
+func _build_pause_menu() -> void:
+	_pause_panel = PanelContainer.new()
+	_pause_panel.name = "PauseMenu"
+	_pause_panel.process_mode = Node.PROCESS_MODE_ALWAYS
+	_pause_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_pause_panel.visible = false
+	var dim: StyleBoxFlat = StyleBoxFlat.new()
+	dim.bg_color = Color(0.02, 0.03, 0.06, 0.75)
+	_pause_panel.add_theme_stylebox_override("panel", dim)
+
+	var center: CenterContainer = CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_pause_panel.add_child(center)
+	var vbox: VBoxContainer = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	center.add_child(vbox)
+
+	var title: Label = Label.new()
+	title.text = "PAUSED"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	vbox.add_child(title)
+
+	_add_pause_button(vbox, "Resume", func(): get_tree().paused = false)
+	_add_pause_button(vbox, "Restart", _on_pause_restart)
+	_add_pause_button(vbox, "Quit", func(): get_tree().quit())
+
+	var diff_row: HBoxContainer = HBoxContainer.new()
+	var diff_label: Label = Label.new()
+	diff_label.text = "Difficulty:"
+	diff_row.add_child(diff_label)
+	var diff_option: OptionButton = OptionButton.new()
+	diff_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for diff_name in GameManager.Difficulty.keys():
+		diff_option.add_item(diff_name.capitalize())
+	diff_option.selected = GameManager.difficulty
+	diff_option.item_selected.connect(func(index: int): GameManager.set_difficulty(index))
+	diff_row.add_child(diff_option)
+	vbox.add_child(diff_row)
+
+	add_child(_pause_panel)
+
+
+func _add_pause_button(parent: Control, text: String, callback: Callable) -> void:
+	var btn: Button = Button.new()
+	btn.text = text
+	btn.custom_minimum_size = Vector2(180, 36)
+	btn.pressed.connect(callback)
+	parent.add_child(btn)
+
+
+func _on_pause_restart() -> void:
+	get_tree().paused = false
+	GameManager.reset()
+	EconomyManager.reset()
+	get_tree().reload_current_scene()
 
 
 func _ignore_mouse_recursive(node: Node) -> void:
@@ -264,8 +332,15 @@ func _get_enemy_building() -> Node2D:
 	return null
 
 
+var _pause_panel: PanelContainer = null
+
+
 func _on_game_over(winner: GameManager.Team) -> void:
+	# Let the slow-mo collapse play out before the panel fades in (real-time
+	# delay, independent of the 0.3 time scale).
+	await get_tree().create_timer(1.4, true, false, true).timeout
 	_game_over_panel.visible = true
+	_game_over_panel.modulate.a = 0.0
 	var container: VBoxContainer = $GameOverPanel/MarginContainer/VBoxContainer
 	var label: Label = $GameOverPanel/MarginContainer/VBoxContainer/ResultLabel
 	if winner == GameManager.Team.PLAYER:
@@ -288,10 +363,13 @@ func _on_game_over(winner: GameManager.Team) -> void:
 	]
 	container.add_child(stats)
 	container.move_child(stats, 1)
+	var fade: Tween = create_tween()
+	fade.tween_property(_game_over_panel, "modulate:a", 1.0, 0.5)
 
 
 func _play_again() -> void:
 	# Autoloads survive scene reload, so reset global state before restarting.
+	get_tree().paused = false
 	GameManager.reset()
 	EconomyManager.reset()
 	get_tree().reload_current_scene()

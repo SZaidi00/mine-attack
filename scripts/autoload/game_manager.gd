@@ -35,23 +35,34 @@ var match_time: float = 0.0
 # AI difficulty for the current match. Set from the debug dropdown (Phase 6)
 # or the main menu (Phase 7); survives reset() so Play Again keeps the choice.
 var difficulty: Difficulty = Difficulty.NORMAL
+# Slow-mo end time (Time.get_ticks_msec()) after a win; -1 = not in slow-mo.
+var _slowmo_end_msec: int = -1
 
 
 func _process(delta: float) -> void:
 	if game_active:
 		match_time += delta
+	if _slowmo_end_msec >= 0 and Time.get_ticks_msec() >= _slowmo_end_msec:
+		_slowmo_end_msec = -1
+		Engine.time_scale = 1.0
 
 
 func declare_winner(winner: Team) -> void:
 	if not game_active:
 		return
 	game_active = false
+	# Cinematic slow-mo under the building collapse; restored after 1 real
+	# second (wall clock, so it is independent of the time scale itself).
+	Engine.time_scale = 0.3
+	_slowmo_end_msec = Time.get_ticks_msec() + 1000
 	game_over.emit(winner)
 
 
 func reset() -> void:
 	game_active = true
 	match_time = 0.0
+	_slowmo_end_msec = -1
+	Engine.time_scale = 1.0
 	# Note: difficulty is intentionally kept so Play Again preserves the choice.
 
 

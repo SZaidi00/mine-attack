@@ -27,6 +27,10 @@ var _queue: Array = []  # { id: String, data: UnitData, remaining: float }
 var _resources: Dictionary = {}
 var _destroyed: bool = false
 var _deposit_point: Marker2D
+# Collapse sequence after destruction: squash + darken over ~1.2 scaled
+# seconds (stretched by the game-over slow-mo, which is the point).
+var _collapsing: bool = false
+var _collapse_t: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -101,7 +105,17 @@ func get_deposit_point() -> Vector2:
 
 
 func _process(delta: float) -> void:
+	if _collapsing:
+		_collapse_t += delta
+		var t: float = clampf(_collapse_t / 1.2, 0.0, 1.0)
+		scale.y = lerpf(1.0, 0.25, t)
+		modulate = Color.WHITE.lerp(Color(0.25, 0.25, 0.28, 0.85), t)
+		if t >= 1.0:
+			_collapsing = false
+		return
 	if _destroyed:
+		return
+	if not GameManager.game_active:
 		return
 	if _queue.is_empty():
 		return
@@ -218,10 +232,50 @@ func take_damage(amount: int) -> void:
 	if _hp <= 0:
 		_hp = 0
 		_destroyed = true
+		_queue.clear()
 		remove_from_group("buildings")
 		destroyed.emit(team)
+		_start_collapse()
 		var winner: GameManager.Team = GameManager.Team.PLAYER if team == GameManager.Team.ENEMY else GameManager.Team.ENEMY
 		GameManager.declare_winner(winner)
+
+
+## One-time dust explosion over the footprint as the building starts to fall.
+func _start_collapse() -> void:
+	_collapsing = true
+	_collapse_t = 0.0
+	var dust: GPUParticles2D = GPUParticles2D.new()
+	dust.one_shot = true
+	dust.explosiveness = 0.9
+	dust.amount = 80
+	dust.lifetime = 1.4
+	dust.texture = _make_dot_texture()
+	dust.modulate = Color(0.7, 0.65, 0.55, 0.8)
+	var mat: ParticleProcessMaterial = ParticleProcessMaterial.new()
+	mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	mat.emission_box_extents = Vector3(width_cells * GridWorld.CELL_SIZE / 2.0, height_cells * GridWorld.CELL_SIZE / 2.0, 1)
+	mat.direction = Vector3(0, -1, 0)
+	mat.spread = 90.0
+	mat.gravity = Vector3(0, 60, 0)
+	mat.initial_velocity_min = 40.0
+	mat.initial_velocity_max = 120.0
+	mat.scale_min = 0.4
+	mat.scale_max = 1.2
+	dust.process_material = mat
+	# Emit from the middle of the building body.
+	dust.position = Vector2(0, -height_cells * GridWorld.CELL_SIZE / 2.0)
+	add_child(dust)
+	dust.emitting = true
+
+
+## Small soft white dot used as the particle sprite (no art dependency).
+func _make_dot_texture() -> Texture2D:
+	var img: Image = Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	for x in range(8):
+		for y in range(8):
+			var d: float = Vector2(x - 3.5, y - 3.5).length()
+			img.set_pixel(x, y, Color(1, 1, 1, clampf(1.0 - d / 4.0, 0.0, 1.0)))
+	return ImageTexture.create_from_image(img)
 
 
 func _spawn_damage_popup(amount: int) -> void:
@@ -253,7 +307,9 @@ func _draw() -> void:
 	var sprite_rect: Rect2 = Rect2(-sprite_size.x / 2.0, -sprite_size.y, sprite_size.x, sprite_size.y)
 	draw_texture(texture, sprite_rect.position)
 
-	# Health bar.
+	# Health bar (hidden once destroyed — the rubble doesn't need one).
+	if _destroyed:
+		return
 	var hp_pct: float = float(_hp) / float(max_hp)
 	var bar_w: float = sprite_size.x - 16
 	var bar_h: float = 8
