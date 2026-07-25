@@ -63,16 +63,18 @@ const LAYERS: int = 7
 const LAYER_HEIGHT: int = 100
 const TILE_SIZE: int = 32
 
-# Layer coin ranges [min, max]. Sized so each side's layers yield enough for
-# the miner upgrades (500 / 1500) before the next tier unlocks.
+# Layer coin ranges [min, max]. Every swing on an ore tile extracts a share of
+# its gold (destruction pays the remainder), so these are per-tile totals.
+# Sized so each side's layers comfortably fund the miner upgrades (500 / 1500)
+# before the next tier unlocks.
 const LAYER_COIN_RANGES: Dictionary = {
-	1: Vector2i(15, 25),
-	2: Vector2i(20, 35),
-	3: Vector2i(30, 50),
-	4: Vector2i(40, 65),
-	5: Vector2i(55, 90),
-	6: Vector2i(70, 120),
-	7: Vector2i(90, 150)
+	1: Vector2i(25, 40),
+	2: Vector2i(30, 50),
+	3: Vector2i(45, 70),
+	4: Vector2i(55, 90),
+	5: Vector2i(75, 120),
+	6: Vector2i(95, 160),
+	7: Vector2i(120, 200)
 }
 
 # Layer tile HP

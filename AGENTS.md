@@ -176,7 +176,7 @@ Global singletons accessible from any script via their class name.
   - Central wall is a single shared 2000 HP objective spanning all layers at `x = -1, 0, 1`; an HP bar renders once it has taken damage, and at 0 HP every wall cell bursts dust and clears its A* solid in the same transaction.
   - Ambient particles (Phase 5.1): slow falling snow over the surface and drifting dust motes underground, spawned in `_ready()` with a code-generated soft-dot texture.
   - Uses `AStarGrid2D` for pathfinding.
-  - `damage_cell()` applies mining damage and returns coin when destroyed; wall damage reduces the shared wall HP pool and scales with miner level. Partially damaged cells show a brief flash, dust puffs, and a small HP bar so active mining is visible; destroyed tiles burst dust and clear their A* solid in the same transaction.
+  - `damage_cell()` applies mining damage and returns coin; ore tiles trickle gold on every swing (a share proportional to the damage dealt, with the remainder paid on destruction — each tile yields exactly `coin_value` total). Wall damage reduces the shared wall HP pool and scales with miner level. Partially damaged cells show a brief flash, dust puffs, and a small HP bar so active mining is visible; destroyed tiles burst dust and clear their A* solid in the same transaction.
   - Cell reservations (`claim_cell` / `release_cell` / `is_cell_claimable`) let miners spread across tiles instead of dogpiling one (Phase 3.3).
   - Draws both layers every frame — sky, surface ground, and the surface row, plus the underground background, ceiling, and all subterranean tiles — so surface and underground activity are visible simultaneously.
 
@@ -341,9 +341,10 @@ Defined in `project.godot` under `[input]`:
   - Level 3 costs 1500, unlocks layers 5–7, +10 carry capacity (40 total), +15 HP, +2 mining rate.
 - **Layers:**
   - 7 underground layers, 3 grid rows each (`ROWS_PER_LAYER = 3`, ~32 px per row).
-  - Layers 1–2: miner level 1, tile HP 50, ore coin 15–25 / 20–35.
-  - Layers 3–4: miner level 2, tile HP 75, ore coin 30–50 / 40–65.
-  - Layers 5–7: miner level 3, tile HP 100, ore coin 55–90 / 70–120 / 90–150.
+  - Layers 1–2: miner level 1, tile HP 50, ore coin 25–40 / 30–50.
+  - Layers 3–4: miner level 2, tile HP 75, ore coin 45–70 / 55–90.
+  - Layers 5–7: miner level 3, tile HP 100, ore coin 75–120 / 95–160 / 120–200.
+  - Ore spawn chance rises with depth (`0.10 + layer * 0.05`), and every pickaxe swing on ore extracts a share of the tile's gold (see `damage_cell()`).
 - **Mining requires being inside the mine:** `mine_cell` only executes while the miner is underground. A mine order given to a surface miner (right-click ore/wall, AI ore orders) is deferred: the miner rides the ladder down first, then `_handle_idle_miner` re-issues the pending cell. Ore yields are sized so each side's layers can fund the 500 / 1500 miner upgrades before the next tier unlocks.
 - **Central wall:** A 3-tile thick wall at `x = -1, 0, 1` spans all layers and shares a single 2000 HP pool. Miners on either team can breach it with an explicit right-click command. Wall damage scales with miner level.
 - **Win condition:** Destroy the enemy building.

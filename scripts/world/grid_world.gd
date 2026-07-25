@@ -13,6 +13,9 @@ class Cell:
 	var layer: int = 0
 	var miner_level_required: int = 1
 	var coin_value: int = 0
+	# Gold left in the tile: every mining swing extracts a share, destruction
+	# pays out the remainder, so a tile always yields exactly coin_value total.
+	var coin_remaining: int = 0
 	var is_wall: bool = false
 	# Instance id of the miner that reserved this cell (0 = unclaimed).
 	var claimed_by: int = 0
@@ -24,6 +27,7 @@ class Cell:
 		hp = hp_val
 		max_hp = hp_val
 		coin_value = coin
+		coin_remaining = coin
 		is_wall = wall
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
@@ -183,7 +187,7 @@ func _generate_map() -> void:
 				continue
 
 			# Ore chance rises with depth.
-			var is_ore: bool = randf() < (0.08 + layer * 0.04)
+			var is_ore: bool = randf() < (0.10 + layer * 0.05)
 			if is_ore:
 				var coin_range: Vector2i = _Constants.LAYER_COIN_RANGES[layer]
 				var coin: int = randi_range(coin_range.x, coin_range.y)
@@ -385,9 +389,18 @@ func damage_cell(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
 	if cell.is_wall:
 		return _damage_wall(grid_pos, damage, miner_level)
 
+	# Ore trickles gold on every swing: each hit extracts a share proportional
+	# to the damage dealt, and destruction pays out whatever is left, so the
+	# tile always yields exactly coin_value in total.
+	var coin: int = 0
+	if cell.type == CellType.ORE and cell.coin_remaining > 0:
+		var share: int = max(1, roundi(float(cell.coin_value) * float(damage) / float(cell.max_hp)))
+		coin = mini(cell.coin_remaining, share)
+		cell.coin_remaining -= coin
+
 	cell.hp -= damage
 	if cell.hp <= 0:
-		var coin: int = cell.coin_value
+		coin += cell.coin_remaining
 		_cells.erase(grid_pos)
 		_astar.set_point_solid(grid_pos, false)
 		# Dust burst marker: the cell is gone from _cells, so the underground
@@ -398,7 +411,7 @@ func damage_cell(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
 		return coin
 	_cell_flash[grid_pos] = 0.2
 	queue_redraw()
-	return 0
+	return coin
 
 
 func _damage_wall(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
