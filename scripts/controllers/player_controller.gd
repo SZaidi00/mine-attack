@@ -292,7 +292,12 @@ func _issue_command(screen_pos: Vector2) -> void:
 				u.enter_mine()
 		return
 
-	# 6. Default: move.
+	# 6. Enemy mine entry clicked -> reject: units can never enter the enemy mine.
+	if entry != null and entry.get("team") != GameManager.Team.PLAYER:
+		_reject_command("mine_entry", "cannot enter the enemy mine", world_pos)
+		return
+
+	# 7. Default: move.
 	DebugLog.log_command("PlayerController", "move_to", "pos=%s units=%d" % [str(world_pos), _selected_units.size()])
 	for u in _selected_units:
 		u.move_to(world_pos)

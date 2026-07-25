@@ -122,6 +122,10 @@ func enter_mine(unit: Node2D) -> void:
 	if unit == null:
 		DebugLog.log_reject("MineEntry %d" % get_instance_id(), "enter_mine", "null unit")
 		return
+	if unit.get("team") != team:
+		# Critical rule: units can never enter the enemy mine.
+		DebugLog.log_reject("MineEntry %d" % get_instance_id(), "enter_mine", "unit=%d wrong team" % unit.get_instance_id())
+		return
 	DebugLog.log_command("MineEntry %d" % get_instance_id(), "enter_mine", "unit=%d" % unit.get_instance_id())
 	unit.global_position = _underground_position
 	unit.set("is_underground", true)
@@ -142,6 +146,9 @@ func exit_mine(unit: Node2D) -> void:
 ## loop; the teleport methods above are kept as fallback for direct commands.
 func enter_mine_climb(unit: Node2D) -> void:
 	if unit == null:
+		return
+	if unit.get("team") != team:
+		DebugLog.log_reject("MineEntry %d" % get_instance_id(), "enter_mine_climb", "unit=%d wrong team" % unit.get_instance_id())
 		return
 	unit.global_position = _underground_position
 	unit.set("is_underground", true)

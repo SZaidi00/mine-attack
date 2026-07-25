@@ -149,7 +149,7 @@ Global singletons accessible from any script via their class name.
 
 - `player_controller.gd`
   - Handles selection box, single/box selection (with Shift add-to-selection), camera pan/zoom, hotkeys.
-  - Issues context-sensitive commands on right-click: attack, mine, breach wall, enter/exit mine, move.
+  - Issues context-sensitive commands on right-click: attack, mine, breach wall, enter/exit mine, move. Right-clicking the enemy mine entry is rejected with a log line and red-X popup — units can never enter the enemy mine.
   - Supports camera view bookmarks (Tab / Surface / Underground buttons) and pause (Space / Esc toggles `get_tree().paused`). Both layers are always rendered, so `set_view(underground)` only saves the current camera position and jumps to the other view's last position (surface base ↔ own mine underground), emitting `view_mode_changed(mode)`.
   - Provides UI callbacks: `train_unit(unit_id)`, `upgrade_miner()`, `set_stance(stance)`, `set_view(underground)`.
   - Stances: `"attack"` (rush enemy building), `"defend"` (stop), `"garrison"` (toggle mine).
@@ -168,7 +168,8 @@ Global singletons accessible from any script via their class name.
   - `Cell` inner class holds type, hp, max_hp, layer, miner level requirement, coin value, wall flag, and a `claimed_by` miner reservation.
   - Procedural map generation with 7 underground layers (3 rows per layer, `ROWS_PER_LAYER = 3`), layer-specific tile HP and ore coin values, entry shafts at x = -15 and x = 15, and border walls.
   - Map bounds: `GRID_X_MIN = -40` to `GRID_X_MAX = 40`, `GRID_Y_MIN = 0` to `GRID_Y_MAX = 21`.
-  - Central wall is a single shared 2000 HP objective spanning all layers at `x = -1, 0, 1`.
+  - Central wall is a single shared 2000 HP objective spanning all layers at `x = -1, 0, 1`; an HP bar renders once it has taken damage, and at 0 HP every wall cell bursts dust and clears its A* solid in the same transaction.
+  - Ambient particles (Phase 5.1): slow falling snow over the surface and drifting dust motes underground, spawned in `_ready()` with a code-generated soft-dot texture.
   - Uses `AStarGrid2D` for pathfinding.
   - `damage_cell()` applies mining damage and returns coin when destroyed; wall damage reduces the shared wall HP pool and scales with miner level. Partially damaged cells show a brief flash, dust puffs, and a small HP bar so active mining is visible; destroyed tiles burst dust and clear their A* solid in the same transaction.
   - Cell reservations (`claim_cell` / `release_cell` / `is_cell_claimable`) let miners spread across tiles instead of dogpiling one (Phase 3.3).
@@ -186,7 +187,7 @@ Global singletons accessible from any script via their class name.
   - Phase 3.4: spawns units with a slight randomized offset so training bursts don't perfectly overlap.
 
 - `mine_entry.gd`
-  - Teleports units between surface and underground positions.
+  - Teleports units between surface and underground positions; `enter_mine` / `enter_mine_climb` reject units of the wrong team with a logged rejection (units can never enter the enemy mine).
   - `deposit(unit)` converts carried coin into team coin — legacy fallback only; the main loop deposits at the building (see `unit.deposit_coin()`).
   - Draws the mine entry sprite from `frost_mines_assets/props/mine_entry.png`. Always visible; both surface and underground render simultaneously.
 
