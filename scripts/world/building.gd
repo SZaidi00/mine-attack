@@ -54,7 +54,8 @@ func _connect_view_mode() -> void:
 
 
 func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
-	visible = (mode == PlayerController.ViewMode.SURFACE)
+	# Surface and underground are shown simultaneously; keep the building visible.
+	visible = true
 
 
 func _mark_footprint_solid() -> void:

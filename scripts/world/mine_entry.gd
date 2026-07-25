@@ -14,7 +14,14 @@ var _ladder: Node2D = null
 
 func _ready() -> void:
 	add_to_group("mine_entries")
-	_underground_position = global_position + Vector2(0, 5 * GridWorld.CELL_SIZE)
+	var grid: GridWorld = get_node_or_null("/root/Main/World/GridWorld")
+	if grid != null:
+		# Make the entry authoritative: carve a shaft wherever it actually sits.
+		var shaft_x: int = grid.world_to_grid(global_position).x
+		grid.carve_shaft(shaft_x, 1, 6)
+		_underground_position = grid.grid_to_world(Vector2i(shaft_x, 5))
+	else:
+		_underground_position = global_position + Vector2(0, 5 * GridWorld.CELL_SIZE)
 	queue_redraw()
 	if underground_spawn:
 		var node = get_node_or_null(underground_spawn)
@@ -22,6 +29,9 @@ func _ready() -> void:
 			_underground_position = node.global_position
 	_spawn_ladder()
 	_connect_view_mode()
+	# Fail loudly if the ladder bottom is buried in solid ground.
+	if grid != null and not grid.is_walkable(grid.world_to_grid(_underground_position)):
+		push_error("MineEntry %s: ladder bottom %s is not walkable — shaft misaligned" % [name, str(_underground_position)])
 
 
 func _connect_view_mode() -> void:
@@ -39,7 +49,10 @@ func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
 
 func _spawn_ladder() -> void:
 	_ladder = _LADDER_SCENE.instantiate()
-	_ladder.top_position = global_position
+	# Keep the ladder vertical: hang it from the shaft column's center, not the
+	# entry node's origin (which sits on a cell corner). Climbing units path to
+	# the ladder top and then descend straight down the carved shaft column.
+	_ladder.top_position = Vector2(_underground_position.x, global_position.y)
 	_ladder.bottom_position = _underground_position
 	# Add the ladder to the dedicated Ladders container (or the World node as a
 	# fallback) so it remains visible in both surface and underground views.

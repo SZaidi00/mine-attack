@@ -29,4 +29,6 @@ aoe_radius = 0.0
 miner_level = 1
 carry_capacity = 20
 mining_rate = 10.0
+mining_damage = 5
+mining_swings_per_sec = 2.0
 max_dig_layer = 2

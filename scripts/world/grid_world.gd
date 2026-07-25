@@ -127,8 +127,8 @@ func _generate_map() -> void:
 				_set_cell(Vector2i(x, y), Cell.new(CellType.DIRT, layer, ml_req, tile_hp, 0))
 
 	# Entry shafts (empty vertical corridors for own mine entry).
-	_carve_shaft(-15)
-	_carve_shaft(15)
+	carve_shaft(-15)
+	carve_shaft(15)
 
 	# Border walls.
 	for y in range(Y_MIN, Y_MAX + 1):
@@ -155,6 +155,10 @@ func _init_astar() -> void:
 	_astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_MANHATTAN
 	_astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_MANHATTAN
 	_astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	# get_point_path returns point * cell_size + offset; offset by half a cell
+	# so path points land on cell centers, matching grid_to_world() and every
+	# arrival threshold in unit movement code.
+	_astar.offset = Vector2(CELL_SIZE, CELL_SIZE) * 0.5
 	_astar.update()
 	for pos in _cells.keys():
 		_astar.set_point_solid(pos, _is_solid_cell(_cells[pos]))
@@ -164,10 +168,15 @@ func _set_cell(grid_pos: Vector2i, cell: Cell) -> void:
 	_cells[grid_pos] = cell
 
 
-func _carve_shaft(x: int) -> void:
-	for y in range(1, 7):
+## Public shaft carving. The default columns match the default map, but
+## MineEntry can carve its own shaft wherever it actually sits.
+func carve_shaft(x: int, y_from: int = 1, y_to: int = 6) -> void:
+	for y in range(y_from, y_to + 1):
 		var pos: Vector2i = Vector2i(x, y)
 		_cells.erase(pos)
+		if _astar.is_in_boundsv(pos):
+			_astar.set_point_solid(pos, false)
+	queue_redraw()
 
 
 func _is_solid_cell(cell: Cell) -> bool:
@@ -273,6 +282,11 @@ func grid_to_world(grid_pos: Vector2i, centered: bool = true) -> Vector2:
 
 
 func find_path(from_world: Vector2, to_world: Vector2) -> PackedVector2Array:
+	# Units and targets can drift slightly above the surface row (spawn jitter,
+	# separation nudges, per-unit target offsets). Grid y = -1 is outside the
+	# A* region, so snap back to the surface row instead of failing the path.
+	from_world.y = maxf(from_world.y, 0.0)
+	to_world.y = maxf(to_world.y, 0.0)
 	var start: Vector2i = world_to_grid(from_world)
 	var end: Vector2i = world_to_grid(to_world)
 	if not _astar.is_in_boundsv(start) or not _astar.is_in_boundsv(end):

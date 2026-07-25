@@ -95,7 +95,9 @@ func _on_draw_control_draw() -> void:
 			path_screen.append(screen_pos)
 			for i in range(unit._path_index, unit._path.size()):
 				path_screen.append(_world_to_screen(unit._path[i]))
-			_draw_control.draw_polyline(path_screen, Color.CYAN, 1.0)
+			# A completed path leaves only the unit's own position — nothing to draw.
+			if path_screen.size() >= 2:
+				_draw_control.draw_polyline(path_screen, Color.CYAN, 1.0)
 
 
 func _build_panel() -> void:

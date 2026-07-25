@@ -28,5 +28,7 @@ extends Resource
 # Mining only
 @export var miner_level: int = 1
 @export var carry_capacity: int = 0
-@export var mining_rate: float = 5.0
+@export var mining_rate: float = 5.0         # kept for compatibility; swing period uses mining_swings_per_sec
+@export var mining_damage: int = 5           # tile damage per pickaxe swing
+@export var mining_swings_per_sec: float = 2.0
 @export var max_dig_layer: int = 2

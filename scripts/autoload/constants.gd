@@ -36,6 +36,13 @@ const MINER_STATS: Dictionary = {
 	3: { "hp": 100, "speed": 80, "mine_dps": 25, "carry": 50, "max_layer": 7 }
 }
 
+# Authoritative mining swing stats per upgrade level. DPS = damage * swings.
+const MINING_STATS: Dictionary = {
+	1: { "damage": 5, "swings": 2.0 },   # 10 dps
+	2: { "damage": 5, "swings": 3.0 },   # 15 dps
+	3: { "damage": 5, "swings": 5.0 },   # 25 dps
+}
+
 # ─── MINER UPGRADES ───
 const MINER_UPGRADE_COSTS: Dictionary = {
 	2: 500,   # L1 → L2

@@ -359,6 +359,8 @@ If you add tests, consider using [GUT](https://github.com/bitwes/Gut) (Godot Uni
 ## Common gotchas
 
 - **Hard-coded node paths:** Several scripts use `get_node("/root/Main/...")` or `get_node("/root/Main/World/GridWorld")`. Renaming nodes in `main.tscn` will break these references.
+- **A* path points are cell centers:** `GridWorld._init_astar()` sets `_astar.offset = cell_size * 0.5`, because raw `AStarGrid2D.get_point_path()` returns cell corners (`point * cell_size`). All movement code (`_follow_path`, arrival thresholds, climb states) assumes centered points — do not remove the offset. `find_path()` also snaps negative world Y to the surface row, since spawn jitter and per-unit target offsets can push units/targets above y = 0 (outside the A* region).
+- **Ladders are vertical by design:** `MineEntry` hangs the ladder from the shaft column center (`_underground_position.x`), not the entry node's origin (which sits on a cell corner). The climb states in `unit.gd` rely on the column being straight: their "on the ladder column" check is what lets phase 2 (the vertical climb) run without re-triggering phase 1 (pathing to the ladder).
 - **AI controller relies on `Unit` internals:** `ai_controller.gd` reads `unit._state` and `unit.data` directly, including the underscore-prefixed `_state` variable. Refactoring `Unit`'s state machine requires updating the AI controller too.
 - **Building footprint writes into `_cells` directly:** `building.gd` mutates `GridWorld._cells` and `_astar` directly rather than using a public API.
 - **No null-safe node access for UI:** `hud.gd` looks up the player controller and building at runtime with `get_node_or_null`; if the scene hierarchy changes, the HUD may silently stop updating.
