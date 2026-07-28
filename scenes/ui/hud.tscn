@@ -532,4 +532,4 @@ text = "Play Again"
 [node name="QuitButton" type="Button" parent="GameOverPanel/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Quit"
+text = "Quit to Menu"

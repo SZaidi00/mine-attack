@@ -75,7 +75,7 @@ func _ready() -> void:
 	_underground_button.pressed.connect(_set_view.bind(true))
 	for speed: float in _speed_buttons:
 		_speed_buttons[speed].pressed.connect(_set_game_speed.bind(speed))
-	$GameOverPanel/MarginContainer/VBoxContainer/QuitButton.pressed.connect(func(): get_tree().quit())
+	$GameOverPanel/MarginContainer/VBoxContainer/QuitButton.pressed.connect(_quit_to_menu)
 	$GameOverPanel/MarginContainer/VBoxContainer/PlayAgainButton.pressed.connect(_play_again)
 	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _surface_button, _underground_button]:
 		btn.pressed.connect(func(): AudioManager.play("click"))
@@ -145,7 +145,7 @@ func _build_pause_menu() -> void:
 
 	_add_pause_button(vbox, "Resume", func(): get_tree().paused = false)
 	_add_pause_button(vbox, "Restart", _on_pause_restart)
-	_add_pause_button(vbox, "Quit", func(): get_tree().quit())
+	_add_pause_button(vbox, "Quit to Menu", _quit_to_menu)
 
 	var diff_row: HBoxContainer = HBoxContainer.new()
 	var diff_label: Label = Label.new()
@@ -177,6 +177,17 @@ func _on_pause_restart() -> void:
 	GameManager.reset()
 	EconomyManager.reset()
 	get_tree().reload_current_scene()
+
+
+## In-game Quit returns to the main menu (the home screen) instead of closing
+## the app — quitting is a no-op in the web export, and desktop players get a
+## consistent "back to menu" flow. Global state is reset so the menu and the
+## next match start clean.
+func _quit_to_menu() -> void:
+	get_tree().paused = false
+	GameManager.reset()
+	EconomyManager.reset()
+	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 
 func _ignore_mouse_recursive(node: Node) -> void:
