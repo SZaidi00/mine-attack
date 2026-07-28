@@ -13,17 +13,30 @@ const _TAB_INACTIVE: Texture2D = preload("res://frost_mines_assets/ui/tab_inacti
 const _ICON_COIN: Texture2D = preload("res://frost_mines_assets/icons/icon_coin.png")
 const _ICON_MINER: Texture2D = preload("res://frost_mines_assets/icons/icon_miner.png")
 const _ICON_SWORDSMAN: Texture2D = preload("res://frost_mines_assets/icons/icon_swordsman.png")
+const _ICON_ARCHER: Texture2D = preload("res://frost_mines_assets/icons/icon_archer.png")
+const _ICON_WIZARD: Texture2D = preload("res://frost_mines_assets/icons/icon_wizard.png")
 const _ICON_HP: Texture2D = preload("res://frost_mines_assets/icons/icon_hp.png")
 const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_attack.png")
 
 @onready var _coin_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/CoinLabel
 @onready var _miner_level_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/MinerLevelLabel
 @onready var _unit_count_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitCountLabel
+@onready var _unit_count_labels: Dictionary = {
+	"Miner": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/MinerCountLabel,
+	"Swordsman": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/SwordsmanCountLabel,
+	"Archer": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/ArcherCountLabel,
+	"Wizard": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/WizardCountLabel,
+}
 @onready var _player_hp_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/PlayerHPLabel
 @onready var _enemy_hp_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyHPLabel
-@onready var _selection_label: Label = $SelectionLabel
+@onready var _selection_label: Label = %SelectionLabel
 @onready var _surface_button: Button = $TopBar/MarginContainer/VBoxContainer/TabsRow/TabGroup/SurfaceButton
 @onready var _underground_button: Button = $TopBar/MarginContainer/VBoxContainer/TabsRow/TabGroup/UndergroundButton
+@onready var _speed_buttons: Dictionary = {
+	1.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed1Button,
+	2.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed2Button,
+	3.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed3Button,
+}
 @onready var _upgrade_button: Button = $BottomBar/MarginContainer/HBoxContainer/UpgradeMinerButton
 @onready var _attack_button: Button = $BottomBar/MarginContainer/HBoxContainer/AttackButton
 @onready var _defend_button: Button = $BottomBar/MarginContainer/HBoxContainer/DefendButton
@@ -38,13 +51,18 @@ func _ready() -> void:
 	_ignore_mouse_recursive($TopBar)
 	_ignore_mouse_recursive($BottomBar)
 	_ignore_mouse_recursive(_game_over_panel)
+	# QueuePanel keeps default mouse handling: its ScrollContainer needs wheel
+	# input and its runtime cancel buttons need clicks.
 	_style_panel($TopBar)
 	_style_panel($BottomBar)
+	_style_panel($QueuePanel)
 	_style_panel(_game_over_panel)
 	_style_tab_buttons()
+	_style_speed_buttons()
 	_style_upgrade_button()
 	_style_stance_buttons()
 	_add_stat_icons()
+	_add_unit_breakdown_icons()
 	_add_attack_button_icon()
 
 	_upgrade_button.pressed.connect(_upgrade_miner)
@@ -53,10 +71,14 @@ func _ready() -> void:
 	_garrison_button.pressed.connect(_stance.bind("garrison"))
 	_surface_button.pressed.connect(_set_view.bind(false))
 	_underground_button.pressed.connect(_set_view.bind(true))
+	for speed: float in _speed_buttons:
+		_speed_buttons[speed].pressed.connect(_set_game_speed.bind(speed))
 	$GameOverPanel/MarginContainer/VBoxContainer/QuitButton.pressed.connect(func(): get_tree().quit())
 	$GameOverPanel/MarginContainer/VBoxContainer/PlayAgainButton.pressed.connect(_play_again)
 	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _surface_button, _underground_button]:
 		btn.pressed.connect(func(): AudioManager.play("click"))
+	for speed: float in _speed_buttons:
+		_speed_buttons[speed].pressed.connect(func(): AudioManager.play("click"))
 
 	EconomyManager.coin_changed.connect(_on_economy_changed)
 	EconomyManager.population_changed.connect(_on_economy_changed)
@@ -73,6 +95,7 @@ func _ready() -> void:
 	_build_pause_menu()
 	_on_economy_changed(GameManager.Team.PLAYER)
 	_sync_view_buttons()
+	_sync_speed_buttons()
 	_initialize_hp_labels()
 
 
@@ -82,6 +105,7 @@ func _process(_delta: float) -> void:
 		_selection_label.text = "Selected: %d" % pc.get_selected_units().size()
 		_sync_view_buttons()
 	_update_upgrade_button()
+	_update_unit_breakdown()
 	# Keep the pause menu in sync with the tree state (pause is toggled from
 	# PlayerController via Space/Esc).
 	if _pause_panel != null and _pause_panel.visible != get_tree().paused:
@@ -178,6 +202,31 @@ func _style_tab_buttons() -> void:
 		btn.add_theme_stylebox_override("hover", _make_textured_style(_TAB_ACTIVE, 4))
 
 
+func _style_speed_buttons() -> void:
+	for speed: float in _speed_buttons:
+		var btn: Button = _speed_buttons[speed]
+		btn.custom_minimum_size = Vector2(40, 28)
+		btn.add_theme_font_size_override("font_size", 11)
+		btn.add_theme_color_override("font_color", Color("#e2e8f0"))
+		btn.add_theme_color_override("font_pressed_color", Color("#ffffff"))
+		btn.add_theme_color_override("font_hover_color", Color("#ffffff"))
+		btn.add_theme_stylebox_override("normal", _make_textured_style(_TAB_INACTIVE, 4))
+		btn.add_theme_stylebox_override("pressed", _make_textured_style(_TAB_ACTIVE, 4))
+		btn.add_theme_stylebox_override("hover", _make_textured_style(_TAB_ACTIVE, 4))
+
+
+func _set_game_speed(speed: float) -> void:
+	GameManager.set_game_speed(speed)
+	_sync_speed_buttons()
+
+
+func _sync_speed_buttons() -> void:
+	for speed: float in _speed_buttons:
+		var btn: Button = _speed_buttons[speed]
+		if btn.button_pressed != (GameManager.game_speed == speed):
+			btn.set_pressed_no_signal(GameManager.game_speed == speed)
+
+
 func _style_upgrade_button() -> void:
 	_upgrade_button.custom_minimum_size = Vector2(120, 70)
 	_upgrade_button.add_theme_font_size_override("font_size", 12)
@@ -233,6 +282,32 @@ func _add_icon_before_label(label: Label, texture: Texture2D) -> void:
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(icon)
 	parent.move_child(icon, label.get_index())
+
+
+func _add_unit_breakdown_icons() -> void:
+	var icons: Dictionary = {
+		"Miner": _ICON_MINER,
+		"Swordsman": _ICON_SWORDSMAN,
+		"Archer": _ICON_ARCHER,
+		"Wizard": _ICON_WIZARD,
+	}
+	for unit_name: String in _unit_count_labels:
+		var label: Label = _unit_count_labels[unit_name]
+		_add_icon_before_label(label, icons[unit_name])
+		label.tooltip_text = "%s count" % unit_name
+
+
+func _update_unit_breakdown() -> void:
+	var counts: Dictionary = { "Miner": 0, "Swordsman": 0, "Archer": 0, "Wizard": 0 }
+	for unit in get_tree().get_nodes_in_group("player"):
+		var data = unit.get("data")
+		if data == null:
+			continue
+		var unit_name: String = data.unit_name
+		if counts.has(unit_name):
+			counts[unit_name] += 1
+	for unit_name: String in _unit_count_labels:
+		_unit_count_labels[unit_name].text = "%d" % counts[unit_name]
 
 
 func _add_attack_button_icon() -> void:

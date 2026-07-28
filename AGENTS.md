@@ -62,7 +62,7 @@ mine-attack/
 - `PlayerController` — handles player input, selection, commands, and camera.
 - `AIController` — handles enemy economy, mining, attacks, and defense.
 - `UI/SelectionBox` — visual drag-selection rectangle.
-- `UI/HUD` — resource labels, training buttons, stance buttons, game-over panel.
+- `UI/HUD` — resource labels, per-unit-type counts, and selection count (top bar), training and stance buttons (bottom bar), vertical training queue panel (right edge), game-over panel.
 
 Autoload singletons (configured in `project.godot`, loaded in this order):
 
@@ -80,7 +80,7 @@ Autoload singletons (configured in `project.godot`, loaded in this order):
 Global singletons accessible from any script via their class name.
 
 - `constants.gd`
-  - Centralized balance numbers: `STARTING_COIN` (500), `STARTING_MINERS` (2 free miners per base at match start), `MAX_UNITS` (100), `MAX_QUEUE_SIZE` (5).
+  - Centralized balance numbers: `STARTING_COIN` (500), `STARTING_MINERS` (2 free miners per base at match start), `MAX_UNITS` (100). The training queue is uncapped (limited only by coin and population).
   - `COSTS`: miner 50, swordsman 100, archer 150, wizard 250.
   - `TRAIN_TIMES`: miner 3.0s, swordsman 5.0s, archer 6.0s, wizard 10.0s.
   - `MINER_STATS`: per-level HP, speed, mining DPS, carry capacity, and max layer.
@@ -91,13 +91,14 @@ Global singletons accessible from any script via their class name.
 - `game_manager.gd`
   - `enum Team { PLAYER, ENEMY }`, `enum Difficulty { EASY, NORMAL, HARD, NIGHTMARE }`
   - Constants: team colors (`COLOR_PLAYER`, `COLOR_ENEMY`), terrain colors.
-  - `DIFFICULTY_MODIFIERS`: per-difficulty AI multipliers — `coin` (deposit income), `train_time` (training duration), `upgrade_speed` (economy decision rate), `push_ratio`/`defend_ratio` (aggression thresholds). Fair-play rule: rates only, never rules (same unit stats, queue cap, pop cap).
+  - `DIFFICULTY_MODIFIERS`: per-difficulty AI multipliers — `coin` (deposit income), `train_time` (training duration), `upgrade_speed` (economy decision rate), `push_ratio`/`defend_ratio` (aggression thresholds). Fair-play rule: rates only, never rules (same unit stats, pop cap).
   - `difficulty` persists across `reset()` so Play Again keeps the choice; set via the debug overlay dropdown (Phase 6) or main menu (Phase 7).
+  - `game_speed` (1.0 / 2.0 / 3.0) is the player-chosen `Engine.time_scale`, set from the HUD speed buttons; it also persists across `reset()`. The win cinematic overrides it temporarily (0.3 slow-mo), then `_process` restores `game_speed` on the wall clock.
   - Accessors: `get_ai_coin_multiplier()`, `get_ai_train_time_multiplier()`, `get_ai_upgrade_speed()`, `get_aggression_thresholds()`.
   - `signal game_over(winner: Team)`
   - `game_active: bool`, `match_time: float`
   - `declare_winner(winner: Team)`, `reset()`
-  - `declare_winner` also runs the win cinematic: `Engine.time_scale = 0.3` slow-mo for 1 real second (wall-clock restore in `_process`), then the HUD game-over panel fades in. `reset()` always restores `time_scale = 1.0`.
+  - `declare_winner` also runs the win cinematic: `Engine.time_scale = 0.3` slow-mo for 1 real second (wall-clock restore in `_process` back to `game_speed`), then the HUD game-over panel fades in. `reset()` restores `time_scale = game_speed`.
 
 - `economy_manager.gd`
   - Reads balance values from `Constants`.
@@ -184,10 +185,10 @@ Global singletons accessible from any script via their class name.
 
 ### `scripts/ui/`
 
-- `hud.gd` — wires non-training buttons to `PlayerController`, listens to economy signals, updates labels, toggles surface/underground view, shows the game-over stats panel (1.4s after `game_over`, fading in once the slow-mo collapse has played) with Play Again and Quit, and adds icon sprites from `frost_mines_assets/icons/` to stat labels and the attack stance button. Runs with `process_mode = ALWAYS` and owns the pause menu (full-screen dim: Resume / Restart / Quit / difficulty), synced to `get_tree().paused` — Space/Esc toggles it via `PlayerController`.
+- `hud.gd` — wires non-training buttons to `PlayerController`, listens to economy signals, updates labels (including the live per-unit-type counts in the top bar), toggles surface/underground view, owns the 1×/2×/3× game-speed buttons (via `GameManager.set_game_speed`), shows the game-over stats panel (1.4s after `game_over`, fading in once the slow-mo collapse has played) with Play Again and Quit, and adds icon sprites from `frost_mines_assets/icons/` to stat labels and the attack stance button. Runs with `process_mode = ALWAYS` and owns the pause menu (full-screen dim: Resume / Restart / Quit / difficulty), synced to `get_tree().paused` — Space/Esc toggles it via `PlayerController`.
 - `main_menu.gd` — minimal main menu (title, difficulty dropdown, Play / Quit); Play sets `GameManager.difficulty` and switches to `main.tscn`.
-- `unit_button.gd` — train button with cost/train-time labels, affordability/disable state, and failure shake.
-- `training_queue_panel.gd` — shows currently training unit progress and queued units; both the in-progress unit and queued units can be cancelled (100% refund).
+- `unit_button.gd` — train button with cost/train-time labels, a hotkey hint badge, affordability/disable state, and failure shake.
+- `training_queue_panel.gd` — vertical queue panel docked on the right edge of the screen (between the top and bottom bars); shows the currently training unit's progress and a scrollable list of queued units; both the in-progress unit and queued units can be cancelled (100% refund).
 - `layer_indicator.gd` — highlights accessible underground layers based on miner upgrade level.
 
 ### `scripts/effects/`
@@ -292,7 +293,7 @@ Defined in `project.godot` under `[input]`:
 - **Population cap:** 100 per team (`MAX_UNITS`).
 - **Starting coin:** 500 per team (`STARTING_COIN`).
 - **Starting units:** each base spawns 2 free miners at match start (`STARTING_MINERS`); they count toward population.
-- **Training queue cap:** 5 units (`MAX_QUEUE_SIZE`).
+- **Training queue:** uncapped — limited only by coin and population.
 - **Units:** Miner, Swordsman, Archer, Wizard.
 - **Unit costs / train times:**
   - Miner: 50 coin, 3.0s
@@ -343,7 +344,7 @@ GUT covers logic, not feel or input. Run this ~15-minute playthrough in the edit
 
 1. Train 2 miners → confirm the full visible cycle: descend, dig (gold trickles per swing), surface, walk to the building, deposit popup, repeat.
 2. Train 1 of each fighter → right-click the enemy building → all engage; enemy HP drops.
-3. Queue 5 units → 6th rejected (shake + tooltip); cancel a queued and an in-progress unit → exact refunds.
+3. Queue 8+ units → all accepted (queue is uncapped; the right-side panel scrolls); cancel a queued and an in-progress unit → exact refunds.
 4. Upgrade miners to L2 → they begin digging layer 3; sprite swaps; layer indicator highlights.
 5. Tab-toggle (camera slide) during every activity; check snow, dust motes, lantern glow, and deep-layer shimmer.
 6. Garrison fighters; force the wall to low HP (debug overlay) → breach → cross-side combat works.

@@ -1,6 +1,6 @@
 extends GutTest
 
-# Building training queue: FIFO order, cap rejection, cancel refunds.
+# Building training queue: FIFO order, uncapped length, cancel refunds.
 # Uses the real main scene so the building/grid wiring is intact.
 
 const PLAYER: int = 0
@@ -43,12 +43,12 @@ func test_queue_fifo_order() -> void:
 	assert_eq(queue[0].id, "swordsman", "swordsman is next in line")
 
 
-func test_queue_cap_rejects_sixth() -> void:
-	for i in range(5):
+func test_queue_accepts_more_than_five() -> void:
+	# The queue is uncapped — only coin and population limit it.
+	for i in range(8):
 		assert_true(_building.call("queue_unit", "miner"), "queue slot %d" % i)
-	assert_false(_building.call("queue_unit", "miner"), "6th entry must be rejected")
-	assert_eq(_building.call("get_queue").size(), 5)
-	assert_eq(EconomyManager.get_coin(PLAYER), 500 - 5 * 50, "rejected entry must not spend")
+	assert_eq(_building.call("get_queue").size(), 8)
+	assert_eq(EconomyManager.get_coin(PLAYER), 500 - 8 * 50, "every entry spends")
 
 
 func test_cancel_queued_refunds_full_cost() -> void:

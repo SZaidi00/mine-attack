@@ -8,7 +8,7 @@ const DEBUG_SEED: int = 12345
 const STARTING_COIN: int = 500
 const STARTING_MINERS: int = 2
 const MAX_UNITS: int = 100
-const MAX_QUEUE_SIZE: int = 5
+# The training queue is uncapped — limited only by coin and population.
 
 # ─── UNIT COSTS ───
 const COSTS: Dictionary = {

@@ -136,9 +136,6 @@ func queue_unit(unit_id: String) -> bool:
 	if not _resources.has(unit_id):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "unknown unit_id " + unit_id)
 		return false
-	if _queue.size() >= _Constants.MAX_QUEUE_SIZE:
-		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "queue full " + unit_id)
-		return false
 	var data: UnitData = _resources[unit_id]
 	if not EconomyManager.can_afford(team, data.cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "cannot afford " + unit_id)

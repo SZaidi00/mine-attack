@@ -35,6 +35,9 @@ var match_time: float = 0.0
 # AI difficulty for the current match. Set from the debug dropdown (Phase 6)
 # or the main menu (Phase 7); survives reset() so Play Again keeps the choice.
 var difficulty: Difficulty = Difficulty.NORMAL
+# Player-chosen game speed (1x/2x/3x). Like difficulty, survives reset() so
+# Play Again keeps the choice. The win slow-mo overrides it temporarily.
+var game_speed: float = 1.0
 # Slow-mo end time (Time.get_ticks_msec()) after a win; -1 = not in slow-mo.
 var _slowmo_end_msec: int = -1
 
@@ -44,7 +47,7 @@ func _process(delta: float) -> void:
 		match_time += delta
 	if _slowmo_end_msec >= 0 and Time.get_ticks_msec() >= _slowmo_end_msec:
 		_slowmo_end_msec = -1
-		Engine.time_scale = 1.0
+		Engine.time_scale = game_speed
 
 
 func declare_winner(winner: Team) -> void:
@@ -62,8 +65,18 @@ func reset() -> void:
 	game_active = true
 	match_time = 0.0
 	_slowmo_end_msec = -1
-	Engine.time_scale = 1.0
-	# Note: difficulty is intentionally kept so Play Again preserves the choice.
+	Engine.time_scale = game_speed
+	# Note: difficulty and game_speed are intentionally kept so Play Again
+	# preserves both choices.
+
+
+## Sets the player-chosen game speed. The value is always stored (so the win
+## slow-mo and reset() restore it), but only applied live outside the slow-mo.
+func set_game_speed(speed: float) -> void:
+	game_speed = speed
+	DebugLog.log_command("GameManager", "set_game_speed", "%gx" % speed)
+	if game_active and _slowmo_end_msec < 0:
+		Engine.time_scale = speed
 
 
 func set_difficulty(d: Difficulty) -> void:

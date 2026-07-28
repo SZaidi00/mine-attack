@@ -1,5 +1,5 @@
 class_name TrainingQueuePanel
-extends Control
+extends PanelContainer
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
@@ -9,16 +9,15 @@ const _BUTTON_NORMAL: Texture2D = preload("res://frost_mines_assets/ui/button_no
 const _BUTTON_HOVER: Texture2D = preload("res://frost_mines_assets/ui/button_hover.png")
 const _BUTTON_PRESSED: Texture2D = preload("res://frost_mines_assets/ui/button_pressed.png")
 
-@onready var _progress_bar: ProgressBar = $ProgressBar
-@onready var _current_label: Label = $CurrentLabel
-@onready var _queue_container: HBoxContainer = $QueueContainer
+@onready var _progress_bar: ProgressBar = $MarginContainer/VBoxContainer/ProgressBar
+@onready var _current_label: Label = $MarginContainer/VBoxContainer/CurrentLabel
+@onready var _queue_container: VBoxContainer = $MarginContainer/VBoxContainer/ScrollContainer/QueueContainer
 
 var _building: Node2D = null
 var _queue_buttons: Array[Button] = []
 
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(260, 70)
 	_building = _get_player_building()
 	if _building:
 		_building.queue_changed.connect(_on_queue_changed)
@@ -33,7 +32,7 @@ func _process(_delta: float) -> void:
 func _style_progress_bar() -> void:
 	if _progress_bar == null:
 		return
-	_progress_bar.custom_minimum_size = Vector2(140, 6)
+	_progress_bar.custom_minimum_size = Vector2(0, 14)
 	var bg: StyleBoxTexture = StyleBoxTexture.new()
 	bg.texture = _PROGRESS_BG
 	bg.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
@@ -82,33 +81,39 @@ func _on_queue_changed(_entries: Array) -> void:
 	# In-progress unit (index 0): cancellable too, with a 100% refund.
 	if not queue.is_empty():
 		var current = queue[0]
-		var current_btn: Button = Button.new()
-		current_btn.text = "✕ " + current.id.capitalize().substr(0, 3)
-		current_btn.tooltip_text = "Cancel in-progress training and refund %d coin" % current.data.cost
-		current_btn.custom_minimum_size = Vector2(70, 40)
-		current_btn.add_theme_font_size_override("font_size", 11)
-		current_btn.add_theme_color_override("font_color", Color("#f87171"))
-		current_btn.add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_PRESSED))
-		current_btn.add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_HOVER))
-		current_btn.add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_NORMAL))
+		var current_btn: Button = _make_queue_button(
+			"✕ " + current.id.capitalize(),
+			"Cancel in-progress training and refund %d coin" % current.data.cost,
+			Color("#f87171")
+		)
 		current_btn.pressed.connect(_cancel_queue.bind(0))
 		_queue_container.add_child(current_btn)
 		_queue_buttons.append(current_btn)
 
 	for i in range(1, queue.size()):
 		var entry = queue[i]
-		var btn: Button = Button.new()
-		btn.text = entry.id.capitalize().substr(0, 3)
-		btn.tooltip_text = "Click to cancel and refund %d coin" % entry.data.cost
-		btn.custom_minimum_size = Vector2(70, 40)
-		btn.add_theme_font_size_override("font_size", 11)
-		btn.add_theme_color_override("font_color", Color("#94a3b8"))
-		btn.add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_NORMAL))
-		btn.add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_HOVER))
-		btn.add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_PRESSED))
+		var btn: Button = _make_queue_button(
+			"%d. %s" % [i, entry.id.capitalize()],
+			"Click to cancel and refund %d coin" % entry.data.cost,
+			Color("#94a3b8")
+		)
 		btn.pressed.connect(_cancel_queue.bind(i))
 		_queue_container.add_child(btn)
 		_queue_buttons.append(btn)
+
+
+func _make_queue_button(text: String, tooltip: String, color: Color) -> Button:
+	var btn: Button = Button.new()
+	btn.text = text
+	btn.tooltip_text = tooltip
+	btn.custom_minimum_size = Vector2(0, 32)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.add_theme_font_size_override("font_size", 11)
+	btn.add_theme_color_override("font_color", color)
+	btn.add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_NORMAL))
+	btn.add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_HOVER))
+	btn.add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_PRESSED))
+	return btn
 
 
 func _make_textured_style(texture: Texture2D) -> StyleBoxTexture:

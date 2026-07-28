@@ -60,6 +60,7 @@ size_flags_horizontal = 3
 
 [node name="CenterGroup" type="HBoxContainer" parent="TopBar/MarginContainer/VBoxContainer/StatsRow"]
 layout_mode = 2
+theme_override_constants/separation = 12
 
 [node name="UnitCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup"]
 unique_name_in_owner = true
@@ -68,6 +69,38 @@ theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
 text = "0/100"
 horizontal_alignment = 1
+
+[node name="UnitBreakdown" type="HBoxContainer" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="MinerCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
+text = "0"
+
+[node name="SwordsmanCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
+text = "0"
+
+[node name="ArcherCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
+text = "0"
+
+[node name="WizardCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
+text = "0"
 
 [node name="Spacer2" type="Control" parent="TopBar/MarginContainer/VBoxContainer/StatsRow"]
 layout_mode = 2
@@ -91,6 +124,13 @@ theme_override_font_sizes/font_size = 14
 theme_override_colors/font_color = Color(0.937255, 0.266667, 0.266667, 1)
 text = "5000"
 
+[node name="SelectionLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
+text = "Selected: 0"
+
 [node name="TabsRow" type="HBoxContainer" parent="TopBar/MarginContainer/VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -105,6 +145,36 @@ script = ExtResource("4_layer_ind")
 [node name="Spacer" type="Control" parent="TopBar/MarginContainer/VBoxContainer/TabsRow"]
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="SpeedGroup" type="HBoxContainer" parent="TopBar/MarginContainer/VBoxContainer/TabsRow"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Speed1Button" type="Button" parent="TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(40, 28)
+layout_mode = 2
+toggle_mode = true
+button_pressed = true
+text = "1×"
+
+[node name="Speed2Button" type="Button" parent="TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(40, 28)
+layout_mode = 2
+toggle_mode = true
+text = "2×"
+
+[node name="Speed3Button" type="Button" parent="TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(40, 28)
+layout_mode = 2
+toggle_mode = true
+text = "3×"
+
+[node name="SpeedSpacer" type="Control" parent="TopBar/MarginContainer/VBoxContainer/TabsRow"]
+custom_minimum_size = Vector2(12, 0)
+layout_mode = 2
 
 [node name="TabGroup" type="HBoxContainer" parent="TopBar/MarginContainer/VBoxContainer/TabsRow"]
 layout_mode = 2
@@ -158,6 +228,17 @@ text = "Miner"
 script = ExtResource("2_unit_btn")
 unit_id = "miner"
 
+[node name="KeyLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/MinerButton"]
+layout_mode = 0
+offset_left = 6.0
+offset_top = 4.0
+offset_right = 22.0
+offset_bottom = 18.0
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
+text = "1"
+mouse_filter = 2
+
 [node name="Icon" type="TextureRect" parent="BottomBar/MarginContainer/HBoxContainer/MinerButton"]
 layout_mode = 0
 offset_left = 42.0
@@ -194,6 +275,17 @@ layout_mode = 2
 text = "Swordsman"
 script = ExtResource("2_unit_btn")
 unit_id = "swordsman"
+
+[node name="KeyLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/SwordsmanButton"]
+layout_mode = 0
+offset_left = 6.0
+offset_top = 4.0
+offset_right = 22.0
+offset_bottom = 18.0
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
+text = "2"
+mouse_filter = 2
 
 [node name="Icon" type="TextureRect" parent="BottomBar/MarginContainer/HBoxContainer/SwordsmanButton"]
 layout_mode = 0
@@ -232,6 +324,17 @@ text = "Archer"
 script = ExtResource("2_unit_btn")
 unit_id = "archer"
 
+[node name="KeyLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/ArcherButton"]
+layout_mode = 0
+offset_left = 6.0
+offset_top = 4.0
+offset_right = 22.0
+offset_bottom = 18.0
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
+text = "3"
+mouse_filter = 2
+
 [node name="Icon" type="TextureRect" parent="BottomBar/MarginContainer/HBoxContainer/ArcherButton"]
 layout_mode = 0
 offset_left = 42.0
@@ -269,6 +372,17 @@ text = "Wizard"
 script = ExtResource("2_unit_btn")
 unit_id = "wizard"
 
+[node name="KeyLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/WizardButton"]
+layout_mode = 0
+offset_left = 6.0
+offset_top = 4.0
+offset_right = 22.0
+offset_bottom = 18.0
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
+text = "4"
+mouse_filter = 2
+
 [node name="Icon" type="TextureRect" parent="BottomBar/MarginContainer/HBoxContainer/WizardButton"]
 layout_mode = 0
 offset_left = 42.0
@@ -298,37 +412,6 @@ theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
 text = "10.0s"
 horizontal_alignment = 1
 
-[node name="TrainingQueuePanel" type="HBoxContainer" parent="BottomBar/MarginContainer/HBoxContainer"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(260, 70)
-layout_mode = 2
-script = ExtResource("3_queue_panel")
-
-[node name="QueueLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/TrainingQueuePanel"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 11
-theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
-text = "Queue"
-
-[node name="ProgressBar" type="ProgressBar" parent="BottomBar/MarginContainer/HBoxContainer/TrainingQueuePanel"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(140, 16)
-layout_mode = 2
-max_value = 1.0
-value = 0.0
-
-[node name="CurrentLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/TrainingQueuePanel"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 11
-theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
-text = "Queue Empty"
-
-[node name="QueueContainer" type="HBoxContainer" parent="BottomBar/MarginContainer/HBoxContainer/TrainingQueuePanel"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_constants/separation = 4
-
 [node name="UpgradeMinerButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(120, 70)
@@ -353,19 +436,59 @@ custom_minimum_size = Vector2(100, 70)
 layout_mode = 2
 text = "Garrison"
 
-[node name="SelectionLabel" type="Label" parent="."]
-unique_name_in_owner = true
-anchors_preset = 1
+[node name="QueuePanel" type="PanelContainer" parent="."]
+anchors_preset = 11
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -120.0
+anchor_bottom = 1.0
+offset_left = -190.0
 offset_top = 100.0
-offset_right = -20.0
-offset_bottom = 123.0
-theme_override_font_sizes/font_size = 12
+offset_right = -10.0
+offset_bottom = -100.0
+grow_horizontal = 0
+grow_vertical = 2
+script = ExtResource("3_queue_panel")
+
+[node name="MarginContainer" type="MarginContainer" parent="QueuePanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="VBoxContainer" type="VBoxContainer" parent="QueuePanel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="QueueLabel" type="Label" parent="QueuePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
+text = "Training Queue"
+horizontal_alignment = 1
+
+[node name="ProgressBar" type="ProgressBar" parent="QueuePanel/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 14)
+layout_mode = 2
+max_value = 1.0
+value = 0.0
+
+[node name="CurrentLabel" type="Label" parent="QueuePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
 theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
-text = "Selected: 0"
-horizontal_alignment = 2
+text = "Queue Empty"
+horizontal_alignment = 1
+
+[node name="ScrollContainer" type="ScrollContainer" parent="QueuePanel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="QueueContainer" type="VBoxContainer" parent="QueuePanel/MarginContainer/VBoxContainer/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
 
 [node name="GameOverPanel" type="PanelContainer" parent="."]
 visible = false
