@@ -1271,7 +1271,8 @@ func _apply_miner_upgrade() -> void:
 		data.max_dig_layer = 7
 		data.carry_capacity += 10
 		data.max_hp += 15
-	# Authoritative per-level mining stats — no incremental compounding.
+	# Authoritative per-level stats — no incremental compounding.
+	data.speed = Constants.MINER_STATS[level].speed
 	var mining_stats: Dictionary = Constants.MINING_STATS[level]
 	data.mining_damage = mining_stats.damage
 	data.mining_swings_per_sec = mining_stats.swings

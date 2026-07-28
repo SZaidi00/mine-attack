@@ -67,3 +67,18 @@ func test_miner_deposit_requires_cargo() -> void:
 	miner.set("carried_coin", 0)
 	miner.call("deposit_coin")
 	assert_ne(miner.get("_state"), 4, "DEPOSIT with empty cargo must be rejected")  # State.DEPOSIT == 4
+
+
+func test_miner_upgrade_applies_speed_and_mining_stats() -> void:
+	EconomyManager.reset()  # 500 coin: exactly the L2 upgrade cost
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(-500, 16))
+	assert_eq(miner.get("data").speed, 60.0, "L1 base speed")
+	assert_true(EconomyManager.upgrade_miner(PLAYER), "L2 affordable at 500")
+	miner.call("_apply_miner_upgrade")
+	assert_eq(miner.get("data").speed, 70.0, "L2 speed from MINER_STATS")
+	assert_eq(miner.get("data").mining_swings_per_sec, 3.0, "L2 mining rate")
+	EconomyManager.add_coin(PLAYER, 1500)
+	assert_true(EconomyManager.upgrade_miner(PLAYER), "L3 upgrade")
+	miner.call("_apply_miner_upgrade")
+	assert_eq(miner.get("data").speed, 80.0, "L3 speed from MINER_STATS")
+	assert_eq(miner.get("data").mining_swings_per_sec, 5.0, "L3 mining rate")

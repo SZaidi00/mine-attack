@@ -304,8 +304,8 @@ Defined in `project.godot` under `[input]`:
   - Archer: 150 coin, 6.0s
   - Wizard: 250 coin, 10.0s
 - **Miner upgrades:**
-  - Level 2 costs 500, unlocks layers 3–4, +10 carry capacity (30 total), +10 HP, +1 mining rate.
-  - Level 3 costs 1500, unlocks layers 5–7, +10 carry capacity (40 total), +15 HP, +2 mining rate.
+  - Level 2 costs 500, unlocks layers 3–4, +10 carry capacity (30 total), +10 HP, +1 mining rate, speed 60 → 70.
+  - Level 3 costs 1500, unlocks layers 5–7, +10 carry capacity (40 total), +15 HP, +2 mining rate, speed 70 → 80.
 - **Layers:**
   - 7 underground layers, 3 grid rows each (`ROWS_PER_LAYER = 3`, ~32 px per row).
   - Layers 1–2: miner level 1, tile HP 50, ore coin 25–40 / 30–50.
