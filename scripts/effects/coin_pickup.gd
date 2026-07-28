@@ -1,8 +1,8 @@
 class_name CoinPickup
 extends Node2D
 
-## Dropped cargo from a killed enemy miner. Any miner that touches it collects
-## the coin into their carried cargo (up to capacity).
+## Dropped cargo from a killed miner (any team). Any miner that touches it
+## collects the coin into their carried cargo (up to capacity).
 
 const _COIN_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/coin_sparkle.png")
 const LIFETIME: float = 30.0

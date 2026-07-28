@@ -26,6 +26,8 @@ var _last_underground_cam_pos: Vector2 = Vector2(0, 400)
 var _view_slide_target: Vector2 = Vector2.INF
 # Screen shake strength, decaying to 0; driven by building damage/destruction.
 var _shake_strength: float = 0.0
+# Rally stance armed: the next right-click sets the rally point for all fighters.
+var _rally_armed: bool = false
 
 
 func _ready() -> void:
@@ -271,12 +273,26 @@ func _select_units(units: Array) -> void:
 
 
 func _issue_command(screen_pos: Vector2) -> void:
+	var world_pos: Vector2 = _screen_to_world(screen_pos)
+
+	# Rally stance armed: this right-click only places the rally point; the
+	# order is army-wide, so it does not need a selection.
+	if _rally_armed:
+		_rally_armed = false
+		var rally_fighters: Array = _filter_fighters(get_tree().get_nodes_in_group("player"))
+		if rally_fighters.is_empty():
+			_reject_command("rally", "no fighters", world_pos)
+			return
+		DebugLog.log_command("PlayerController", "rally", "point=%s fighters=%d" % [str(world_pos), rally_fighters.size()])
+		for u in rally_fighters:
+			u.rally_to(world_pos)
+		return
+
 	# Drop dead units from the selection before issuing anything.
 	_selected_units = _selected_units.filter(func(u): return is_instance_valid(u))
 	if _selected_units.is_empty():
 		DebugLog.log_reject("PlayerController", "RMB command", "no selected units")
 		return
-	var world_pos: Vector2 = _screen_to_world(screen_pos)
 	var grid_pos: Vector2i = _grid.world_to_grid(world_pos)
 
 	# Resolution order is deterministic and exclusive: exactly one command (or
@@ -470,7 +486,16 @@ func set_stance(stance: String) -> void:
 	if fighters.is_empty():
 		DebugLog.log_reject("PlayerController", "set_stance " + stance, "no fighters")
 		return
+	# Choosing any stance cancels a pending rally-point placement.
+	if stance != "rally":
+		_rally_armed = false
 	match stance:
+		"rally":
+			# No immediate order: the next right-click places the rally point
+			# (see _issue_command). Fighters then hunt everything on the
+			# surface — enemy miners included — around that point.
+			_rally_armed = true
+			DebugLog.log_command("PlayerController", "stance rally", "armed; awaiting rally point right-click")
 		"attack":
 			var enemy_building: Node2D = null
 			for b in get_tree().get_nodes_in_group("buildings"):
@@ -500,3 +525,7 @@ func set_stance(stance: String) -> void:
 
 func get_selected_units() -> Array:
 	return _selected_units
+
+
+func is_rally_armed() -> bool:
+	return _rally_armed

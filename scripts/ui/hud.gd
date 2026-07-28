@@ -41,6 +41,7 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 @onready var _attack_button: Button = $BottomBar/MarginContainer/HBoxContainer/AttackButton
 @onready var _defend_button: Button = $BottomBar/MarginContainer/HBoxContainer/DefendButton
 @onready var _garrison_button: Button = $BottomBar/MarginContainer/HBoxContainer/GarrisonButton
+@onready var _rally_button: Button = $BottomBar/MarginContainer/HBoxContainer/RallyButton
 @onready var _game_over_panel: PanelContainer = $GameOverPanel
 
 
@@ -69,13 +70,14 @@ func _ready() -> void:
 	_attack_button.pressed.connect(_stance.bind("attack"))
 	_defend_button.pressed.connect(_stance.bind("defend"))
 	_garrison_button.pressed.connect(_stance.bind("garrison"))
+	_rally_button.pressed.connect(_stance.bind("rally"))
 	_surface_button.pressed.connect(_set_view.bind(false))
 	_underground_button.pressed.connect(_set_view.bind(true))
 	for speed: float in _speed_buttons:
 		_speed_buttons[speed].pressed.connect(_set_game_speed.bind(speed))
 	$GameOverPanel/MarginContainer/VBoxContainer/QuitButton.pressed.connect(func(): get_tree().quit())
 	$GameOverPanel/MarginContainer/VBoxContainer/PlayAgainButton.pressed.connect(_play_again)
-	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _surface_button, _underground_button]:
+	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _surface_button, _underground_button]:
 		btn.pressed.connect(func(): AudioManager.play("click"))
 	for speed: float in _speed_buttons:
 		_speed_buttons[speed].pressed.connect(func(): AudioManager.play("click"))
@@ -104,6 +106,10 @@ func _process(_delta: float) -> void:
 	if pc:
 		_selection_label.text = "Selected: %d" % pc.get_selected_units().size()
 		_sync_view_buttons()
+		# The Rally button is a momentary arm: it stays "pressed" only while
+		# the controller waits for the rally-point right-click.
+		if _rally_button.button_pressed != pc.is_rally_armed():
+			_rally_button.set_pressed_no_signal(pc.is_rally_armed())
 	_update_upgrade_button()
 	_update_unit_breakdown()
 	# Keep the pause menu in sync with the tree state (pause is toggled from
@@ -239,7 +245,7 @@ func _style_upgrade_button() -> void:
 
 
 func _style_stance_buttons() -> void:
-	for btn in [_attack_button, _defend_button, _garrison_button]:
+	for btn in [_attack_button, _defend_button, _garrison_button, _rally_button]:
 		btn.custom_minimum_size = Vector2(100, 70)
 		btn.add_theme_font_size_override("font_size", 12)
 		btn.add_theme_color_override("font_color", Color("#e2e8f0"))

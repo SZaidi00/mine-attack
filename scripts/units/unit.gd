@@ -71,6 +71,11 @@ var _pending_mine_cell: Vector2i = Vector2i(-9999, -9999)
 # Phase 3.4: small per-unit offset applied to deposit and mine-entry targets
 # so multiple miners do not stack into a single sprite on the surface parade.
 var _movement_offset: Vector2 = Vector2.ZERO
+# Rally stance: fighters hunt every enemy on the surface (miners included)
+# and fall back to the rally point. Any explicit command cancels the rally.
+var _rally_active: bool = false
+var _rally_point: Vector2 = Vector2.ZERO
+var _rally_scan_timer: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -131,8 +136,15 @@ func _process(delta: float) -> void:
 				_mine_exhausted = false
 		if _state == State.IDLE:
 			_handle_idle_miner()
-	elif data.is_fighter and _state == State.IDLE:
-		_handle_idle_fighter()
+	elif data.is_fighter:
+		if _state == State.IDLE:
+			_handle_idle_fighter()
+		elif _rally_active and _state == State.MOVE:
+			# Attack-move: scan for surface enemies while travelling.
+			_rally_scan_timer -= delta
+			if _rally_scan_timer <= 0.0:
+				_rally_scan_timer = 0.25
+				_engage_rally_target_if_any()
 	# Keep the selection ring pulsing and the lantern glow flickering.
 	if selected or (data.is_miner and is_underground):
 		queue_redraw()
@@ -318,6 +330,28 @@ func stop() -> void:
 	_clear_target()
 	_set_state(State.IDLE, "stop command")
 	_path.clear()
+
+
+## Rally stance order (fighters only): move to the point while hunting every
+## enemy on the surface — miners included. The rally stays active until any
+## explicit command cancels it (_clear_target resets the flag).
+func rally_to(world_pos: Vector2) -> void:
+	if data == null or not data.is_fighter:
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "rally_to", "not a fighter")
+		return
+	_clear_target()
+	_rally_active = true
+	_rally_point = world_pos
+	_target_position = world_pos
+	_repath(world_pos)
+	if _path.is_empty():
+		# No route (e.g. clicked solid dirt): hold position and hunt from here.
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "rally_to", "no path to " + str(world_pos))
+		_rally_point = global_position
+		_set_state(State.IDLE, "rally point unreachable")
+		return
+	DebugLog.log_command("Unit %d" % get_instance_id(), "rally_to", str(world_pos))
+	_set_state(State.MOVE, "rally_to command")
 
 
 func take_damage(amount: int, attacker: Node2D = null) -> void:
@@ -717,6 +751,7 @@ func _set_state(new_state: State, reason: String = "") -> void:
 
 func _clear_target() -> void:
 	_release_claim()
+	_rally_active = false
 	_target_unit = null
 	_target_building = null
 	_target_cell = Vector2i(-9999, -9999)
@@ -955,10 +990,10 @@ func _die() -> void:
 	_set_state(State.DEAD, "death")
 	_dead_timer = 1.0
 	_release_claim()
-	# Enemy miners killed underground drop half their cargo as a collectible pickup.
-	if data.is_miner and is_underground and team != GameManager.Team.PLAYER and carried_coin > 0:
-		var dropped: int = maxi(1, floori(carried_coin * 0.5))
-		_spawn_coin_pickup(dropped)
+	# Miners drop their full cargo where they died (any team, any layer), so
+	# the coin is never lost — any miner that walks over the pickup collects it.
+	if data.is_miner and carried_coin > 0:
+		_spawn_coin_pickup(carried_coin)
 	remove_from_group("units")
 	remove_from_group(team_name())
 	EconomyManager.remove_population(team, data.population)
@@ -1058,6 +1093,11 @@ func _nearest_friendly_fighter() -> Unit:
 
 
 func _handle_idle_fighter() -> void:
+	if _rally_active:
+		if _engage_rally_target_if_any():
+			return
+		_return_to_rally_point()
+		return
 	var target = _find_auto_attack_target()
 	if target != null:
 		if target is Unit:
@@ -1067,6 +1107,49 @@ func _handle_idle_fighter() -> void:
 		return
 	if is_underground:
 		_patrol_underground()
+
+
+## Rally hunt: engage the best surface target without cancelling the rally.
+## Deliberately bypasses attack_unit(), because explicit commands clear the
+## rally flag via _clear_target() and this engagement must keep it — after
+## the kill the unit goes idle and resumes the hunt / returns to the point.
+func _engage_rally_target_if_any() -> bool:
+	var target: Unit = _find_rally_target()
+	if target == null:
+		return false
+	DebugLog.log_command("Unit %d" % get_instance_id(), "rally engage", "target=%d" % target.get_instance_id())
+	_target_unit = target
+	_repath(target.global_position)
+	_set_state(State.ATTACK, "rally engage")
+	return true
+
+
+## Rally targets: any living enemy on the surface — fighters AND miners.
+## Underground enemies are out of scope (the rally sweep is a surface hunt).
+func _find_rally_target() -> Unit:
+	if is_underground:
+		return null
+	var best: Unit = null
+	var best_dist: float = data.sight_range * data.sight_range
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit.team == team or unit._state == State.DEAD:
+			continue
+		if unit.is_underground:
+			continue
+		var d: float = global_position.distance_squared_to(unit.global_position)
+		if d <= best_dist:
+			best_dist = d
+			best = unit
+	return best
+
+
+func _return_to_rally_point() -> void:
+	if global_position.distance_to(_rally_point) <= GridWorld.CELL_SIZE:
+		return
+	_target_position = _rally_point
+	_repath(_rally_point)
+	if not _path.is_empty():
+		_set_state(State.MOVE, "return to rally point")
 
 
 func _find_auto_attack_target():
