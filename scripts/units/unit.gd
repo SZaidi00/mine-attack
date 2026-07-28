@@ -320,7 +320,7 @@ func stop() -> void:
 	_path.clear()
 
 
-func take_damage(amount: int) -> void:
+func take_damage(amount: int, attacker: Node2D = null) -> void:
 	hp -= amount
 	_hit_flash_timer = 0.15
 	queue_redraw()
@@ -329,6 +329,47 @@ func take_damage(amount: int) -> void:
 		_die()
 	elif data.is_miner:
 		_start_flee()
+	elif team == GameManager.Team.ENEMY:
+		_maybe_retaliate(attacker)
+
+
+## AI-only target re-evaluation: a fighter locked onto a building ignores
+## nothing forever — when enemy fighters damage it, some peel off to fight
+## back (per-hit roll against the difficulty's retaliation chance), so a siege
+## under fire turns into a real battle instead of a shooting gallery. Units
+## already engaging units are left alone, so a retaliate decision never
+## flip-flops mid-duel.
+func _maybe_retaliate(attacker: Node2D) -> void:
+	if _state != State.ATTACK or _target_building == null:
+		return
+	if randf() > GameManager.get_ai_retaliation_chance():
+		return
+	var target: Unit = _pick_retaliation_target(attacker)
+	if target != null:
+		DebugLog.log_command("Unit %d" % get_instance_id(), "retaliate", "target=%d" % target.get_instance_id())
+		attack_unit(target)
+
+
+## Best unit to fight back against: the attacker itself when it is a reachable
+## fighter nearby, otherwise the closest enemy fighter in sight on the same
+## level (A* can't cross the surface/underground boundary).
+func _pick_retaliation_target(attacker: Node2D) -> Unit:
+	if attacker is Unit and is_instance_valid(attacker) and attacker._state != State.DEAD \
+			and attacker.data.is_fighter and attacker.is_underground == is_underground \
+			and global_position.distance_to(attacker.global_position) <= data.sight_range * 1.5:
+		return attacker
+	var best: Unit = null
+	var best_dist: float = data.sight_range * data.sight_range
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit.team == team or unit._state == State.DEAD:
+			continue
+		if not unit.data.is_fighter or unit.is_underground != is_underground:
+			continue
+		var d: float = global_position.distance_squared_to(unit.global_position)
+		if d <= best_dist:
+			best_dist = d
+			best = unit
+	return best
 
 
 func _spawn_damage_popup(amount: int) -> void:
@@ -433,7 +474,7 @@ func _process_attack(delta: float) -> void:
 			# Melee
 			AudioManager.play("sword", global_position, -8.0)
 			if _target_unit != null:
-				_target_unit.take_damage(hit_damage)
+				_target_unit.take_damage(hit_damage, self)
 			elif _target_building != null:
 				_target_building.call("take_damage", hit_damage)
 		else:
@@ -452,6 +493,7 @@ func _spawn_projectile(target_pos: Vector2) -> void:
 	proj.set("speed", data.projectile_speed)
 	proj.set("aoe_radius", data.aoe_radius)
 	proj.set("target_position", target_pos)
+	proj.set("source", self)
 	# Try to find the actual target node for homing.
 	if _target_unit != null and is_instance_valid(_target_unit):
 		proj.set("homing_target", _target_unit)

@@ -91,10 +91,10 @@ Global singletons accessible from any script via their class name.
 - `game_manager.gd`
   - `enum Team { PLAYER, ENEMY }`, `enum Difficulty { EASY, NORMAL, HARD, NIGHTMARE }`
   - Constants: team colors (`COLOR_PLAYER`, `COLOR_ENEMY`), terrain colors.
-  - `DIFFICULTY_MODIFIERS`: per-difficulty AI multipliers — `coin` (deposit income), `train_time` (training duration), `upgrade_speed` (economy decision rate), `push_ratio`/`defend_ratio` (aggression thresholds). Fair-play rule: rates only, never rules (same unit stats, pop cap).
+  - `DIFFICULTY_MODIFIERS`: per-difficulty AI multipliers — `coin` (deposit income), `train_time` (training duration), `upgrade_speed` (economy decision rate), `push_ratio`/`defend_ratio` (aggression thresholds), `retaliation` (per-hit chance a damaged AI sieger fights back). Fair-play rule: rates only, never rules (same unit stats, pop cap).
   - `difficulty` persists across `reset()` so Play Again keeps the choice; set via the debug overlay dropdown (Phase 6) or main menu (Phase 7).
   - `game_speed` (1.0 / 2.0 / 3.0) is the player-chosen `Engine.time_scale`, set from the HUD speed buttons; it also persists across `reset()`. The win cinematic overrides it temporarily (0.3 slow-mo), then `_process` restores `game_speed` on the wall clock.
-  - Accessors: `get_ai_coin_multiplier()`, `get_ai_train_time_multiplier()`, `get_ai_upgrade_speed()`, `get_aggression_thresholds()`.
+  - Accessors: `get_ai_coin_multiplier()`, `get_ai_train_time_multiplier()`, `get_ai_upgrade_speed()`, `get_aggression_thresholds()`, `get_ai_retaliation_chance()`.
   - `signal game_over(winner: Team)`
   - `game_active: bool`, `match_time: float`
   - `declare_winner(winner: Team)`, `reset()`
@@ -168,6 +168,7 @@ Global singletons accessible from any script via their class name.
   - Miners auto-enter mine on spawn, auto-seek diggable cells when idle, and flee toward friendly fighters or the mine entry when attacked (fleeing to the shaft's underground position when attacked below ground). When cargo is full (or nothing diggable remains), miners surface and walk to their building's deposit point to cash in before heading back down (Phase 3.1).
   - Mining seek (Phase 3.3): ore always wins over dirt, nearest first; the miner-level gate is enforced at seek time; targeted cells are reserved via `claimed_by`; cells that can't be pathed to go on a per-miner 10s blacklist; when nothing diggable remains, miners with cargo surface to deposit while empty-handed miners wait near the shaft bottom and re-scan every 5s (or immediately on any `cell_destroyed` signal) instead of yo-yoing up and down.
   - Fighters auto-attack nearby enemies (fighters → building → enemy miners on own side) and patrol underground when idle.
+  - AI retaliation: an **enemy-team** fighter locked onto a building re-evaluates when an enemy fighter damages it — a per-hit roll against the difficulty's `retaliation` chance (Easy 0.25 → Nightmare 0.9) makes some of the wave peel off to fight back (`_maybe_retaliate` / `_pick_retaliation_target`: prefer the attacker if reachable, else the closest enemy fighter in sight on the same level). Units already duelling a unit never flip-flop; player units never auto-retaliate (explicit orders stay sovereign).
   - Fighters move at 60% speed while underground.
   - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`).
   - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected, use `frost_mines_assets/effects/selection_ring.png` for selection (with a gentle pulse), a warm lantern glow when mining underground, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage. Units are always visible in both views (surface and underground render simultaneously). Mining swings, melee hits, and projectile launches play positional SFX via `AudioManager`.
@@ -314,12 +315,12 @@ Defined in `project.godot` under `[input]`:
 - **Win condition:** Destroy the enemy building.
 - **AI difficulty** (`GameManager.DIFFICULTY_MODIFIERS`; rates only, never rules):
 
-  | Difficulty | AI coin × | Train time × | Decision rate × | Aggression bias |
-  |------------|-----------|--------------|------------------|-----------------|
-  | Easy | 0.8 | 1.0 | 0.7 | Defensive (push 2.0×, defend 0.75×) |
-  | Normal | 1.0 | 1.0 | 1.0 | Balanced (push 1.5×, defend 0.5×) |
-  | Hard | 1.2 | 0.9 | 1.2 | Aggressive (push 1.3×, defend 0.4×) |
-  | Nightmare | 1.5 | 0.8 | 1.5 | Very aggressive (push 1.1×, defend 0.25×) |
+  | Difficulty | AI coin × | Train time × | Decision rate × | Retaliation | Aggression bias |
+  |------------|-----------|--------------|------------------|-------------|-----------------|
+  | Easy | 0.8 | 1.0 | 0.7 | 0.25 | Defensive (push 2.0×, defend 0.75×) |
+  | Normal | 1.0 | 1.0 | 1.0 | 0.5 | Balanced (push 1.5×, defend 0.5×) |
+  | Hard | 1.2 | 0.9 | 1.2 | 0.7 | Aggressive (push 1.3×, defend 0.4×) |
+  | Nightmare | 1.5 | 0.8 | 1.5 | 0.9 | Very aggressive (push 1.1×, defend 0.25×) |
 
 ---
 
@@ -331,6 +332,7 @@ The project uses [GUT](https://github.com/bitwes/Gut) 9.6.1 (committed under `ad
 - `tests/test_building_queue.gd` — FIFO order, queue-cap rejection, cancel refunds (queued + in-progress).
 - `tests/test_grid_world.gd` — ore trickle totals, A* clearing on destruction, level gates, wall shared-HP pool, `nearest_walkable_cell`/`cells_adjacent_to_rect` around the building footprint, no tile regen.
 - `tests/test_unit_guards.gd` — fighter `mine_cell` rejected, enemy mine entry rejected, unreachable mine target blacklisted, empty-cargo deposit rejected.
+- `tests/test_ai_retaliation.gd` — damaged AI sieger eventually retaliates against its attacker, undamaged sieger stays on the building, player units never auto-retaliate. Note: this script frees its `main.tscn` immediately in `after_all` (its tests never await, so a deferred `queue_free` would race the next script's scene boot and break `/root/Main` lookups).
 
 Run the suite headless (exits nonzero on failure):
 

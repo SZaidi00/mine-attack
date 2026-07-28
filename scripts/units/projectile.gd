@@ -12,6 +12,9 @@ const _BLAST_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/proj
 var target_position: Vector2 = Vector2.ZERO
 var homing_target: Node2D = null
 var homing_building: Node2D = null
+# The unit that fired this projectile; passed to take_damage so AI targets can
+# retaliate against ranged attackers too.
+var source: Node2D = null
 
 
 func _ready() -> void:
@@ -48,7 +51,7 @@ func _impact() -> void:
 		if unit.get("team") == team:
 			continue
 		if unit.global_position.distance_to(pos) <= hit_radius:
-			unit.take_damage(damage)
+			unit.take_damage(damage, source)
 	if not is_fireball:
 		return
 	# Splash also damages buildings within the same area.
