@@ -222,6 +222,11 @@ func _find_best_ore(unit: Unit) -> Vector2i:
 			var cell: GridWorld.Cell = _grid.get_cell(pos)
 			if cell == null or cell.type != GridWorld.CellType.ORE:
 				continue
+			# Miners don't know where buried ore is: the AI may only route to
+			# ore that already proved itself (damaged = yielded gold).
+			# Undiscovered ore is dug blind via the miner's own auto-seek.
+			if cell.hp >= cell.max_hp:
+				continue
 			if unit.data.miner_level < cell.miner_level_required:
 				continue
 			# If wall is still up, stick to own side.

@@ -19,7 +19,10 @@ func before_all() -> void:
 
 
 func after_all() -> void:
-	_main.queue_free()
+	# Free immediately: a queued free can still be pending when the next test
+	# script instantiates its own main.tscn — the old "Main" name would still
+	# be taken and every hard-coded /root/Main lookup would break.
+	_main.free()
 
 
 func before_each() -> void:

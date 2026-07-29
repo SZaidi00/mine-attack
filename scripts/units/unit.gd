@@ -880,16 +880,18 @@ func _find_and_mine() -> void:
 	var now_ms: int = Time.get_ticks_msec()
 
 	# Scan the whole own side (both sides once the wall is down) so no corner
-	# of the mine is starved. Ore is always preferred; dirt is only dug to
-	# expand the frontier toward new ore.
+	# of the mine is starved. Miners don't know where buried ore is: every
+	# diggable face is equal until a tile proves itself — ore that already
+	# took mining damage (hp < max_hp) yielded gold, so it counts as
+	# discovered and is preferred over everything else.
 	var wall_intact: bool = _grid.get_wall_hp() > 0
 	var x_lo: int = GridWorld.X_MIN if team_dir == -1 or not wall_intact else 2
 	var x_hi: int = GridWorld.X_MAX if team_dir == 1 or not wall_intact else -2
 
-	var best_ore: Vector2i = Vector2i(-9999, -9999)
-	var best_ore_dist: float = INF
-	var best_dirt: Vector2i = Vector2i(-9999, -9999)
-	var best_dirt_dist: float = INF
+	var best_gold: Vector2i = Vector2i(-9999, -9999)
+	var best_gold_dist: float = INF
+	var best_cell: Vector2i = Vector2i(-9999, -9999)
+	var best_cell_dist: float = INF
 
 	for x in range(x_lo, x_hi + 1):
 		for y in range(1, GridWorld.Y_MAX + 1):
@@ -915,20 +917,21 @@ func _find_and_mine() -> void:
 			if not _has_empty_neighbor(pos):
 				continue
 			var d: float = center.distance_to(pos)
-			if cell.type == GridWorld.CellType.ORE:
-				if d < best_ore_dist:
-					best_ore_dist = d
-					best_ore = pos
-			else:
-				if d < best_dirt_dist:
-					best_dirt_dist = d
-					best_dirt = pos
+			if cell.type == GridWorld.CellType.ORE and cell.hp < cell.max_hp:
+				# Discovered gold: this tile already yielded coin, so the
+				# miner knows it is worth coming back to.
+				if d < best_gold_dist:
+					best_gold_dist = d
+					best_gold = pos
+			elif d < best_cell_dist:
+				best_cell_dist = d
+				best_cell = pos
 
-	if best_ore != Vector2i(-9999, -9999):
-		mine_cell(best_ore)
+	if best_gold != Vector2i(-9999, -9999):
+		mine_cell(best_gold)
 		return
-	if best_dirt != Vector2i(-9999, -9999):
-		mine_cell(best_dirt)
+	if best_cell != Vector2i(-9999, -9999):
+		mine_cell(best_cell)
 		return
 
 	# Nothing diggable remains in range: cash in any cargo, then wait near the

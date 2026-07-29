@@ -18,7 +18,10 @@ func before_all() -> void:
 
 
 func after_all() -> void:
-	_main.queue_free()
+	# Free immediately: a queued free can still be pending when the next test
+	# script instantiates its own main.tscn — the old "Main" name would still
+	# be taken and every hard-coded /root/Main lookup would break.
+	_main.free()
 
 
 func _find_cell_of_type(type: int, x_from: int = -40, x_to: int = -2) -> Vector2i:

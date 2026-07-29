@@ -19,7 +19,10 @@ func before_all() -> void:
 
 
 func after_all() -> void:
-	_main.queue_free()
+	# Free immediately: a queued free can still be pending when the next test
+	# script instantiates its own main.tscn — the old "Main" name would still
+	# be taken and every hard-coded /root/Main lookup would break.
+	_main.free()
 
 
 func _spawn_unit(tres_path: String, team: int, pos: Vector2) -> Node2D:
@@ -82,3 +85,71 @@ func test_miner_upgrade_applies_speed_and_mining_stats() -> void:
 	miner.call("_apply_miner_upgrade")
 	assert_eq(miner.get("data").speed, 80.0, "L3 speed from MINER_STATS")
 	assert_eq(miner.get("data").mining_swings_per_sec, 5.0, "L3 mining rate")
+
+
+func test_seek_does_not_prefer_buried_ore() -> void:
+	# Miners don't know where buried ore is: the seek must not beeline to
+	# undiscovered ore — it digs the nearest face instead.
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(-464, 80))
+	miner.set("is_underground", true)
+	var c: Dictionary = _find_seek_candidates(miner)
+	assert_ne(c.ore, Vector2i(-9999, -9999), "scenario needs an undiscovered ore target")
+	assert_ne(c.dirt, Vector2i(-9999, -9999), "scenario needs a dirt target")
+	assert_true(c.dirt_d < c.ore_d, "scenario needs dirt closer than the buried ore")
+	miner.call("_find_and_mine")
+	assert_ne(miner.get("_target_cell"), Vector2i(-9999, -9999), "miner found something to dig")
+	assert_ne(miner.get("_target_cell"), c.ore, "buried ore must not be preferred")
+	miner.call("stop")
+
+
+func test_damaged_ore_is_discovered_and_preferred() -> void:
+	# Once an ore tile has taken a swing (hp < max_hp = it yielded gold), the
+	# miner "knows" about it and prefers it over plain dirt faces.
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(-464, 80))
+	miner.set("is_underground", true)
+	var c: Dictionary = _find_seek_candidates(miner)
+	assert_ne(c.ore, Vector2i(-9999, -9999), "scenario needs an undiscovered ore target")
+	var grid: Node = _main.get_node("World/GridWorld")
+	grid.damage_cell(c.ore, 1, 1)  # first swing: gold! the ore is discovered
+	miner.call("_find_and_mine")
+	var target: Vector2i = miner.get("_target_cell")
+	assert_ne(target, Vector2i(-9999, -9999), "miner found something to dig")
+	var target_cell = grid.get_cell(target)
+	assert_eq(target_cell.type, GridWorld.CellType.ORE, "discovered ore is preferred")
+	assert_true(target_cell.hp < target_cell.max_hp, "target is a discovered (damaged) ore")
+	miner.call("stop")
+
+
+## Nearest valid diggable DIRT cell and nearest valid UNDISCOVERED ore cell
+## for the given (underground, level 1) miner, replicating the seek's filters.
+func _find_seek_candidates(miner: Node2D) -> Dictionary:
+	var grid: Node = _main.get_node("World/GridWorld")
+	var center: Vector2i = grid.world_to_grid(miner.global_position)
+	var id: int = miner.get_instance_id()
+	var dirt := Vector2i(-9999, -9999)
+	var dirt_d := INF
+	var ore := Vector2i(-9999, -9999)
+	var ore_d := INF
+	for x in range(-40, -1):  # player side while the wall stands (x <= -2)
+		for y in range(1, 22):
+			var pos := Vector2i(x, y)
+			var cell = grid.get_cell(pos)
+			if cell == null:
+				continue
+			if cell.type != GridWorld.CellType.DIRT and cell.type != GridWorld.CellType.ORE:
+				continue
+			if cell.miner_level_required > 1:
+				continue
+			if not grid.is_cell_claimable(pos, id):
+				continue
+			if not miner.call("_has_empty_neighbor", pos):
+				continue
+			var d: float = center.distance_to(pos)
+			if cell.type == GridWorld.CellType.DIRT:
+				if d < dirt_d:
+					dirt_d = d
+					dirt = pos
+			elif cell.hp == cell.max_hp and d < ore_d:
+				ore_d = d
+				ore = pos
+	return { "dirt": dirt, "dirt_d": dirt_d, "ore": ore, "ore_d": ore_d }

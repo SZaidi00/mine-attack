@@ -125,7 +125,7 @@ Global singletons accessible from any script via their class name.
   - Tick-driven AI with separate timers for economy (`ENEMY_DECISION_INTERVAL` = 2s, scaled by the difficulty `upgrade_speed`), mining (1s), attack waves (`ENEMY_ATTACK_WAVE_INTERVAL` = 18s), and aggression updates (`ENEMY_AGGRESSION_INTERVAL` = 10s).
   - Maintains an `_aggression_level` (`"defend"`, `"balanced"`, `"push"`) based on relative fighter counts; the push/defend ratios come from the difficulty modifiers.
   - Defends building when enemy units are nearby.
-  - Selects ore based on distance, value, and side ownership, skipping cells reserved by other miners or blacklisted as unreachable by that miner.
+  - Selects ore based on distance, value, and side ownership — but only *discovered* ore (cells that already took mining damage; miners don't know where buried ore is), skipping cells reserved by other miners or blacklisted as unreachable by that miner.
   - Attempts central wall breach when pushing and no accessible unmined tiles remain.
 
 ### `scripts/world/`
@@ -166,7 +166,7 @@ Global singletons accessible from any script via their class name.
   - All AI/movement freezes when `GameManager.game_active` is false (match over); only the `DEAD` fade-out keeps running. Projectiles freeze mid-flight too.
   - Command API: `move_to`, `attack_unit`, `attack_building`, `mine_cell`, `deposit_coin`, `enter_mine`, `exit_mine`, `climb_up_ladder`, `climb_down_ladder`, `rally_to`, `stop`. The ladder climbs are the auto-loop's way in and out of the mine; `enter_mine`/`exit_mine` teleport and remain as explicit-order fallbacks.
   - Miners auto-enter mine on spawn, auto-seek diggable cells when idle, and flee toward friendly fighters or the mine entry when attacked (fleeing to the shaft's underground position when attacked below ground). When cargo is full (or nothing diggable remains), miners surface and walk to their building's deposit point to cash in before heading back down (Phase 3.1).
-  - Mining seek (Phase 3.3): ore always wins over dirt, nearest first; the miner-level gate is enforced at seek time; targeted cells are reserved via `claimed_by`; cells that can't be pathed to go on a per-miner 10s blacklist; when nothing diggable remains, miners with cargo surface to deposit while empty-handed miners wait near the shaft bottom and re-scan every 5s (or immediately on any `cell_destroyed` signal) instead of yo-yoing up and down.
+  - Mining seek (Phase 3.3): miners don't know where buried ore is — every diggable face is equal until a tile proves itself. Ore that already took mining damage (`hp < max_hp`, i.e. it yielded gold) counts as *discovered* and is preferred at any distance; otherwise the nearest diggable cell wins regardless of type. The miner-level gate is enforced at seek time; targeted cells are reserved via `claimed_by`; cells that can't be pathed to go on a per-miner 10s blacklist; when nothing diggable remains, miners with cargo surface to deposit while empty-handed miners wait near the shaft bottom and re-scan every 5s (or immediately on any `cell_destroyed` signal) instead of yo-yoing up and down.
   - Fighters auto-attack nearby enemies (fighters → building → enemy miners on own side) and patrol underground when idle.
   - Rally mode (`rally_to`): a fighter hunts any enemy on the surface — miners included (`_find_rally_target` skips underground enemies) — while travelling to and idling at the rally point. Rally engagements bypass `attack_unit()` so `_rally_active` survives the kill (the unit then resumes the hunt); every explicit command cancels the rally via `_clear_target()`.
   - Death drops: a miner that dies with cargo drops its full carried coin as a `CoinPickup` on the spot (any team, any layer), so the coin is never lost; any miner that walks over the pickup collects it.
@@ -334,8 +334,10 @@ The project uses [GUT](https://github.com/bitwes/Gut) 9.6.1 (committed under `ad
 - `tests/test_building_queue.gd` — FIFO order, queue-cap rejection, cancel refunds (queued + in-progress).
 - `tests/test_grid_world.gd` — ore trickle totals, A* clearing on destruction, level gates, wall shared-HP pool, `nearest_walkable_cell`/`cells_adjacent_to_rect` around the building footprint, no tile regen.
 - `tests/test_unit_guards.gd` — fighter `mine_cell` rejected, enemy mine entry rejected, unreachable mine target blacklisted, empty-cargo deposit rejected.
-- `tests/test_ai_retaliation.gd` — damaged AI sieger eventually retaliates against its attacker, undamaged sieger stays on the building, player units never auto-retaliate. Note: this script frees its `main.tscn` immediately in `after_all` (its tests never await, so a deferred `queue_free` would race the next script's scene boot and break `/root/Main` lookups).
-- `tests/test_rally.gd` — rally targets surface miners, skips underground enemies, engagement keeps the rally active, explicit commands cancel it, miners can't rally, miner death drops full cargo as a pickup. Same immediate-free `after_all` pattern.
+- `tests/test_ai_retaliation.gd` — damaged AI sieger eventually retaliates against its attacker, undamaged sieger stays on the building, player units never auto-retaliate.
+- `tests/test_rally.gd` — rally targets surface miners, skips underground enemies, engagement keeps the rally active, explicit commands cancel it, miners can't rally, miner death drops full cargo as a pickup.
+
+> Test harness gotcha: every script that boots `main.tscn` must free it **immediately** in `after_all` (`_main.free()`, never `queue_free()`). A deferred free can still be pending when the next script instantiates its own `main.tscn` — the old `Main` name stays taken, the new scene gets renamed, and every hard-coded `/root/Main/...` lookup breaks (flaky, timing-dependent failures).
 
 Run the suite headless (exits nonzero on failure):
 
