@@ -86,3 +86,16 @@ func test_miner_death_drops_full_cargo() -> void:
 	assert_not_null(found, "a pickup spawns where the miner died")
 	if found:
 		assert_eq(found.coin_value, 40, "the full cargo is dropped, not lost")
+
+
+func test_archer_kites_to_standoff_range() -> void:
+	# A melee enemy inside 40% of the archer's attack range pushes the archer
+	# back: it should retreat to its standoff distance while staying in ATTACK.
+	var archer: Node2D = _spawn_unit("res://scripts/resources/units/archer.tres", PLAYER, Vector2(0, 16))
+	var enemy: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(40, 16))
+	enemy.set_process(false)  # Freeze the melee unit so only the archer moves.
+	archer.call("attack_unit", enemy)
+	await wait_seconds(1.2)
+	var gap: float = archer.global_position.distance_to(enemy.global_position)
+	assert_true(gap > 55.0, "archer should retreat toward its standoff range, gap=%f" % gap)
+	assert_eq(archer.get("_state"), 2, "still in ATTACK state while kiting")  # State.ATTACK == 2

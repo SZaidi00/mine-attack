@@ -471,6 +471,32 @@ func _compute_separation() -> Vector2:
 	return sep
 
 
+## Ranged kiting: a direct steering step away from a closing threat. Deliberately
+## not a path/move command — the ATTACK state (and its target) must survive, so
+## the unit keeps firing on cooldown while it backs off.
+func _kite_away_from(threat_pos: Vector2, delta: float) -> void:
+	var away: Vector2 = global_position - threat_pos
+	if away.length_squared() < 0.001:
+		away = Vector2.LEFT
+	var step: float = data.speed * delta
+	if is_underground and data.is_fighter:
+		step *= 0.6
+	var next_pos: Vector2 = global_position + away.normalized() * step
+	if _is_walkable_point(next_pos):
+		global_position = next_pos
+
+
+## Cheap point walkability for kiting (no A*): the surface row is open ground;
+## underground only EMPTY cells can be stood on.
+func _is_walkable_point(world_pos: Vector2) -> bool:
+	if world_pos.y <= GridWorld.CELL_SIZE:
+		return world_pos.y >= 0.0 \
+			and world_pos.x >= GridWorld.X_MIN * GridWorld.CELL_SIZE \
+			and world_pos.x <= (GridWorld.X_MAX + 1) * GridWorld.CELL_SIZE
+	var cell: GridWorld.Cell = _grid.get_cell(_grid.world_to_grid(world_pos))
+	return cell != null and cell.type == GridWorld.CellType.EMPTY
+
+
 func _process_attack(delta: float) -> void:
 	_attack_timer -= delta
 	var target_pos: Vector2 = Vector2.ZERO
@@ -504,6 +530,13 @@ func _process_attack(delta: float) -> void:
 		return
 
 	_path.clear()
+	# Ranged standoff: if a unit target slips inside 40% of the attack range,
+	# step back to re-establish distance before the next shot. Melee units
+	# (attack_range <= 35) and building sieges are unaffected.
+	if data.attack_range > 35.0 and _target_unit != null:
+		var gap: float = global_position.distance_to(target_pos)
+		if gap < data.attack_range * 0.4:
+			_kite_away_from(target_pos, delta)
 	if _attack_timer <= 0:
 		_attack_timer = data.attack_cooldown
 		var hit_damage: int = roundi(data.damage_per_hit)
