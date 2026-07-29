@@ -81,6 +81,12 @@ const FIGHTER_UPGRADES: Dictionary = {
 const PLAYER_BUILDING_HP: float = 5000.0
 const ENEMY_BUILDING_HP: float = 5000.0
 
+# ─── OUT-OF-COMBAT REGEN ───
+# Units that avoid damage for this long slowly recover HP. Slow on purpose:
+# it rewards retreating wounded units without erasing combat outcomes.
+const UNIT_REGEN_DELAY: float = 5.0
+const UNIT_REGEN_PER_SEC: float = 2.0
+
 # ─── WALL ───
 const WALL_HP: float = 2000.0
 const WALL_DAMAGE_PER_MINER: float = 10.0

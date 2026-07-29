@@ -78,6 +78,10 @@ var _rally_point: Vector2 = Vector2.ZERO
 var _rally_scan_timer: float = 0.0
 # Team-wide fighter upgrade level already applied to this unit's data.
 var _fighter_level_applied: int = 1
+# Out-of-combat regen: counts down after each hit taken; HP accrues once it
+# reaches zero (see _process).
+var _regen_delay: float = 0.0
+var _regen_accum: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -115,6 +119,19 @@ func _process(delta: float) -> void:
 	# Match over: freeze all unit AI and movement in place.
 	if not GameManager.game_active:
 		return
+
+	# Out-of-combat regeneration: a few seconds without taking damage slowly
+	# restores HP (rewards retreating wounded units without erasing fights).
+	if hp < data.max_hp:
+		if _regen_delay > 0.0:
+			_regen_delay -= delta
+		else:
+			_regen_accum += Constants.UNIT_REGEN_PER_SEC * delta
+			var whole: int = int(_regen_accum)
+			if whole > 0:
+				_regen_accum -= whole
+				hp = mini(hp + whole, data.max_hp)
+				queue_redraw()
 
 	if _hit_flash_timer > 0:
 		_hit_flash_timer -= delta
@@ -359,6 +376,7 @@ func rally_to(world_pos: Vector2) -> void:
 
 func take_damage(amount: int, attacker: Node2D = null) -> void:
 	hp -= amount
+	_regen_delay = Constants.UNIT_REGEN_DELAY
 	_hit_flash_timer = 0.15
 	queue_redraw()
 	_spawn_damage_popup(amount)

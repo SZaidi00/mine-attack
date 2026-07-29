@@ -99,3 +99,22 @@ func test_archer_kites_to_standoff_range() -> void:
 	var gap: float = archer.global_position.distance_to(enemy.global_position)
 	assert_true(gap > 55.0, "archer should retreat toward its standoff range, gap=%f" % gap)
 	assert_eq(archer.get("_state"), 2, "still in ATTACK state while kiting")  # State.ATTACK == 2
+
+
+func test_out_of_combat_regen() -> void:
+	var unit: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(0, 16))
+	unit.call("take_damage", 50)
+	assert_eq(unit.get("hp"), 100)
+	await wait_seconds(6.0)  # 5s no-damage delay, then ~1s of regen
+	assert_true(unit.get("hp") > 100, "regen kicks in after the no-damage delay")
+	assert_true(unit.get("hp") < unit.get("data").max_hp, "regen is slow — not a full heal in 1s")
+
+
+func test_regen_waits_for_damage_to_stop() -> void:
+	var unit: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(0, 16))
+	unit.call("take_damage", 50)
+	await wait_seconds(3.0)  # inside the 5s delay: no regen yet
+	unit.call("take_damage", 10)  # resets the delay
+	assert_eq(unit.get("hp"), 90)
+	await wait_seconds(2.0)  # still inside the reset delay
+	assert_eq(unit.get("hp"), 90, "taking damage keeps regen paused")
