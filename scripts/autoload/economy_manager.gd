@@ -5,6 +5,7 @@ const _Constants = preload("res://scripts/autoload/constants.gd")
 signal coin_changed(team: GameManager.Team)
 signal population_changed(team: GameManager.Team)
 signal miner_level_changed(team: GameManager.Team)
+signal fighter_level_changed(team: GameManager.Team, unit_id: String)
 signal stats_changed(team: GameManager.Team)
 
 var _coin: Dictionary = {
@@ -21,6 +22,18 @@ var _miner_level: Dictionary = {
 	GameManager.Team.PLAYER: 1,
 	GameManager.Team.ENEMY: 1,
 }
+
+var _fighter_levels: Dictionary = _fresh_fighter_levels()
+
+
+func _fresh_fighter_levels() -> Dictionary:
+	var per_team: Dictionary = {}
+	for unit_id in _Constants.FIGHTER_UPGRADES:
+		per_team[unit_id] = 1
+	return {
+		GameManager.Team.PLAYER: per_team.duplicate(),
+		GameManager.Team.ENEMY: per_team.duplicate(),
+	}
 
 var _units_trained: Dictionary = {
 	GameManager.Team.PLAYER: 0,
@@ -50,6 +63,7 @@ func reset() -> void:
 		GameManager.Team.PLAYER: 1,
 		GameManager.Team.ENEMY: 1,
 	}
+	_fighter_levels = _fresh_fighter_levels()
 	_units_trained = {
 		GameManager.Team.PLAYER: 0,
 		GameManager.Team.ENEMY: 0,
@@ -128,6 +142,31 @@ func get_miner_upgrade_cost(team: GameManager.Team) -> int:
 	var next_level: int = _miner_level[team] + 1
 	if _Constants.MINER_UPGRADE_COSTS.has(next_level):
 		return _Constants.MINER_UPGRADE_COSTS[next_level]
+	return -1
+
+
+func get_fighter_level(team: GameManager.Team, unit_id: String) -> int:
+	return _fighter_levels[team].get(unit_id, 1)
+
+
+func upgrade_fighter(team: GameManager.Team, unit_id: String) -> bool:
+	var cost: int = get_fighter_upgrade_cost(team, unit_id)
+	if cost < 0:
+		return false
+	if not spend_coin(team, cost):
+		return false
+	_fighter_levels[team][unit_id] += 1
+	DebugLog.log_command("EconomyManager", "upgrade_fighter", "team=%s %s level=%d cost=%d" % ["PLAYER" if team == GameManager.Team.PLAYER else "ENEMY", unit_id, _fighter_levels[team][unit_id], cost])
+	fighter_level_changed.emit(team, unit_id)
+	return true
+
+
+func get_fighter_upgrade_cost(team: GameManager.Team, unit_id: String) -> int:
+	if not _Constants.FIGHTER_UPGRADE_COSTS.has(unit_id):
+		return -1
+	var next_level: int = get_fighter_level(team, unit_id) + 1
+	if _Constants.FIGHTER_UPGRADE_COSTS[unit_id].has(next_level):
+		return _Constants.FIGHTER_UPGRADE_COSTS[unit_id][next_level]
 	return -1
 
 

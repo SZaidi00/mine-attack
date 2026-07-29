@@ -86,3 +86,36 @@ func test_stats_tracking() -> void:
 	EconomyManager.mine_coin(PLAYER, 75)
 	assert_eq(EconomyManager.get_units_trained(PLAYER), 2)
 	assert_eq(EconomyManager.get_coin_mined(PLAYER), 75)
+
+
+func test_fighter_upgrade_spends_and_levels() -> void:
+	watch_signals(EconomyManager)
+	assert_eq(EconomyManager.get_fighter_level(PLAYER, "swordsman"), 1)
+	assert_eq(EconomyManager.get_fighter_upgrade_cost(PLAYER, "swordsman"), 400)
+	assert_true(EconomyManager.upgrade_fighter(PLAYER, "swordsman"))
+	assert_eq(EconomyManager.get_coin(PLAYER), 100, "L2 swordsman costs 400")
+	assert_eq(EconomyManager.get_fighter_level(PLAYER, "swordsman"), 2)
+	assert_signal_emitted(EconomyManager, "fighter_level_changed")
+	# Types level independently.
+	assert_eq(EconomyManager.get_fighter_level(PLAYER, "archer"), 1)
+	assert_eq(EconomyManager.get_fighter_level(ENEMY, "swordsman"), 1)
+
+
+func test_fighter_upgrade_fails_without_funds() -> void:
+	assert_false(EconomyManager.upgrade_fighter(PLAYER, "wizard"), "L2 wizard costs 600 > 500")
+	assert_eq(EconomyManager.get_fighter_level(PLAYER, "wizard"), 1)
+	assert_eq(EconomyManager.get_coin(PLAYER), 500, "failed upgrade must not spend")
+
+
+func test_fighter_upgrade_max_level() -> void:
+	EconomyManager.add_coin(PLAYER, 5000)
+	assert_true(EconomyManager.upgrade_fighter(PLAYER, "archer"))
+	assert_true(EconomyManager.upgrade_fighter(PLAYER, "archer"))
+	assert_eq(EconomyManager.get_fighter_level(PLAYER, "archer"), 3)
+	assert_eq(EconomyManager.get_fighter_upgrade_cost(PLAYER, "archer"), -1)
+	assert_false(EconomyManager.upgrade_fighter(PLAYER, "archer"), "no level 4")
+
+
+func test_fighter_upgrade_unknown_unit_rejected() -> void:
+	assert_eq(EconomyManager.get_fighter_upgrade_cost(PLAYER, "miner"), -1)
+	assert_false(EconomyManager.upgrade_fighter(PLAYER, "miner"))

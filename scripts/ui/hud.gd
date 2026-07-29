@@ -38,6 +38,11 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 	3.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed3Button,
 }
 @onready var _upgrade_button: Button = $BottomBar/MarginContainer/HBoxContainer/UpgradeMinerButton
+@onready var _fighter_upgrade_buttons: Dictionary = {
+	"swordsman": $BottomBar/MarginContainer/HBoxContainer/UpgradeSwordsmanButton,
+	"archer": $BottomBar/MarginContainer/HBoxContainer/UpgradeArcherButton,
+	"wizard": $BottomBar/MarginContainer/HBoxContainer/UpgradeWizardButton,
+}
 @onready var _attack_button: Button = $BottomBar/MarginContainer/HBoxContainer/AttackButton
 @onready var _defend_button: Button = $BottomBar/MarginContainer/HBoxContainer/DefendButton
 @onready var _garrison_button: Button = $BottomBar/MarginContainer/HBoxContainer/GarrisonButton
@@ -61,12 +66,15 @@ func _ready() -> void:
 	_style_tab_buttons()
 	_style_speed_buttons()
 	_style_upgrade_button()
+	_style_fighter_upgrade_buttons()
 	_style_stance_buttons()
 	_add_stat_icons()
 	_add_unit_breakdown_icons()
 	_add_attack_button_icon()
 
 	_upgrade_button.pressed.connect(_upgrade_miner)
+	for unit_id: String in _fighter_upgrade_buttons:
+		_fighter_upgrade_buttons[unit_id].pressed.connect(_upgrade_fighter.bind(unit_id))
 	_attack_button.pressed.connect(_stance.bind("attack"))
 	_defend_button.pressed.connect(_stance.bind("defend"))
 	_garrison_button.pressed.connect(_stance.bind("garrison"))
@@ -79,6 +87,8 @@ func _ready() -> void:
 	$GameOverPanel/MarginContainer/VBoxContainer/PlayAgainButton.pressed.connect(_play_again)
 	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _surface_button, _underground_button]:
 		btn.pressed.connect(func(): AudioManager.play("click"))
+	for unit_id: String in _fighter_upgrade_buttons:
+		_fighter_upgrade_buttons[unit_id].pressed.connect(func(): AudioManager.play("click"))
 	for speed: float in _speed_buttons:
 		_speed_buttons[speed].pressed.connect(func(): AudioManager.play("click"))
 
@@ -111,6 +121,7 @@ func _process(_delta: float) -> void:
 		if _rally_button.button_pressed != pc.is_rally_armed():
 			_rally_button.set_pressed_no_signal(pc.is_rally_armed())
 	_update_upgrade_button()
+	_update_fighter_upgrade_buttons()
 	_update_unit_breakdown()
 	# Keep the pause menu in sync with the tree state (pause is toggled from
 	# PlayerController via Space/Esc).
@@ -341,6 +352,19 @@ func _add_attack_button_icon() -> void:
 	_attack_button.move_child(icon, 0)
 
 
+func _style_fighter_upgrade_buttons() -> void:
+	for unit_id: String in _fighter_upgrade_buttons:
+		var btn: Button = _fighter_upgrade_buttons[unit_id]
+		btn.custom_minimum_size = Vector2(110, 70)
+		btn.add_theme_font_size_override("font_size", 11)
+		btn.add_theme_color_override("font_color", Color("#fbbf24"))
+		btn.add_theme_color_override("font_disabled_color", Color("#94a3b8"))
+		btn.add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_UPGRADE, 6))
+		btn.add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_UPGRADE, 6))
+		btn.add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_PRESSED, 6))
+		btn.add_theme_stylebox_override("disabled", _make_textured_style(_BUTTON_DISABLED, 6))
+
+
 func _update_upgrade_button() -> void:
 	var level: int = EconomyManager.get_miner_level(GameManager.Team.PLAYER)
 	var cost: int = EconomyManager.get_miner_upgrade_cost(GameManager.Team.PLAYER)
@@ -353,6 +377,28 @@ func _update_upgrade_button() -> void:
 		var affordable: bool = EconomyManager.can_afford(GameManager.Team.PLAYER, cost)
 		_upgrade_button.disabled = not affordable
 		_upgrade_button.tooltip_text = "" if affordable else "Not enough coin (%d needed)" % cost
+
+
+func _update_fighter_upgrade_buttons() -> void:
+	for unit_id: String in _fighter_upgrade_buttons:
+		var btn: Button = _fighter_upgrade_buttons[unit_id]
+		var level: int = EconomyManager.get_fighter_level(GameManager.Team.PLAYER, unit_id)
+		var cost: int = EconomyManager.get_fighter_upgrade_cost(GameManager.Team.PLAYER, unit_id)
+		if cost < 0:
+			btn.text = "%s\nMax Level" % unit_id.capitalize()
+			btn.disabled = true
+			btn.tooltip_text = "%s is fully upgraded" % unit_id.capitalize()
+		else:
+			btn.text = "%s\nLv %d → %d | %d" % [unit_id.capitalize(), level, level + 1, cost]
+			var affordable: bool = EconomyManager.can_afford(GameManager.Team.PLAYER, cost)
+			btn.disabled = not affordable
+			btn.tooltip_text = "" if affordable else "Not enough coin (%d needed)" % cost
+
+
+func _upgrade_fighter(unit_id: String) -> void:
+	var pc: PlayerController = _get_player_controller()
+	if pc:
+		pc.upgrade_fighter(unit_id)
 
 
 func _upgrade_miner() -> void:

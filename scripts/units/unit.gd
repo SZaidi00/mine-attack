@@ -76,6 +76,8 @@ var _movement_offset: Vector2 = Vector2.ZERO
 var _rally_active: bool = false
 var _rally_point: Vector2 = Vector2.ZERO
 var _rally_scan_timer: float = 0.0
+# Team-wide fighter upgrade level already applied to this unit's data.
+var _fighter_level_applied: int = 1
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -137,6 +139,7 @@ func _process(delta: float) -> void:
 		if _state == State.IDLE:
 			_handle_idle_miner()
 	elif data.is_fighter:
+		_apply_fighter_upgrade()
 		if _state == State.IDLE:
 			_handle_idle_fighter()
 		elif _rally_active and _state == State.MOVE:
@@ -1259,6 +1262,25 @@ func _add_hover_area() -> void:
 	shape.shape = rect
 	area.add_child(shape)
 	add_child(area)
+
+
+## Team-wide fighter upgrades (swordsman/archer/wizard): applies the
+## authoritative per-level stats from Constants.FIGHTER_UPGRADES once per
+## level change, healing the max_hp delta like miner upgrades do.
+func _apply_fighter_upgrade() -> void:
+	var unit_id: String = data.unit_name.to_lower()
+	if not Constants.FIGHTER_UPGRADES.has(unit_id):
+		return
+	var level: int = EconomyManager.get_fighter_level(team, unit_id)
+	if level == _fighter_level_applied:
+		return
+	var stats: Dictionary = Constants.FIGHTER_UPGRADES[unit_id][level]
+	var hp_gain: int = stats.hp - data.max_hp
+	data.max_hp = stats.hp
+	data.damage_per_hit = stats.damage
+	hp += hp_gain
+	_fighter_level_applied = level
+	queue_redraw()
 
 
 func _apply_miner_upgrade() -> void:

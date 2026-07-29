@@ -418,6 +418,24 @@ custom_minimum_size = Vector2(120, 70)
 layout_mode = 2
 text = "Upgrade Miner"
 
+[node name="UpgradeSwordsmanButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 70)
+layout_mode = 2
+text = "Upgrade\nSwordsman"
+
+[node name="UpgradeArcherButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 70)
+layout_mode = 2
+text = "Upgrade\nArcher"
+
+[node name="UpgradeWizardButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 70)
+layout_mode = 2
+text = "Upgrade\nWizard"
+
 [node name="AttackButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 70)

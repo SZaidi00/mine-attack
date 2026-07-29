@@ -87,6 +87,21 @@ func test_miner_upgrade_applies_speed_and_mining_stats() -> void:
 	assert_eq(miner.get("data").mining_swings_per_sec, 5.0, "L3 mining rate")
 
 
+func test_fighter_upgrade_applies_stats() -> void:
+	EconomyManager.reset()
+	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(-500, 16))
+	assert_eq(swordsman.get("data").max_hp, 150, "L1 base HP")
+	EconomyManager.add_coin(PLAYER, 1000)
+	assert_true(EconomyManager.upgrade_fighter(PLAYER, "swordsman"))
+	swordsman.call("_apply_fighter_upgrade")
+	assert_eq(swordsman.get("data").max_hp, 195, "L2 HP from FIGHTER_UPGRADES")
+	assert_eq(swordsman.get("data").damage_per_hit, 9.5, "L2 damage from FIGHTER_UPGRADES")
+	# Upgrading an unrelated type does not touch this unit.
+	EconomyManager.upgrade_fighter(PLAYER, "archer")
+	swordsman.call("_apply_fighter_upgrade")
+	assert_eq(swordsman.get("data").max_hp, 195, "archer upgrade must not affect swordsman")
+
+
 func test_seek_does_not_prefer_buried_ore() -> void:
 	# Miners don't know where buried ore is: the seek must not beeline to
 	# undiscovered ore — it digs the nearest face instead.

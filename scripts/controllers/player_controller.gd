@@ -449,6 +449,10 @@ func upgrade_miner() -> void:
 	EconomyManager.upgrade_miner(GameManager.Team.PLAYER)
 
 
+func upgrade_fighter(unit_id: String) -> void:
+	EconomyManager.upgrade_fighter(GameManager.Team.PLAYER, unit_id)
+
+
 func _toggle_view() -> void:
 	set_view(_view_mode == ViewMode.SURFACE)
 

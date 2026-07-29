@@ -66,6 +66,15 @@ func _run_economy() -> void:
 	elif level == 2 and coin >= _Constants.MINER_UPGRADE_COSTS[3]:
 		EconomyManager.upgrade_miner(team)
 
+	# Fighter upgrades once the economy is comfortable (keep a coin reserve so
+	# training never stalls); cheapest first so the army scales steadily.
+	coin = EconomyManager.get_coin(team)
+	for unit_id in ["swordsman", "archer", "wizard"]:
+		var upgrade_cost: int = EconomyManager.get_fighter_upgrade_cost(team, unit_id)
+		if upgrade_cost > 0 and coin >= upgrade_cost + 400:
+			EconomyManager.upgrade_fighter(team, unit_id)
+			coin -= upgrade_cost
+
 	# Queue decisions (respecting queue size and population cap).
 	var queue_size: int = building.call("get_queue").size()
 	if queue_size < 3 and population < _Constants.MAX_UNITS:

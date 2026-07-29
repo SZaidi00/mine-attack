@@ -50,6 +50,33 @@ const MINER_UPGRADE_COSTS: Dictionary = {
 	3: 1500   # L2 → L3
 }
 
+# ─── FIGHTER UPGRADES ───
+# Team-wide per-type levels (like miner upgrades). Level 1 rows mirror the
+# .tres base stats; levels 2–3 are authoritative overrides applied on top
+# (roughly +30% HP and +25% damage per level).
+const FIGHTER_UPGRADE_COSTS: Dictionary = {
+	"swordsman": { 2: 400, 3: 1200 },
+	"archer": { 2: 500, 3: 1500 },
+	"wizard": { 2: 600, 3: 1800 },
+}
+const FIGHTER_UPGRADES: Dictionary = {
+	"swordsman": {
+		1: { "hp": 150, "damage": 7.5 },
+		2: { "hp": 195, "damage": 9.5 },
+		3: { "hp": 245, "damage": 12.0 },
+	},
+	"archer": {
+		1: { "hp": 80, "damage": 12.0 },
+		2: { "hp": 105, "damage": 15.0 },
+		3: { "hp": 130, "damage": 19.0 },
+	},
+	"wizard": {
+		1: { "hp": 60, "damage": 37.5 },
+		2: { "hp": 80, "damage": 47.0 },
+		3: { "hp": 100, "damage": 58.0 },
+	},
+}
+
 # ─── BUILDINGS ───
 const PLAYER_BUILDING_HP: float = 5000.0
 const ENEMY_BUILDING_HP: float = 5000.0

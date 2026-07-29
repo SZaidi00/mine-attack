@@ -85,6 +85,7 @@ Global singletons accessible from any script via their class name.
   - `TRAIN_TIMES`: miner 3.0s, swordsman 5.0s, archer 6.0s, wizard 10.0s.
   - `MINER_STATS`: per-level HP, speed, mining DPS, carry capacity, and max layer.
   - `MINER_UPGRADE_COSTS`: level 2 → 500, level 3 → 1500.
+  - `FIGHTER_UPGRADE_COSTS` / `FIGHTER_UPGRADES`: team-wide per-type fighter levels (swordsman/archer/wizard, L1→L3). Costs: swordsman 400/1200, archer 500/1500, wizard 600/1800. Stats are authoritative per-level HP/damage overrides (~+30% HP, +25% damage per level); level 1 rows mirror the `.tres` base stats.
   - Building HP, wall HP, layer data, grid bounds, and input action `StringName` constants.
   - Fighter stats are stored in `UnitData` resources under `scripts/resources/units/*.tres`; `FIGHTER_STATS` was removed in Phase 2 to keep a single source of truth.
 
@@ -102,8 +103,8 @@ Global singletons accessible from any script via their class name.
 
 - `economy_manager.gd`
   - Reads balance values from `Constants`.
-  - Tracks coin, population, miner level, units trained, and coin mined per team.
-  - `add_coin`, `spend_coin`, `can_afford`, population helpers, `upgrade_miner`, `get_miner_upgrade_cost`.
+  - Tracks coin, population, miner level, per-type fighter levels, units trained, and coin mined per team.
+  - `add_coin`, `spend_coin`, `can_afford`, population helpers, `upgrade_miner`, `get_miner_upgrade_cost`, `upgrade_fighter`, `get_fighter_level`, `get_fighter_upgrade_cost`.
 
 - `audio_manager.gd`
   - Procedural audio (Phase 8): the project ships no audio assets, so every sound is synthesized at startup into `AudioStreamWAV` (22.05 kHz 16-bit).
@@ -118,11 +119,11 @@ Global singletons accessible from any script via their class name.
   - Issues context-sensitive commands on right-click: attack, mine, breach wall, enter/exit mine, move. Right-clicking the enemy mine entry is rejected with a log line and red-X popup — units can never enter the enemy mine.
   - Supports camera view bookmarks (Tab / Surface / Underground buttons) and pause (Space / Esc toggles `get_tree().paused`). Both layers are always rendered, so `set_view(underground)` only saves the current camera position and slides the camera to the other view's last position (surface base ↔ own mine underground; manual pan cancels the slide), emitting `view_mode_changed(mode)`.
   - Screen shake (Phase 8): connected to both buildings' `hp_changed` (small rumble) and `destroyed` (big shake), applied as a decaying `camera.offset`.
-  - Provides UI callbacks: `train_unit(unit_id)`, `upgrade_miner()`, `set_stance(stance)`, `set_view(underground)`.
+  - Provides UI callbacks: `train_unit(unit_id)`, `upgrade_miner()`, `upgrade_fighter(unit_id)`, `set_stance(stance)`, `set_view(underground)`.
   - Stances: `"attack"` (rush enemy building), `"defend"` (stop), `"garrison"` (toggle mine), `"rally"` (arms rally mode — the next right-click places an army-wide rally point; fighters hunt every enemy on the surface, miners included, and fall back to the point; any explicit command cancels a unit's rally).
 
 - `ai_controller.gd`
-  - Tick-driven AI with separate timers for economy (`ENEMY_DECISION_INTERVAL` = 2s, scaled by the difficulty `upgrade_speed`), mining (1s), attack waves (`ENEMY_ATTACK_WAVE_INTERVAL` = 18s), and aggression updates (`ENEMY_AGGRESSION_INTERVAL` = 10s).
+  - Tick-driven AI with separate timers for economy (`ENEMY_DECISION_INTERVAL` = 2s, scaled by the difficulty `upgrade_speed`), mining (1s), attack waves (`ENEMY_ATTACK_WAVE_INTERVAL` = 18s), and aggression updates (`ENEMY_AGGRESSION_INTERVAL` = 10s). The economy tick buys miner upgrades first, then fighter upgrades once a 400-coin reserve is safe (cheapest first).
   - Maintains an `_aggression_level` (`"defend"`, `"balanced"`, `"push"`) based on relative fighter counts; the push/defend ratios come from the difficulty modifiers.
   - Defends building when enemy units are nearby.
   - Selects ore based on distance, value, and side ownership — but only *discovered* ore (cells that already took mining damage; miners don't know where buried ore is), skipping cells reserved by other miners or blacklisted as unreachable by that miner.
@@ -172,7 +173,7 @@ Global singletons accessible from any script via their class name.
   - Death drops: a miner that dies with cargo drops its full carried coin as a `CoinPickup` on the spot (any team, any layer), so the coin is never lost; any miner that walks over the pickup collects it.
   - AI retaliation: an **enemy-team** fighter locked onto a building re-evaluates when an enemy fighter damages it — a per-hit roll against the difficulty's `retaliation` chance (Easy 0.25 → Nightmare 0.9) makes some of the wave peel off to fight back (`_maybe_retaliate` / `_pick_retaliation_target`: prefer the attacker if reachable, else the closest enemy fighter in sight on the same level). Units already duelling a unit never flip-flop; player units never auto-retaliate (explicit orders stay sovereign).
   - Fighters move at 60% speed while underground.
-  - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`).
+  - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`) and team-wide fighter upgrade stats (`_apply_fighter_upgrade` — swordsman/archer/wizard HP/damage per level from `Constants.FIGHTER_UPGRADES`, healing the max_hp delta on level-up).
   - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected, use `frost_mines_assets/effects/selection_ring.png` for selection (with a gentle pulse), a warm lantern glow when mining underground, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage. Units are always visible in both views (surface and underground render simultaneously). Mining swings, melee hits, and projectile launches play positional SFX via `AudioManager`.
   - Phase 3.4 traffic: each unit gets a small `_movement_offset` applied to miner deposit and mine-entry targets, and `_follow_path()` applies soft repulsion from nearby friendly units so surface parades don't stack into a single sprite. Path arrival is step-aware (`max(2px, speed * delta)`) so large deltas (lag spikes, high `Engine.time_scale`) can't orbit a path point forever against the separation nudge.
 
@@ -306,6 +307,11 @@ Defined in `project.godot` under `[input]`:
 - **Miner upgrades:**
   - Level 2 costs 500, unlocks layers 3–4, +10 carry capacity (30 total), +10 HP, +1 mining rate, speed 60 → 70.
   - Level 3 costs 1500, unlocks layers 5–7, +10 carry capacity (40 total), +15 HP, +2 mining rate, speed 70 → 80.
+- **Fighter upgrades (team-wide, per type):**
+  - Swordsman L2 400 / L3 1200 → HP 195/245, damage 9.5/12.
+  - Archer L2 500 / L3 1500 → HP 105/130, damage 15/19.
+  - Wizard L2 600 / L3 1800 → HP 80/100, damage 47/58.
+  - The AI buys them in its economy tick once it keeps a 400-coin reserve (cheapest first).
 - **Layers:**
   - 7 underground layers, 3 grid rows each (`ROWS_PER_LAYER = 3`, ~32 px per row).
   - Layers 1–2: miner level 1, tile HP 50, ore coin 25–40 / 30–50.
