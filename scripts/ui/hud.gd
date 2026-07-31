@@ -114,7 +114,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	var pc: PlayerController = _get_player_controller()
 	if pc:
-		_selection_label.text = "Selected: %d" % pc.get_selected_units().size()
+		_update_selection_label(pc)
 		_sync_view_buttons()
 		# The Rally button is a momentary arm: it stays "pressed" only while
 		# the controller waits for the rally-point right-click.
@@ -418,6 +418,19 @@ func _set_view(underground: bool) -> void:
 	if pc:
 		pc.set_view(underground)
 	_sync_view_buttons()
+
+
+## Selection readout in the top bar: a count for groups, and the unit's name
+## plus live HP when exactly one unit is selected (click a unit to inspect it).
+func _update_selection_label(pc: PlayerController) -> void:
+	var selected: Array = pc.get_selected_units().filter(func(u): return is_instance_valid(u))
+	if selected.size() == 1:
+		var unit = selected[0]
+		var data = unit.get("data")
+		if data != null:
+			_selection_label.text = "%s — HP %d/%d" % [data.unit_name, unit.get("hp"), data.max_hp]
+			return
+	_selection_label.text = "Selected: %d" % selected.size()
 
 
 func _sync_view_buttons() -> void:

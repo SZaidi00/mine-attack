@@ -13,7 +13,7 @@ func _ready() -> void:
 
 
 func setup(amount: int, is_healing: bool = false) -> void:
-	text = "-" + str(amount)
+	text = ("+" if is_healing else "-") + str(amount)
 	modulate = Color.GREEN if is_healing else Color.RED
 
 

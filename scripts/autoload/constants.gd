@@ -1,7 +1,7 @@
 extends Node
 
 # ─── DEBUG ───
-const DEBUG: bool = true
+const DEBUG: bool = false
 const DEBUG_SEED: int = 12345
 
 # ─── ECONOMY ───

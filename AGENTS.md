@@ -62,11 +62,11 @@ mine-attack/
 - `PlayerController` — handles player input, selection, commands, and camera.
 - `AIController` — handles enemy economy, mining, attacks, and defense.
 - `UI/SelectionBox` — visual drag-selection rectangle.
-- `UI/HUD` — resource labels, per-unit-type counts, and selection count (top bar), training and stance buttons (bottom bar), vertical training queue panel (right edge), game-over panel.
+- `UI/HUD` — resource labels, per-unit-type counts, and selection readout (top bar; a single selected unit shows name + live HP), training and stance buttons (bottom bar), vertical training queue panel (right edge), game-over panel.
 
 Autoload singletons (configured in `project.godot`, loaded in this order):
 
-- `Constants` — centralized balance numbers and input action names. Added in Phase 0: `DEBUG` flag and `DEBUG_SEED` for deterministic testing.
+- `Constants` — centralized balance numbers and input action names. `DEBUG` (currently **false**) gates the debug overlay and `DebugLog`; `DEBUG_SEED` makes map generation deterministic when `DEBUG` is on. With `DEBUG` off, maps are random each match — test scripts that boot `main.tscn` call `seed(12345)` in `before_all` to get a deterministic layout.
 - `GameManager` — global game state, `Team` enum, shared color palette, match timer, win/loss signals.
 - `EconomyManager` — coin balances, population counts, miner upgrade levels, units trained, coin mined. Emits `coin_changed`, `population_changed`, `miner_level_changed`, `stats_changed`.
 - `DebugLog` — Phase 0 ring-buffer logger used by the debug overlay and command/state logging.
@@ -175,7 +175,7 @@ Global singletons accessible from any script via their class name.
   - AI retaliation: an **enemy-team** fighter locked onto a building re-evaluates when an enemy fighter damages it — a per-hit roll against the difficulty's `retaliation` chance (Easy 0.25 → Nightmare 0.9) makes some of the wave peel off to fight back (`_maybe_retaliate` / `_pick_retaliation_target`: prefer the attacker if reachable, else the closest enemy fighter in sight on the same level). Units already duelling a unit never flip-flop; player units never auto-retaliate (explicit orders stay sovereign).
   - Fighters move at 60% speed while underground.
   - Ranged standoff (kiting): a fighter with `attack_range > 35` whose unit target slips inside 40% of its range takes a direct steering step away (`_kite_away_from`) while staying in ATTACK and firing on cooldown. `_is_walkable_point` bounds the step (surface row or EMPTY cells underground) — no pathing, so the target lock is never dropped. Melee units and building sieges are unaffected.
-  - Out-of-combat regen: `take_damage` starts a 5s no-damage countdown; once it elapses the unit regains 2 HP/s up to `max_hp`. Applies to all units, both teams (miners heal between trips too).
+  - Out-of-combat regen: `take_damage` starts a 5s no-damage countdown; once it elapses the unit regains 2 HP/s up to `max_hp`, with a green `+N` popup on each heal tick. Applies to all units, both teams (miners heal between trips too).
   - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`) and team-wide fighter upgrade stats (`_apply_fighter_upgrade` — swordsman/archer/wizard HP/damage per level from `Constants.FIGHTER_UPGRADES`, healing the max_hp delta on level-up).
   - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected, use `frost_mines_assets/effects/selection_ring.png` for selection (with a gentle pulse), a warm lantern glow when mining underground, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage. Units are always visible in both views (surface and underground render simultaneously). Mining swings, melee hits, and projectile launches play positional SFX via `AudioManager`.
   - Phase 3.4 traffic: each unit gets a small `_movement_offset` applied to miner deposit and mine-entry targets, and `_follow_path()` applies soft repulsion from nearby friendly units so surface parades don't stack into a single sprite. Path arrival is step-aware (`max(2px, speed * delta)`) so large deltas (lag spikes, high `Engine.time_scale`) can't orbit a path point forever against the separation nudge.
@@ -200,7 +200,7 @@ Global singletons accessible from any script via their class name.
 
 ### `scripts/effects/`
 
-- `damage_popup.gd` — floating red/green combat numbers.
+- `damage_popup.gd` — floating combat numbers: red `-N` for damage, green `+N` for healing.
 - `coin_popup.gd` — floating gold coin deposit numbers with a `frost_mines_assets/effects/coin_sparkle.png` icon.
 
 ---

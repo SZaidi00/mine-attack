@@ -11,6 +11,9 @@ var _grid: Node
 
 
 func before_all() -> void:
+	# Deterministic map: Constants.DEBUG is off (so GridWorld doesn't seed
+	# itself), but the tests assert against specific layouts.
+	seed(12345)
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_tree().root.add_child(_main)
 	get_tree().current_scene = _main

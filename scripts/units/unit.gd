@@ -131,6 +131,7 @@ func _process(delta: float) -> void:
 			if whole > 0:
 				_regen_accum -= whole
 				hp = mini(hp + whole, data.max_hp)
+				_spawn_heal_popup(whole)
 				queue_redraw()
 
 	if _hit_flash_timer > 0:
@@ -430,6 +431,13 @@ func _pick_retaliation_target(attacker: Node2D) -> Unit:
 func _spawn_damage_popup(amount: int) -> void:
 	var popup: DamagePopup = preload("res://scenes/effects/damage_popup.tscn").instantiate()
 	popup.setup(amount)
+	popup.global_position = global_position + Vector2(0, -20)
+	get_tree().current_scene.add_child(popup)
+
+
+func _spawn_heal_popup(amount: int) -> void:
+	var popup: DamagePopup = preload("res://scenes/effects/damage_popup.tscn").instantiate()
+	popup.setup(amount, true)
 	popup.global_position = global_position + Vector2(0, -20)
 	get_tree().current_scene.add_child(popup)
 
