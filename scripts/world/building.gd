@@ -24,6 +24,7 @@ signal unit_spawned(unit: Node2D)
 @export var height_cells: int = 5
 
 var _hp: int = max_hp
+var _base_max_hp: int = max_hp  # Fortify research adds on top of this.
 var _queue: Array = []  # { id: String, data: UnitData, remaining: float }
 var _resources: Dictionary = {}
 var _destroyed: bool = false
@@ -38,6 +39,7 @@ var _collapse_t: float = 0.0
 
 func _ready() -> void:
 	_hp = max_hp
+	_base_max_hp = max_hp
 	_destroyed = false
 	add_to_group("buildings")
 	_resources["miner"] = preload("res://scripts/resources/units/miner.tres")
@@ -47,8 +49,25 @@ func _ready() -> void:
 	_mark_footprint_solid()
 	_add_deposit_point()
 	_connect_view_mode()
+	if not ResearchManager.research_completed.is_connected(_on_research_completed):
+		ResearchManager.research_completed.connect(_on_research_completed)
 	queue_redraw()
 	call_deferred("_spawn_starting_miners")
+
+
+## Fortify research: raises max HP on top of the base value and heals the
+## delta, so the upgrade is immediately visible in the HP bar.
+func _on_research_completed(completed_team: GameManager.Team, tech_id: String) -> void:
+	if completed_team != team or tech_id != "fortify" or _destroyed:
+		return
+	var new_max: int = _base_max_hp + int(ResearchManager.get_stat_bonus(team, "building_hp"))
+	var delta: int = new_max - max_hp
+	if delta <= 0:
+		return
+	max_hp = new_max
+	_hp += delta
+	hp_changed.emit(_hp, max_hp)
+	queue_redraw()
 
 
 ## Each base starts with free miners so the economy runs from the first

@@ -3,6 +3,8 @@ extends Node2D
 
 signal cell_destroyed(grid_pos: Vector2i)
 signal wall_hp_changed(current: int, maximum: int)
+# Emitted by the Ore Sonar scan with the newly revealed ore cells (VFX hook).
+signal cells_revealed(cells: Array)
 
 enum CellType { EMPTY, SURFACE_GROUND, DIRT, ORE, WALL }
 
@@ -19,6 +21,8 @@ class Cell:
 	var is_wall: bool = false
 	# Instance id of the miner that reserved this cell (0 = unclaimed).
 	var claimed_by: int = 0
+	# Teams whose Ore Sonar scan has revealed this cell (team -> true).
+	var sonar_revealed: Dictionary = {}
 
 	func _init(t: CellType, l: int = 0, ml: int = 1, hp_val: int = 0, coin: int = 0, wall: bool = false):
 		type = t
@@ -499,6 +503,34 @@ func count_accessible_unmined_tiles(side: int, miner_level: int) -> int:
 	return count
 
 
+## Ore Sonar: marks every buried ORE cell within `radius_cells` of `center`
+## as revealed for `team`, so that team's miners treat it as discovered gold.
+## Returns the number of newly revealed cells.
+func reveal_ore_in_radius(center: Vector2i, radius_cells: int, team: GameManager.Team) -> int:
+	var revealed: Array = []
+	for x in range(center.x - radius_cells, center.x + radius_cells + 1):
+		for y in range(center.y - radius_cells, center.y + radius_cells + 1):
+			var pos: Vector2i = Vector2i(x, y)
+			if Vector2(pos - center).length() > radius_cells:
+				continue
+			var cell: Cell = _cells.get(pos)
+			if cell == null or cell.type != CellType.ORE:
+				continue
+			if cell.sonar_revealed.get(team, false):
+				continue
+			cell.sonar_revealed[team] = true
+			revealed.append(pos)
+	if not revealed.is_empty():
+		queue_redraw()
+		cells_revealed.emit(revealed)
+	return revealed.size()
+
+
+func is_ore_revealed(grid_pos: Vector2i, team: GameManager.Team) -> bool:
+	var cell: Cell = _cells.get(grid_pos)
+	return cell != null and cell.type == CellType.ORE and cell.sonar_revealed.get(team, false)
+
+
 func _draw() -> void:
 	# Both layers are always drawn so the player can see surface activity and the
 	# underground mine at the same time.
@@ -588,6 +620,13 @@ func _draw_underground() -> void:
 				draw_rect(rect, Color(0.4, 0.9, 1.0, 0.05 + 0.08 * wave), true)
 			else:
 				draw_rect(rect, Color(1.0, 0.45, 0.15, 0.04 + 0.07 * wave), true)
+
+		# Ore Sonar glimmer: pulsing gold marker on ore revealed to the player
+		# (redrawn at the shimmer cadence, so the pulse animates for free).
+		if cell.type == CellType.ORE and cell.sonar_revealed.get(GameManager.Team.PLAYER, false):
+			var pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 300.0 + float(hash(pos) % 100))
+			draw_rect(rect, Color(1.0, 0.85, 0.3, 0.10 + 0.10 * pulse), true)
+			draw_rect(rect, Color(1.0, 0.85, 0.3, 0.35 + 0.35 * pulse), false, 2.0)
 
 	# Dust burst for cells destroyed since the last redraw (already erased
 	# from _cells, so the main loop above skips them).

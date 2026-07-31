@@ -240,6 +240,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		train_unit("wizard")
 	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_VIEW):
 		_toggle_view()
+	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_RESEARCH):
+		var hud: CanvasLayer = get_node_or_null("/root/Main/UI/HUD")
+		if hud:
+			hud.toggle_research_panel()
 	elif event.is_action_pressed(_Constants.INPUT_PAUSE):
 		get_tree().paused = not get_tree().paused
 

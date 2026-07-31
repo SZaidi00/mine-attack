@@ -88,6 +88,7 @@ func _build_streams() -> void:
 	_streams["coin"] = _coin_chime()
 	_streams["click"] = _tone(1400.0, 1000.0, 0.04, 0.3, "sine")
 	_streams["alarm"] = _tone(620.0, 620.0, 0.18, 0.3, "square")
+	_streams["sonar"] = _sonar_ping()
 	# Ambience (looping).
 	_streams["wind"] = _wind_loop(4.0)
 	_streams["drips"] = _drip_loop(5.0)
@@ -134,6 +135,21 @@ func _noise(duration: float, volume: float) -> AudioStreamWAV:
 		var t: float = float(i) / frames
 		var env: float = (1.0 - t) * (1.0 - t)
 		_write_sample(bytes, i, (randf() * 2.0 - 1.0) * env * volume)
+	return _make_stream(frames, bytes)
+
+
+## Sonar ping (Ore Sonar scan): a bright chirp plus a softer delayed echo.
+func _sonar_ping() -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * 0.7)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	for ping in [[0.0, 0.4], [0.28, 0.18]]:
+		var start_frame: int = int(_MIX_RATE * ping[0])
+		var ping_frames: int = int(_MIX_RATE * 0.25)
+		var phase: float = 0.0
+		for i in range(ping_frames):
+			var t: float = float(i) / ping_frames
+			phase += lerpf(1500.0, 900.0, t) / _MIX_RATE
+			_write_sample(bytes, start_frame + i, sin(phase * TAU) * (1.0 - t) * ping[1])
 	return _make_stream(frames, bytes)
 
 

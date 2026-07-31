@@ -37,10 +37,10 @@ mine-attack/
 │   ├── ui/                    # main_menu (project entry point), hud, debug_overlay
 │   └── effects/               # coin_popup, damage_popup (floating text popups)
 └── scripts/                   # GDScript source (details in §Code organization)
-    ├── autoload/      # constants, game_manager, economy_manager, debug_log, audio_manager
+    ├── autoload/      # constants, game_manager, economy_manager, research_manager, debug_log, audio_manager
     ├── controllers/   # ai_controller, player_controller
     ├── resources/     # unit_data.gd + units/*.tres (miner, swordsman, archer, wizard)
-    ├── ui/            # hud, debug_overlay, layer_indicator, training_queue_panel, unit_button
+    ├── ui/            # hud, debug_overlay, layer_indicator, training_queue_panel, research_panel, unit_button
     ├── effects/       # coin_popup, damage_popup
     ├── units/         # unit.gd (state machine), projectile.gd
     └── world/         # grid_world, building, mine_entry
@@ -69,6 +69,7 @@ Autoload singletons (configured in `project.godot`, loaded in this order):
 - `Constants` — centralized balance numbers and input action names. `DEBUG` (currently **false**) gates the debug overlay and `DebugLog`; `DEBUG_SEED` makes map generation deterministic when `DEBUG` is on. With `DEBUG` off, maps are random each match — test scripts that boot `main.tscn` call `seed(12345)` in `before_all` to get a deterministic layout.
 - `GameManager` — global game state, `Team` enum, shared color palette, match timer, win/loss signals.
 - `EconomyManager` — coin balances, population counts, miner upgrade levels, units trained, coin mined. Emits `coin_changed`, `population_changed`, `miner_level_changed`, `stats_changed`.
+- `ResearchManager` — timed research tree: one active research per team (coin paid up front, 100% refund on cancel), per-team tech levels, and the Ore Sonar scan ability + cooldown. Tech definitions live in `Constants.RESEARCH_TECHS`; effects are applied by the owning systems (`unit.gd`, `building.gd`) via `research_completed` / `get_stat_bonus(team, key)`. Research and cooldowns freeze when `GameManager.game_active` is false. `hud.gd` calls `reset()` on Play Again / Restart / Quit to Menu (autoloads survive scene reload).
 - `DebugLog` — Phase 0 ring-buffer logger used by the debug overlay and command/state logging.
 
 ---
@@ -86,6 +87,7 @@ Global singletons accessible from any script via their class name.
   - `MINER_STATS`: per-level HP, speed, mining DPS, carry capacity, and max layer.
   - `MINER_UPGRADE_COSTS`: level 2 → 500, level 3 → 1500.
   - `FIGHTER_UPGRADE_COSTS` / `FIGHTER_UPGRADES`: team-wide per-type fighter levels (swordsman/archer/wizard, L1→L3). Costs: swordsman 400/1200, archer 500/1500, wizard 600/1800. Stats are authoritative per-level HP/damage overrides (~+30% HP, +25% damage per level); level 1 rows mirror the `.tres` base stats.
+  - `RESEARCH_TECHS`: timed research tree (coexists with the instant upgrades). Fortify L1/L2 (600g/20s, 1500g/30s → building +2000/+3000 max HP, heals the delta), Ore Sonar L1/L2 (300g/15s, 800g/20s → unlocks the ore scan), Bulwark L1/L2 (swordsman +2/+2 flat damage reduction), Longbow (archer +30 range), Inferno (wizard +50% AoE), Reinforced Pack (miner +15 carry). Level values are per-level increments summed by `ResearchManager.get_stat_bonus()`. `SONAR_RADIUS` (8/12 cells) and `SONAR_COOLDOWN` (60s/40s) size the scan.
   - Building HP, wall HP, layer data, grid bounds, and input action `StringName` constants.
   - `UNIT_REGEN_DELAY` (5s) / `UNIT_REGEN_PER_SEC` (2 HP/s): out-of-combat regeneration — units that avoid damage for the delay slowly recover HP.
   - Fighter stats are stored in `UnitData` resources under `scripts/resources/units/*.tres`; `FIGHTER_STATS` was removed in Phase 2 to keep a single source of truth.
@@ -109,7 +111,7 @@ Global singletons accessible from any script via their class name.
 
 - `audio_manager.gd`
   - Procedural audio (Phase 8): the project ships no audio assets, so every sound is synthesized at startup into `AudioStreamWAV` (22.05 kHz 16-bit).
-  - SFX: `pickaxe`, `sword`, `bow`, `blast`, `coin`, `click`, `alarm`. Looping ambience: `wind`, `drips` on a quiet `Ambient` bus; one-shots use the `SFX` bus.
+  - SFX: `pickaxe`, `sword`, `bow`, `blast`, `coin`, `click`, `alarm`, `sonar` (Ore Sonar scan ping). Looping ambience: `wind`, `drips` on a quiet `Ambient` bus; one-shots use the `SFX` bus.
   - `play(sound, world_pos, volume_db)`: flat players for UI (no position), a rotating pool of 12 `AudioStreamPlayer2D` for world sounds.
   - Runs with `process_mode = ALWAYS` so ambience keeps playing while paused.
 
@@ -124,10 +126,10 @@ Global singletons accessible from any script via their class name.
   - Stances: `"attack"` (rush enemy building), `"defend"` (stop/hold in place), `"garrison"` (fall back and defend the base — underground fighters climb out, everyone gathers at the home building's deposit point and holds there via `garrison_home()`), `"rally"` (arms rally mode — the next **left-click** places an army-wide rally point, right-click cancels; fighters hunt every enemy on the surface, miners included, and fall back to the point; any explicit command cancels a unit's rally). Attack/Defend/Garrison are persistent **modes** (`_current_stance`, default `"defend"`): setting one works with zero fighters, and every fighter trained afterwards automatically gets the mode's order on spawn (building `unit_spawned` → `_on_fighter_spawned`; miners are exempt and always enter the mine). The HUD stance buttons are toggles highlighting the active mode. Rally is momentary and does not change the mode.
 
 - `ai_controller.gd`
-  - Tick-driven AI with separate timers for economy (`ENEMY_DECISION_INTERVAL` = 2s, scaled by the difficulty `upgrade_speed`), mining (1s), attack waves (`ENEMY_ATTACK_WAVE_INTERVAL` = 18s), and aggression updates (`ENEMY_AGGRESSION_INTERVAL` = 10s). The economy tick buys miner upgrades first, then fighter upgrades once a 400-coin reserve is safe (cheapest first).
+  - Tick-driven AI with separate timers for economy (`ENEMY_DECISION_INTERVAL` = 2s, scaled by the difficulty `upgrade_speed`), mining (1s), attack waves (`ENEMY_ATTACK_WAVE_INTERVAL` = 18s), and aggression updates (`ENEMY_AGGRESSION_INTERVAL` = 10s). The economy tick buys miner upgrades first, then fighter upgrades once a 400-coin reserve is safe (cheapest first), then research (sonar first, fortify when the base is hurt, then the fighter tech matching its most numerous fighter type) under the same reserve rule; the sonar scan fires whenever its cooldown is up.
   - Maintains an `_aggression_level` (`"defend"`, `"balanced"`, `"push"`) based on relative fighter counts; the push/defend ratios come from the difficulty modifiers.
   - Defends building when enemy units are nearby.
-  - Selects ore based on distance, value, and side ownership — but only *discovered* ore (cells that already took mining damage; miners don't know where buried ore is), skipping cells reserved by other miners or blacklisted as unreachable by that miner.
+  - Selects ore based on distance, value, and side ownership — but only *discovered* ore (cells that already took mining damage or were revealed by an Ore Sonar scan; miners don't know where buried ore is), skipping cells reserved by other miners or blacklisted as unreachable by that miner.
   - Attempts central wall breach when pushing and no accessible unmined tiles remain.
 
 ### `scripts/world/`
@@ -146,7 +148,7 @@ Global singletons accessible from any script via their class name.
 
 - `building.gd`
   - Training queue with `queue_unit(unit_id)` and `cancel_queue(index)` (100% refund). The AI building's training speed and deposit income scale with the difficulty modifiers; the player is always ×1.0.
-  - Default building HP is 5000 (`PLAYER_BUILDING_HP` / `ENEMY_BUILDING_HP`).
+  - Default building HP is 5000 (`PLAYER_BUILDING_HP` / `ENEMY_BUILDING_HP`); the Fortify research adds on top of the stored base (`_base_max_hp`) and heals the delta via `research_completed`.
   - Spawns units at the building front and automatically sends miners into the mine.
   - Emits `hp_changed`, `queue_changed`, `destroyed`, `coin_deposited`, `unit_spawned`.
   - On destruction: clears the queue, leaves the `"buildings"` group, plays a collapse (one-shot dust burst + squash/darken tween under the slow-mo), and hides its HP bar. Sounds: coin chime on deposit, alarm below 25% HP, blast on destruction.
@@ -168,7 +170,7 @@ Global singletons accessible from any script via their class name.
   - All AI/movement freezes when `GameManager.game_active` is false (match over); only the `DEAD` fade-out keeps running. Projectiles freeze mid-flight too.
   - Command API: `move_to`, `attack_unit`, `attack_building`, `mine_cell`, `deposit_coin`, `enter_mine`, `exit_mine`, `climb_up_ladder`, `climb_down_ladder`, `rally_to`, `garrison_home`, `stop`. The ladder climbs are the auto-loop's way in and out of the mine; `enter_mine`/`exit_mine` teleport and remain as explicit-order fallbacks.
   - Miners auto-enter mine on spawn, auto-seek diggable cells when idle, and flee toward friendly fighters or the mine entry when attacked (fleeing to the shaft's underground position when attacked below ground). When cargo is full (or nothing diggable remains), miners surface and walk to their building's deposit point to cash in before heading back down (Phase 3.1).
-  - Mining seek (Phase 3.3): miners don't know where buried ore is — every diggable face is equal until a tile proves itself. Ore that already took mining damage (`hp < max_hp`, i.e. it yielded gold) counts as *discovered* and is preferred at any distance; otherwise the nearest diggable cell wins regardless of type. The miner-level gate is enforced at seek time; targeted cells are reserved via `claimed_by`; cells that can't be pathed to go on a per-miner 10s blacklist; when nothing diggable remains, miners with cargo surface to deposit while empty-handed miners wait near the shaft bottom and re-scan every 5s (or immediately on any `cell_destroyed` signal) instead of yo-yoing up and down.
+  - Mining seek (Phase 3.3): miners don't know where buried ore is — every diggable face is equal until a tile proves itself. Ore that already took mining damage (`hp < max_hp`, i.e. it yielded gold) or was revealed by an Ore Sonar scan (`cell.sonar_revealed`) counts as *discovered* and is preferred at any distance; otherwise the nearest diggable cell wins regardless of type. The miner-level gate is enforced at seek time; targeted cells are reserved via `claimed_by`; cells that can't be pathed to go on a per-miner 10s blacklist; when nothing diggable remains, miners with cargo surface to deposit while empty-handed miners wait near the shaft bottom and re-scan every 5s (or immediately on any `cell_destroyed` signal) instead of yo-yoing up and down.
   - Fighters auto-attack nearby enemies (fighters → building → enemy miners on own side) and patrol underground when idle.
   - Rally mode (`rally_to`): a fighter hunts any enemy on the surface — miners included (`_find_rally_target` skips underground enemies) — while travelling to and idling at the rally point. Underground rally points are rejected; underground fighters climb out first and resume the rally on the surface. Rally engagements bypass `attack_unit()` so `_rally_active` survives the kill (the unit then resumes the hunt); every explicit command cancels the rally via `_clear_target()`.
   - Standing points (`_post_point`): a fighter's idle anchor on the surface — set at spawn, updated by explicit `move_to` (new post) and `stop` (hold here). Attack and auto-attack engagements leave it unchanged, so when the fighting ends the fighter paths back to its post (`_return_to_post_if_needed`) and the army regroups at base instead of spreading across the map.
@@ -177,7 +179,7 @@ Global singletons accessible from any script via their class name.
   - Fighters move at 60% speed while underground.
   - Ranged standoff (kiting): a fighter with `attack_range > 35` whose unit target slips inside 40% of its range takes a direct steering step away (`_kite_away_from`) while staying in ATTACK and firing on cooldown. `_is_walkable_point` bounds the step (surface row or EMPTY cells underground) — no pathing, so the target lock is never dropped. Melee units and building sieges are unaffected.
   - Out-of-combat regen: `take_damage` starts a 5s no-damage countdown; once it elapses the unit regains 2 HP/s up to `max_hp`, with a green `+N` popup on each heal tick. Applies to all units, both teams (miners heal between trips too).
-  - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`) and team-wide fighter upgrade stats (`_apply_fighter_upgrade` — swordsman/archer/wizard HP/damage per level from `Constants.FIGHTER_UPGRADES`, healing the max_hp delta on level-up).
+  - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`) and team-wide fighter upgrade stats (`_apply_fighter_upgrade` — swordsman/archer/wizard HP/damage per level from `Constants.FIGHTER_UPGRADES`, healing the max_hp delta on level-up), plus research-tree bonuses (`_apply_research_bonuses` — bulwark armor, longbow range, inferno AoE, reinforced-pack carry, applied as deltas so re-application never compounds).
   - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected; miners also show a gold `carried/capacity` cargo readout above the HP bar while hauling or when hovered/selected. Units use `frost_mines_assets/effects/selection_ring.png` for selection (with a gentle pulse), a warm lantern glow when mining underground, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage. Units are always visible in both views (surface and underground render simultaneously). Mining swings, melee hits, and projectile launches play positional SFX via `AudioManager`.
   - Phase 3.4 traffic: each unit gets a small `_movement_offset` applied to miner deposit and mine-entry targets, and `_follow_path()` applies soft repulsion from nearby friendly units so surface parades don't stack into a single sprite. Path arrival is step-aware (`max(2px, speed * delta)`) so large deltas (lag spikes, high `Engine.time_scale`) can't orbit a path point forever against the separation nudge.
 
@@ -197,6 +199,7 @@ Global singletons accessible from any script via their class name.
 - `main_menu.gd` — main menu: night-sky backdrop with falling snow (CPUParticles2D), both bases and units on the ground strip, and a centered card (title, difficulty dropdown, gold Play button, Quit, hotkey hint line); Play sets `GameManager.difficulty` and switches to `main.tscn`.
 - `unit_button.gd` — train button with cost/train-time labels, a hotkey hint badge, affordability/disable state, and failure shake.
 - `training_queue_panel.gd` — vertical queue panel docked on the right edge of the screen (between the top and bottom bars); shows the currently training unit's progress and a scrollable list of queued units; both the in-progress unit and queued units can be cancelled (100% refund).
+- `research_panel.gd` — research tree panel docked on the left edge, toggled by the BottomBar Research button / `R` hotkey. Rows are built in code from `Constants.RESEARCH_TECHS` (adding a tech to the table adds a row); shows the active research progress with a 100%-refund cancel, and the Ore Sonar **Scan** button with its cooldown countdown.
 - `layer_indicator.gd` — highlights accessible underground layers based on miner upgrade level.
 
 ### `scripts/effects/`
@@ -290,6 +293,7 @@ Defined in `project.godot` under `[input]`:
 | `train_archer` | `3` |
 | `train_wizard` | `4` |
 | `toggle_view` | Tab |
+| `toggle_research` | R |
 | `pause` | Space / Esc |
 | `toggle_debug` | F3 |
 | Add to selection | Shift + click / drag |
@@ -316,6 +320,12 @@ Defined in `project.godot` under `[input]`:
   - Archer L2 500 / L3 1500 → HP 105/130, damage 15/19.
   - Wizard L2 600 / L3 1800 → HP 80/100, damage 47/58.
   - The AI buys them in its economy tick once it keeps a 400-coin reserve (cheapest first).
+- **Research tree (timed techs, one active research per team, 100% refund on cancel):**
+  - Fortify L1 600g/20s, L2 1500g/30s → building max HP +2000 / +3000 (heals the delta).
+  - Ore Sonar L1 300g/15s, L2 800g/20s → unlocks the Scan ability: reveals buried ore in an 8/12-cell radius of the own mine so miners path straight to it; 60s/40s cooldown.
+  - Bulwark L1 500g, L2 1000g → swordsmen take 2/4 less damage per hit (min 1).
+  - Longbow 500g → archers +30 attack range. Inferno 600g → wizard fireballs +50% AoE. Reinforced Pack 400g → miners +15 carry.
+  - Coexists with the instant upgrades above; the AI researches the same tree in its economy tick.
 - **Layers:**
   - 7 underground layers, 3 grid rows each (`ROWS_PER_LAYER = 3`, ~32 px per row).
   - Layers 1–2: miner level 1, tile HP 50, ore coin 25–40 / 30–50.
@@ -347,6 +357,7 @@ The project uses [GUT](https://github.com/bitwes/Gut) 9.6.1 (committed under `ad
 - `tests/test_ai_retaliation.gd` — damaged AI sieger eventually retaliates against its attacker, undamaged sieger stays on the building, player units never auto-retaliate.
 - `tests/test_rally.gd` — rally targets surface miners, skips underground enemies, engagement keeps the rally active, explicit commands cancel it, miners can't rally, miner death drops full cargo as a pickup.
 - `tests/test_stance_modes.gd` — stance modes persist with zero fighters, attack/garrison/defend modes auto-order newly spawned fighters, miners ignore modes, rally doesn't change the mode.
+- `tests/test_research.gd` — research purchase guards (unknown/busy/unaffordable/maxed), timed completion and pause freeze, 100% cancel refund, fortify/longbow/bulwark/reinforced-pack effects, sonar scan reveal + cooldown, `reset()` clearing.
 
 > Test harness gotcha: every script that boots `main.tscn` must free it **immediately** in `after_all` (`_main.free()`, never `queue_free()`). A deferred free can still be pending when the next script instantiates its own `main.tscn` — the old `Main` name stays taken, the new scene gets renamed, and every hard-coded `/root/Main/...` lookup breaks (flaky, timing-dependent failures).
 

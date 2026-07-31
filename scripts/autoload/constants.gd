@@ -81,6 +81,69 @@ const FIGHTER_UPGRADES: Dictionary = {
 const PLAYER_BUILDING_HP: float = 5000.0
 const ENEMY_BUILDING_HP: float = 5000.0
 
+# ─── RESEARCH TREE ───
+# Timed techs bought with coin through the ResearchManager (one active
+# research per team, 100% refund on cancel). These coexist with the instant
+# miner/fighter upgrades above — research only covers new techs.
+# Effect keys are read through ResearchManager.get_stat_bonus():
+#   building_hp    → flat max-HP added to the team's building (heals the delta)
+#   swordsman_armor → flat damage reduction per hit taken
+#   archer_range   → flat attack-range bonus
+#   wizard_aoe_mult → fireball AoE radius multiplier bonus (0.5 = +50%)
+#   miner_carry    → flat carry-capacity bonus
+const RESEARCH_TECHS: Dictionary = {
+	"fortify": {
+		"name": "Fortify",
+		"unit": "",
+		"levels": {
+			1: { "cost": 600, "time": 20.0, "building_hp": 2000 },
+			2: { "cost": 1500, "time": 30.0, "building_hp": 3000 },
+		},
+	},
+	"ore_sonar": {
+		"name": "Ore Sonar",
+		"unit": "",
+		"levels": {
+			1: { "cost": 300, "time": 15.0 },
+			2: { "cost": 800, "time": 20.0 },
+		},
+	},
+	"bulwark": {
+		"name": "Bulwark",
+		"unit": "swordsman",
+		"levels": {
+			1: { "cost": 500, "time": 20.0, "swordsman_armor": 2 },
+			2: { "cost": 1000, "time": 25.0, "swordsman_armor": 2 },  # total 4
+		},
+	},
+	"longbow": {
+		"name": "Longbow",
+		"unit": "archer",
+		"levels": {
+			1: { "cost": 500, "time": 20.0, "archer_range": 30.0 },
+		},
+	},
+	"inferno": {
+		"name": "Inferno",
+		"unit": "wizard",
+		"levels": {
+			1: { "cost": 600, "time": 25.0, "wizard_aoe_mult": 0.5 },
+		},
+	},
+	"reinforced_pack": {
+		"name": "Reinforced Pack",
+		"unit": "miner",
+		"levels": {
+			1: { "cost": 400, "time": 15.0, "miner_carry": 15 },
+		},
+	},
+}
+
+# Ore Sonar scan ability: reveals buried ore around the team's mine so miners
+# path straight to it. Radius is in grid cells, cooldown in seconds.
+const SONAR_RADIUS: Dictionary = { 1: 8, 2: 12 }
+const SONAR_COOLDOWN: Dictionary = { 1: 60.0, 2: 40.0 }
+
 # ─── OUT-OF-COMBAT REGEN ───
 # Units that avoid damage for this long slowly recover HP. Slow on purpose:
 # it rewards retreating wounded units without erasing combat outcomes.
@@ -147,6 +210,7 @@ const INPUT_TRAIN_SWORDSMAN: StringName = &"train_swordsman"
 const INPUT_TRAIN_ARCHER: StringName = &"train_archer"
 const INPUT_TRAIN_WIZARD: StringName = &"train_wizard"
 const INPUT_TOGGLE_VIEW: StringName = &"toggle_view"
+const INPUT_TOGGLE_RESEARCH: StringName = &"toggle_research"
 const INPUT_PAUSE: StringName = &"pause"
 
 const INPUT_CAMERA_UP: StringName = &"camera_up"

@@ -54,6 +54,8 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 @onready var _defend_button: Button = $BottomBar/MarginContainer/HBoxContainer/DefendButton
 @onready var _garrison_button: Button = $BottomBar/MarginContainer/HBoxContainer/GarrisonButton
 @onready var _rally_button: Button = $BottomBar/MarginContainer/HBoxContainer/RallyButton
+@onready var _research_button: Button = $BottomBar/MarginContainer/HBoxContainer/ResearchButton
+@onready var _research_panel: PanelContainer = $ResearchPanel
 @onready var _stance_buttons: Dictionary = {}
 @onready var _game_over_panel: PanelContainer = $GameOverPanel
 
@@ -70,6 +72,7 @@ func _ready() -> void:
 	_style_panel($TopBar)
 	_style_panel($BottomBar)
 	_style_panel($QueuePanel)
+	_style_panel(_research_panel)
 	_style_panel(_game_over_panel)
 	_style_tab_buttons()
 	_style_speed_buttons()
@@ -92,13 +95,14 @@ func _ready() -> void:
 	_defend_button.pressed.connect(_stance.bind("defend"))
 	_garrison_button.pressed.connect(_stance.bind("garrison"))
 	_rally_button.pressed.connect(_stance.bind("rally"))
+	_research_button.pressed.connect(toggle_research_panel)
 	_surface_button.pressed.connect(_set_view.bind(false))
 	_underground_button.pressed.connect(_set_view.bind(true))
 	for speed: float in _speed_buttons:
 		_speed_buttons[speed].pressed.connect(_set_game_speed.bind(speed))
 	$GameOverPanel/MarginContainer/VBoxContainer/QuitButton.pressed.connect(_quit_to_menu)
 	$GameOverPanel/MarginContainer/VBoxContainer/PlayAgainButton.pressed.connect(_play_again)
-	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _surface_button, _underground_button]:
+	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _research_button, _surface_button, _underground_button]:
 		btn.pressed.connect(func(): AudioManager.play("click"))
 	for unit_id: String in _fighter_upgrade_buttons:
 		_fighter_upgrade_buttons[unit_id].pressed.connect(func(): AudioManager.play("click"))
@@ -201,6 +205,7 @@ func _on_pause_restart() -> void:
 	get_tree().paused = false
 	GameManager.reset()
 	EconomyManager.reset()
+	ResearchManager.reset()
 	get_tree().reload_current_scene()
 
 
@@ -212,6 +217,7 @@ func _quit_to_menu() -> void:
 	get_tree().paused = false
 	GameManager.reset()
 	EconomyManager.reset()
+	ResearchManager.reset()
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 
@@ -434,6 +440,11 @@ func _stance(stance: String) -> void:
 		pc.set_stance(stance)
 
 
+## BottomBar Research button / R hotkey: shows or hides the research panel.
+func toggle_research_panel() -> void:
+	_research_panel.visible = not _research_panel.visible
+
+
 func _set_view(underground: bool) -> void:
 	var pc: PlayerController = _get_player_controller()
 	if pc:
@@ -561,4 +572,5 @@ func _play_again() -> void:
 	get_tree().paused = false
 	GameManager.reset()
 	EconomyManager.reset()
+	ResearchManager.reset()
 	get_tree().reload_current_scene()

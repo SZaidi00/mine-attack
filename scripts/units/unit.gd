@@ -78,6 +78,13 @@ var _rally_point: Vector2 = Vector2.ZERO
 var _rally_scan_timer: float = 0.0
 # Team-wide fighter upgrade level already applied to this unit's data.
 var _fighter_level_applied: int = 1
+# Research tree bonuses: _armor is a flat damage reduction (Bulwark); the
+# others track what has already been folded into the duplicated UnitData so
+# re-applying after each completed research never compounds.
+var _armor: int = 0
+var _applied_archer_range: float = 0.0
+var _applied_wizard_aoe_mult: float = 0.0
+var _applied_miner_carry: float = 0.0
 # Out-of-combat regen: counts down after each hit taken; HP accrues once it
 # reaches zero (see _process).
 var _regen_delay: float = 0.0
@@ -96,6 +103,7 @@ func _ready() -> void:
 		data = preload("res://scripts/resources/units/swordsman.tres")
 	if data.is_miner:
 		_apply_miner_upgrade()
+	_apply_research_bonuses()
 	hp = data.max_hp
 	add_to_group("units")
 	_add_hover_area()
@@ -154,6 +162,7 @@ func _process(delta: float) -> void:
 				_follow_path(delta)
 		return
 
+	_apply_research_bonuses()
 	if data.is_miner:
 		_apply_miner_upgrade()
 		if _mine_exhausted:
@@ -418,6 +427,9 @@ func rally_to(world_pos: Vector2) -> void:
 
 
 func take_damage(amount: int, attacker: Node2D = null) -> void:
+	# Bulwark research: flat damage reduction, but a hit always lands for 1+.
+	if _armor > 0:
+		amount = maxi(1, amount - _armor)
 	hp -= amount
 	_regen_delay = Constants.UNIT_REGEN_DELAY
 	_hit_flash_timer = 0.15
@@ -1021,9 +1033,10 @@ func _find_and_mine() -> void:
 			if not _has_empty_neighbor(pos):
 				continue
 			var d: float = center.distance_to(pos)
-			if cell.type == GridWorld.CellType.ORE and cell.hp < cell.max_hp:
-				# Discovered gold: this tile already yielded coin, so the
-				# miner knows it is worth coming back to.
+			if cell.type == GridWorld.CellType.ORE and (cell.hp < cell.max_hp or cell.sonar_revealed.get(team, false)):
+				# Discovered gold: this tile already yielded coin or an Ore
+				# Sonar scan revealed it, so the miner knows it is worth
+				# coming back to.
 				if d < best_gold_dist:
 					best_gold_dist = d
 					best_gold = pos
@@ -1423,6 +1436,33 @@ func _apply_miner_upgrade() -> void:
 	_unreachable_cells.clear()
 	_mine_exhausted = false
 	queue_redraw()
+
+
+## Research tree bonuses (ResearchManager): folds the team's researched stat
+## bonuses into this unit's duplicated UnitData. Called every tick like the
+## upgrade appliers; each key early-outs when nothing changed, and deltas (or
+## exact multiplier inversion for AoE) keep re-application from compounding.
+func _apply_research_bonuses() -> void:
+	if data.is_miner:
+		var carry: float = ResearchManager.get_stat_bonus(team, "miner_carry")
+		if carry != _applied_miner_carry:
+			data.carry_capacity += int(carry - _applied_miner_carry)
+			_applied_miner_carry = carry
+			queue_redraw()
+	elif data.is_fighter:
+		match data.unit_name.to_lower():
+			"swordsman":
+				_armor = int(ResearchManager.get_stat_bonus(team, "swordsman_armor"))
+			"archer":
+				var range_bonus: float = ResearchManager.get_stat_bonus(team, "archer_range")
+				if range_bonus != _applied_archer_range:
+					data.attack_range += range_bonus - _applied_archer_range
+					_applied_archer_range = range_bonus
+			"wizard":
+				var aoe_mult: float = ResearchManager.get_stat_bonus(team, "wizard_aoe_mult")
+				if aoe_mult != _applied_wizard_aoe_mult:
+					data.aoe_radius = data.aoe_radius / (1.0 + _applied_wizard_aoe_mult) * (1.0 + aoe_mult)
+					_applied_wizard_aoe_mult = aoe_mult
 
 
 func _draw_pickaxe(draw_body: bool = true) -> void:

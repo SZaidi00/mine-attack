@@ -75,6 +75,19 @@ func _run_economy() -> void:
 			EconomyManager.upgrade_fighter(team, unit_id)
 			coin -= upgrade_cost
 
+	# Research tree: one timed slot per team, bought with the same reserve
+	# rule as fighter upgrades. Research time is not difficulty-scaled — the
+	# difficulty multipliers already speed up the income that pays for it.
+	if not ResearchManager.is_researching(team):
+		var tech: String = _pick_research(building)
+		if tech != "":
+			var data: Dictionary = ResearchManager.get_next_level_data(team, tech)
+			if EconomyManager.get_coin(team) >= int(data.cost) + 400:
+				ResearchManager.start_research(team, tech)
+	# The scan is free — fire it whenever the cooldown is up.
+	if ResearchManager.can_scan(team):
+		ResearchManager.scan(team)
+
 	# Queue decisions (respecting queue size and population cap).
 	var queue_size: int = building.call("get_queue").size()
 	if queue_size < 3 and population < _Constants.MAX_UNITS:
@@ -88,6 +101,36 @@ func _run_economy() -> void:
 			building.call("queue_unit", "archer")
 		elif coin >= _Constants.COSTS["swordsman"]:
 			building.call("queue_unit", "swordsman")
+
+
+## Next research to buy, by priority: sonar first (revealed ore shortens
+## every miner trip), fortify when the base is hurt, then the fighter tech
+## matching the army's most numerous fighter type, then anything left.
+func _pick_research(building: Node2D) -> String:
+	if _research_open("ore_sonar"):
+		return "ore_sonar"
+	var hurt: bool = building != null and float(building.get("_hp")) < float(building.get("max_hp")) * 0.6
+	if hurt and _research_open("fortify"):
+		return "fortify"
+	var counts: Dictionary = { "swordsman": 0, "archer": 0, "wizard": 0 }
+	for unit in get_tree().get_nodes_in_group(team_name()):
+		if unit.data.is_fighter:
+			counts[unit.data.unit_name.to_lower()] += 1
+	var tech_by_unit: Dictionary = { "swordsman": "bulwark", "archer": "longbow", "wizard": "inferno" }
+	var best_unit: String = "swordsman"
+	for unit_id in counts:
+		if counts[unit_id] > counts[best_unit]:
+			best_unit = unit_id
+	if _research_open(tech_by_unit[best_unit]):
+		return tech_by_unit[best_unit]
+	for tech in ["bulwark", "longbow", "inferno", "reinforced_pack", "fortify"]:
+		if _research_open(tech):
+			return tech
+	return ""
+
+
+func _research_open(tech_id: String) -> bool:
+	return not ResearchManager.get_next_level_data(team, tech_id).is_empty()
 
 
 func _run_mining() -> void:
@@ -232,9 +275,10 @@ func _find_best_ore(unit: Unit) -> Vector2i:
 			if cell == null or cell.type != GridWorld.CellType.ORE:
 				continue
 			# Miners don't know where buried ore is: the AI may only route to
-			# ore that already proved itself (damaged = yielded gold).
-			# Undiscovered ore is dug blind via the miner's own auto-seek.
-			if cell.hp >= cell.max_hp:
+			# ore that already proved itself (damaged = yielded gold) or that
+			# an Ore Sonar scan revealed. Undiscovered ore is dug blind via
+			# the miner's own auto-seek.
+			if cell.hp >= cell.max_hp and not cell.sonar_revealed.get(team, false):
 				continue
 			if unit.data.miner_level < cell.miner_level_required:
 				continue
