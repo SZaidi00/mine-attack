@@ -383,7 +383,7 @@ Fully offline, single-player game: no network code, authentication, saved-game s
 - **AI controller relies on `Unit` internals:** `ai_controller.gd` reads `unit._state` and `unit.data` directly, including the underscore-prefixed `_state` variable. Refactoring `Unit`'s state machine requires updating the AI controller too.
 - **Building footprint writes into `_cells` directly:** `building.gd` mutates `GridWorld._cells` and `_astar` directly rather than using a public API.
 - **No null-safe node access for UI:** `hud.gd` looks up the player controller and building at runtime with `get_node_or_null`; if the scene hierarchy changes, the HUD may silently stop updating.
-- **Export presets mismatch:** The README mentions Windows, macOS, and Linux exports, but only the Web preset is configured.
+- **Only the Web export preset is configured** (`build/MineAttack.html`); desktop presets were never set up. `tools/serve_web.py` serves the build with the COOP/COEP headers Godot 4 web builds require.
 - **Viewport is 2560×1440** (`window/size` in `project.godot`, stretch `canvas_items`/`expand`). Camera zoom range is 0.4–2.0; HUD layout is anchored, so larger viewports show more of the world rather than scaling the UI.
 - **Headless teardown spam:** in `-s` SceneTree harnesses, after `quit()` the script unregistration can race node teardown and spam `Trying to return a value of type 'Node' ... 'PlayerController'` from `hud._get_player_controller` (kept alive by `process_mode = ALWAYS`). Harness-only noise after the check result; normal boots and gameplay are clean.
 - **Resources are duplicated at spawn:** `building.gd` calls `data.duplicate(true)` so each unit gets its own mutable `UnitData`. Upgrades mutate that copy in `unit.gd`.
