@@ -43,14 +43,14 @@ theme_override_constants/separation = 16
 [node name="CoinLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.984314, 0.74902, 0.141176, 1)
 text = "0"
 
 [node name="MinerLevelLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.231373, 0.509804, 0.964706, 1)
 text = "L1"
 
@@ -65,7 +65,7 @@ theme_override_constants/separation = 12
 [node name="UnitCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
 text = "0/100"
 horizontal_alignment = 1
@@ -77,28 +77,28 @@ theme_override_constants/separation = 10
 [node name="MinerCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
 text = "0"
 
 [node name="SwordsmanCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
 text = "0"
 
 [node name="ArcherCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
 text = "0"
 
 [node name="WizardCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
 text = "0"
 
@@ -113,21 +113,21 @@ theme_override_constants/separation = 16
 [node name="PlayerHPLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.133333, 0.772549, 0.368627, 1)
 text = "5000"
 
 [node name="EnemyHPLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.937255, 0.266667, 0.266667, 1)
 text = "5000"
 
 [node name="SelectionLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
 text = "Selected: 0"
 
@@ -252,7 +252,7 @@ offset_left = 36.0
 offset_top = 28.0
 offset_right = 64.0
 offset_bottom = 44.0
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.984314, 0.74902, 0.141176, 1)
 text = "50"
 horizontal_alignment = 1
@@ -300,7 +300,7 @@ offset_left = 36.0
 offset_top = 28.0
 offset_right = 64.0
 offset_bottom = 44.0
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.984314, 0.74902, 0.141176, 1)
 text = "100"
 horizontal_alignment = 1
@@ -348,7 +348,7 @@ offset_left = 36.0
 offset_top = 28.0
 offset_right = 64.0
 offset_bottom = 44.0
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.984314, 0.74902, 0.141176, 1)
 text = "150"
 horizontal_alignment = 1
@@ -396,7 +396,7 @@ offset_left = 36.0
 offset_top = 28.0
 offset_right = 64.0
 offset_bottom = 44.0
-theme_override_font_sizes/font_size = 12
+theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.984314, 0.74902, 0.141176, 1)
 text = "250"
 horizontal_alignment = 1

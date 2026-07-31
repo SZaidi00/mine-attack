@@ -3,10 +3,6 @@ extends Button
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
-const _BUTTON_NORMAL: Texture2D = preload("res://frost_mines_assets/ui/button_normal.png")
-const _BUTTON_HOVER: Texture2D = preload("res://frost_mines_assets/ui/button_hover.png")
-const _BUTTON_PRESSED: Texture2D = preload("res://frost_mines_assets/ui/button_pressed.png")
-const _BUTTON_DISABLED: Texture2D = preload("res://frost_mines_assets/ui/button_disabled.png")
 const _ICON_MINER: Texture2D = preload("res://frost_mines_assets/icons/icon_miner.png")
 const _ICON_SWORDSMAN: Texture2D = preload("res://frost_mines_assets/icons/icon_swordsman.png")
 const _ICON_ARCHER: Texture2D = preload("res://frost_mines_assets/icons/icon_archer.png")
@@ -130,22 +126,25 @@ func _apply_style() -> void:
 	add_theme_color_override("font_disabled_color", Color("#94a3b8"))
 
 	if disabled:
-		add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_DISABLED))
-		add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_DISABLED))
-		add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_DISABLED))
-		modulate = Color(1, 1, 1, 0.6)
+		var disabled_style: StyleBoxFlat = _make_flat_style(Color("#151c29"))
+		add_theme_stylebox_override("normal", disabled_style)
+		add_theme_stylebox_override("hover", disabled_style)
+		add_theme_stylebox_override("pressed", disabled_style)
+		modulate = Color(1, 1, 1, 0.55)
 	else:
-		add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_NORMAL))
-		add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_HOVER))
-		add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_PRESSED))
+		add_theme_stylebox_override("normal", _make_flat_style(Color("#1a2434"), Color(1, 1, 1, 0.07)))
+		add_theme_stylebox_override("hover", _make_flat_style(Color("#253650"), Color("#4a86c8")))
+		add_theme_stylebox_override("pressed", _make_flat_style(Color("#111927"), Color(1, 1, 1, 0.07)))
 		modulate = Color(1, 1, 1, 1)
 
 
-func _make_textured_style(texture: Texture2D) -> StyleBoxTexture:
-	var style: StyleBoxTexture = StyleBoxTexture.new()
-	style.texture = texture
-	style.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
-	style.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+func _make_flat_style(bg: Color, border: Color = Color(0, 0, 0, 0)) -> StyleBoxFlat:
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = bg
+	if border.a > 0.0:
+		style.border_color = border
+		style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
 	style.content_margin_left = 6
 	style.content_margin_top = 6
 	style.content_margin_right = 6

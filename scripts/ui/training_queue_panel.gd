@@ -3,12 +3,6 @@ extends PanelContainer
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
-const _PROGRESS_BG: Texture2D = preload("res://frost_mines_assets/ui/progress_bg.png")
-const _PROGRESS_FILL: Texture2D = preload("res://frost_mines_assets/ui/progress_fill.png")
-const _BUTTON_NORMAL: Texture2D = preload("res://frost_mines_assets/ui/button_normal.png")
-const _BUTTON_HOVER: Texture2D = preload("res://frost_mines_assets/ui/button_hover.png")
-const _BUTTON_PRESSED: Texture2D = preload("res://frost_mines_assets/ui/button_pressed.png")
-
 @onready var _progress_bar: ProgressBar = $MarginContainer/VBoxContainer/ProgressBar
 @onready var _current_label: Label = $MarginContainer/VBoxContainer/CurrentLabel
 @onready var _queue_container: VBoxContainer = $MarginContainer/VBoxContainer/ScrollContainer/QueueContainer
@@ -33,15 +27,13 @@ func _style_progress_bar() -> void:
 	if _progress_bar == null:
 		return
 	_progress_bar.custom_minimum_size = Vector2(0, 14)
-	var bg: StyleBoxTexture = StyleBoxTexture.new()
-	bg.texture = _PROGRESS_BG
-	bg.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
-	bg.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+	var bg: StyleBoxFlat = StyleBoxFlat.new()
+	bg.bg_color = Color("#121a28")
+	bg.set_corner_radius_all(7)
 	_progress_bar.add_theme_stylebox_override("background", bg)
-	var fill: StyleBoxTexture = StyleBoxTexture.new()
-	fill.texture = _PROGRESS_FILL
-	fill.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
-	fill.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+	var fill: StyleBoxFlat = StyleBoxFlat.new()
+	fill.bg_color = Color("#3b82c4")
+	fill.set_corner_radius_all(7)
 	_progress_bar.add_theme_stylebox_override("fill", fill)
 	if _current_label:
 		_current_label.add_theme_color_override("font_color", Color("#e2e8f0"))
@@ -110,17 +102,19 @@ func _make_queue_button(text: String, tooltip: String, color: Color) -> Button:
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.add_theme_font_size_override("font_size", 11)
 	btn.add_theme_color_override("font_color", color)
-	btn.add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_NORMAL))
-	btn.add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_HOVER))
-	btn.add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_PRESSED))
+	btn.add_theme_stylebox_override("normal", _make_flat_style(Color("#1a2434"), Color(1, 1, 1, 0.07)))
+	btn.add_theme_stylebox_override("hover", _make_flat_style(Color("#253650"), Color("#4a86c8")))
+	btn.add_theme_stylebox_override("pressed", _make_flat_style(Color("#111927"), Color(1, 1, 1, 0.07)))
 	return btn
 
 
-func _make_textured_style(texture: Texture2D) -> StyleBoxTexture:
-	var style: StyleBoxTexture = StyleBoxTexture.new()
-	style.texture = texture
-	style.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
-	style.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+func _make_flat_style(bg: Color, border: Color = Color(0, 0, 0, 0)) -> StyleBoxFlat:
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = bg
+	if border.a > 0.0:
+		style.border_color = border
+		style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
 	style.content_margin_left = 4
 	style.content_margin_top = 4
 	style.content_margin_right = 4

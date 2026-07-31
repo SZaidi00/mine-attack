@@ -2,14 +2,21 @@ extends CanvasLayer
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
-const _PANEL_BG: Texture2D = preload("res://frost_mines_assets/ui/panel_background.png")
-const _BUTTON_NORMAL: Texture2D = preload("res://frost_mines_assets/ui/button_normal.png")
-const _BUTTON_HOVER: Texture2D = preload("res://frost_mines_assets/ui/button_hover.png")
-const _BUTTON_PRESSED: Texture2D = preload("res://frost_mines_assets/ui/button_pressed.png")
-const _BUTTON_DISABLED: Texture2D = preload("res://frost_mines_assets/ui/button_disabled.png")
-const _BUTTON_UPGRADE: Texture2D = preload("res://frost_mines_assets/ui/button_upgrade.png")
-const _TAB_ACTIVE: Texture2D = preload("res://frost_mines_assets/ui/tab_active.png")
-const _TAB_INACTIVE: Texture2D = preload("res://frost_mines_assets/ui/tab_inactive.png")
+# Flat UI palette: solid dark panels and buttons with a faint border — no
+# gradient textures, so the bars stay readable over any background.
+const _COL_PANEL_BG: Color = Color(0.047, 0.066, 0.106, 0.94)
+const _COL_PANEL_BORDER: Color = Color(1, 1, 1, 0.08)
+const _COL_BTN_NORMAL: Color = Color("#1a2434")
+const _COL_BTN_HOVER: Color = Color("#253650")
+const _COL_BTN_PRESSED: Color = Color("#111927")
+const _COL_BTN_DISABLED: Color = Color("#151c29")
+const _COL_BTN_BORDER: Color = Color(1, 1, 1, 0.07)
+const _COL_BTN_HOVER_BORDER: Color = Color("#4a86c8")
+const _COL_TAB_ACTIVE: Color = Color("#1f3a5c")
+const _COL_TAB_ACTIVE_BORDER: Color = Color("#4a86c8")
+const _COL_UPGRADE_BG: Color = Color("#272210")
+const _COL_UPGRADE_BORDER: Color = Color("#8a6d1f")
+
 const _ICON_COIN: Texture2D = preload("res://frost_mines_assets/icons/icon_coin.png")
 const _ICON_MINER: Texture2D = preload("res://frost_mines_assets/icons/icon_miner.png")
 const _ICON_SWORDSMAN: Texture2D = preload("res://frost_mines_assets/icons/icon_swordsman.png")
@@ -211,10 +218,14 @@ func _ignore_mouse_recursive(node: Node) -> void:
 
 
 func _style_panel(panel: PanelContainer) -> void:
-	var style: StyleBoxTexture = StyleBoxTexture.new()
-	style.texture = _PANEL_BG
-	style.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
-	style.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = _COL_PANEL_BG
+	style.border_color = _COL_PANEL_BORDER
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(10)
+	style.shadow_color = Color(0, 0, 0, 0.35)
+	style.shadow_size = 6
+	style.shadow_offset = Vector2(0, 2)
 	panel.add_theme_stylebox_override("panel", style)
 
 
@@ -225,9 +236,9 @@ func _style_tab_buttons() -> void:
 		btn.add_theme_color_override("font_color", Color("#e2e8f0"))
 		btn.add_theme_color_override("font_pressed_color", Color("#ffffff"))
 		btn.add_theme_color_override("font_hover_color", Color("#ffffff"))
-		btn.add_theme_stylebox_override("normal", _make_textured_style(_TAB_INACTIVE, 4))
-		btn.add_theme_stylebox_override("pressed", _make_textured_style(_TAB_ACTIVE, 4))
-		btn.add_theme_stylebox_override("hover", _make_textured_style(_TAB_ACTIVE, 4))
+		btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_BTN_NORMAL))
+		btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_TAB_ACTIVE, _COL_TAB_ACTIVE_BORDER))
+		btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_BTN_HOVER, _COL_BTN_HOVER_BORDER))
 
 
 func _style_speed_buttons() -> void:
@@ -238,9 +249,9 @@ func _style_speed_buttons() -> void:
 		btn.add_theme_color_override("font_color", Color("#e2e8f0"))
 		btn.add_theme_color_override("font_pressed_color", Color("#ffffff"))
 		btn.add_theme_color_override("font_hover_color", Color("#ffffff"))
-		btn.add_theme_stylebox_override("normal", _make_textured_style(_TAB_INACTIVE, 4))
-		btn.add_theme_stylebox_override("pressed", _make_textured_style(_TAB_ACTIVE, 4))
-		btn.add_theme_stylebox_override("hover", _make_textured_style(_TAB_ACTIVE, 4))
+		btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_BTN_NORMAL))
+		btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_TAB_ACTIVE, _COL_TAB_ACTIVE_BORDER))
+		btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_BTN_HOVER, _COL_BTN_HOVER_BORDER))
 
 
 func _set_game_speed(speed: float) -> void:
@@ -260,10 +271,10 @@ func _style_upgrade_button() -> void:
 	_upgrade_button.add_theme_font_size_override("font_size", 12)
 	_upgrade_button.add_theme_color_override("font_color", Color("#fbbf24"))
 	_upgrade_button.add_theme_color_override("font_disabled_color", Color("#94a3b8"))
-	_upgrade_button.add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_UPGRADE, 6))
-	_upgrade_button.add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_UPGRADE, 6))
-	_upgrade_button.add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_PRESSED, 6))
-	_upgrade_button.add_theme_stylebox_override("disabled", _make_textured_style(_BUTTON_DISABLED, 6))
+	_upgrade_button.add_theme_stylebox_override("normal", _make_flat_style(_COL_UPGRADE_BG, _COL_UPGRADE_BORDER))
+	_upgrade_button.add_theme_stylebox_override("hover", _make_flat_style(_COL_UPGRADE_BG.lightened(0.12), Color("#fbbf24")))
+	_upgrade_button.add_theme_stylebox_override("pressed", _make_flat_style(_COL_UPGRADE_BG.darkened(0.4), _COL_UPGRADE_BORDER))
+	_upgrade_button.add_theme_stylebox_override("disabled", _make_flat_style(_COL_BTN_DISABLED))
 
 
 func _style_stance_buttons() -> void:
@@ -271,16 +282,18 @@ func _style_stance_buttons() -> void:
 		btn.custom_minimum_size = Vector2(100, 70)
 		btn.add_theme_font_size_override("font_size", 12)
 		btn.add_theme_color_override("font_color", Color("#e2e8f0"))
-		btn.add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_NORMAL, 6))
-		btn.add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_HOVER, 6))
-		btn.add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_PRESSED, 6))
+		btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_BTN_NORMAL, _COL_BTN_BORDER))
+		btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_BTN_HOVER, _COL_BTN_HOVER_BORDER))
+		btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_BTN_PRESSED, _COL_BTN_BORDER))
 
 
-func _make_textured_style(texture: Texture2D, content_margin: int = 6) -> StyleBoxTexture:
-	var style: StyleBoxTexture = StyleBoxTexture.new()
-	style.texture = texture
-	style.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
-	style.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_STRETCH
+func _make_flat_style(bg: Color, border: Color = Color(0, 0, 0, 0), radius: int = 8, content_margin: int = 6) -> StyleBoxFlat:
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = bg
+	if border.a > 0.0:
+		style.border_color = border
+		style.set_border_width_all(1)
+	style.set_corner_radius_all(radius)
 	style.content_margin_left = content_margin
 	style.content_margin_top = content_margin
 	style.content_margin_right = content_margin
@@ -359,10 +372,10 @@ func _style_fighter_upgrade_buttons() -> void:
 		btn.add_theme_font_size_override("font_size", 11)
 		btn.add_theme_color_override("font_color", Color("#fbbf24"))
 		btn.add_theme_color_override("font_disabled_color", Color("#94a3b8"))
-		btn.add_theme_stylebox_override("normal", _make_textured_style(_BUTTON_UPGRADE, 6))
-		btn.add_theme_stylebox_override("hover", _make_textured_style(_BUTTON_UPGRADE, 6))
-		btn.add_theme_stylebox_override("pressed", _make_textured_style(_BUTTON_PRESSED, 6))
-		btn.add_theme_stylebox_override("disabled", _make_textured_style(_BUTTON_DISABLED, 6))
+		btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_UPGRADE_BG, _COL_UPGRADE_BORDER))
+		btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_UPGRADE_BG.lightened(0.12), Color("#fbbf24")))
+		btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_UPGRADE_BG.darkened(0.4), _COL_UPGRADE_BORDER))
+		btn.add_theme_stylebox_override("disabled", _make_flat_style(_COL_BTN_DISABLED))
 
 
 func _update_upgrade_button() -> void:
