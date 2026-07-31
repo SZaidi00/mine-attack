@@ -54,6 +54,7 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 @onready var _defend_button: Button = $BottomBar/MarginContainer/HBoxContainer/DefendButton
 @onready var _garrison_button: Button = $BottomBar/MarginContainer/HBoxContainer/GarrisonButton
 @onready var _rally_button: Button = $BottomBar/MarginContainer/HBoxContainer/RallyButton
+@onready var _stance_buttons: Dictionary = {}
 @onready var _game_over_panel: PanelContainer = $GameOverPanel
 
 
@@ -75,6 +76,11 @@ func _ready() -> void:
 	_style_upgrade_button()
 	_style_fighter_upgrade_buttons()
 	_style_stance_buttons()
+	_stance_buttons = {
+		"attack": _attack_button,
+		"defend": _defend_button,
+		"garrison": _garrison_button,
+	}
 	_add_stat_icons()
 	_add_unit_breakdown_icons()
 	_add_attack_button_icon()
@@ -127,6 +133,7 @@ func _process(_delta: float) -> void:
 		# the controller waits for the rally-point right-click.
 		if _rally_button.button_pressed != pc.is_rally_armed():
 			_rally_button.set_pressed_no_signal(pc.is_rally_armed())
+		_sync_stance_buttons(pc)
 	_update_upgrade_button()
 	_update_fighter_upgrade_buttons()
 	_update_unit_breakdown()
@@ -282,9 +289,10 @@ func _style_stance_buttons() -> void:
 		btn.custom_minimum_size = Vector2(100, 70)
 		btn.add_theme_font_size_override("font_size", 12)
 		btn.add_theme_color_override("font_color", Color("#e2e8f0"))
+		btn.add_theme_color_override("font_pressed_color", Color("#ffffff"))
 		btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_BTN_NORMAL, _COL_BTN_BORDER))
 		btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_BTN_HOVER, _COL_BTN_HOVER_BORDER))
-		btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_BTN_PRESSED, _COL_BTN_BORDER))
+		btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_TAB_ACTIVE, _COL_TAB_ACTIVE_BORDER))
 
 
 func _make_flat_style(bg: Color, border: Color = Color(0, 0, 0, 0), radius: int = 8, content_margin: int = 6) -> StyleBoxFlat:
@@ -446,6 +454,16 @@ func _update_selection_label(pc: PlayerController) -> void:
 				_selection_label.text += " — Gold %d/%d" % [unit.get("carried_coin"), data.carry_capacity]
 			return
 	_selection_label.text = "Selected: %d" % selected.size()
+
+
+## The Attack/Defend/Garrison buttons are toggles reflecting the persistent
+## stance mode: the active mode stays highlighted (radio-style).
+func _sync_stance_buttons(pc: PlayerController) -> void:
+	var stance: String = pc.get_stance()
+	for stance_name: String in _stance_buttons:
+		var btn: Button = _stance_buttons[stance_name]
+		if btn.button_pressed != (stance == stance_name):
+			btn.set_pressed_no_signal(stance == stance_name)
 
 
 func _sync_view_buttons() -> void:

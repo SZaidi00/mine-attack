@@ -28,6 +28,9 @@ var _view_slide_target: Vector2 = Vector2.INF
 var _shake_strength: float = 0.0
 # Rally stance armed: the next left-click sets the rally point for all fighters.
 var _rally_armed: bool = false
+# Persistent army mode set by the Attack/Defend/Garrison buttons: newly
+# trained fighters automatically receive this order when they spawn.
+var _current_stance: String = "defend"
 
 
 func _ready() -> void:
@@ -44,7 +47,30 @@ func _ready() -> void:
 		selection_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_init_view_positions()
 	_connect_building_shake()
+	_connect_building_spawns()
 	call_deferred("_validate_setup")
+
+
+## Newly trained player fighters automatically receive the current stance mode
+## (Attack/Defend/Garrison) as soon as they leave the building.
+func _connect_building_spawns() -> void:
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.get("team") == GameManager.Team.PLAYER and b.has_signal("unit_spawned"):
+			b.unit_spawned.connect(_on_fighter_spawned)
+
+
+func _on_fighter_spawned(unit: Node2D) -> void:
+	var data = unit.get("data")
+	if data == null or data.is_miner:
+		return  # Miners always auto-enter the mine, regardless of stance.
+	match _current_stance:
+		"attack":
+			var enemy_building: Node2D = _enemy_building()
+			if enemy_building:
+				unit.attack_building(enemy_building)
+		"garrison":
+			unit.garrison_home()
+		# "defend" needs no order: a fresh fighter already holds its spawn post.
 
 
 ## Screen shake (Phase 8): small rumble on every building hit, a big one when
@@ -501,27 +527,27 @@ func _set_rally_point(screen_pos: Vector2) -> void:
 
 func set_stance(stance: String) -> void:
 	# [DECISION] Stances are army-wide orders to every living player fighter;
-	# right-click issues orders to the current selection only.
-	var fighters: Array = _filter_fighters(get_tree().get_nodes_in_group("player"))
-	if fighters.is_empty():
-		DebugLog.log_reject("PlayerController", "set_stance " + stance, "no fighters")
-		return
-	# Choosing any stance cancels a pending rally-point placement.
-	if stance != "rally":
+	# right-click issues orders to the current selection only. Attack/Defend/
+	# Garrison are also persistent modes: the choice is remembered and applied
+	# to every fighter trained afterwards (see _on_fighter_spawned), so setting
+	# a mode with zero fighters is valid.
+	if stance in ["attack", "defend", "garrison"]:
+		# Choosing any stance cancels a pending rally-point placement.
 		_rally_armed = false
+		_current_stance = stance
+	var fighters: Array = _filter_fighters(get_tree().get_nodes_in_group("player"))
 	match stance:
 		"rally":
+			if fighters.is_empty():
+				DebugLog.log_reject("PlayerController", "set_stance rally", "no fighters")
+				return
 			# No immediate order: the next left-click places the rally point
 			# (see _set_rally_point; right-click cancels). Fighters then hunt
 			# everything on the surface — enemy miners included.
 			_rally_armed = true
 			DebugLog.log_command("PlayerController", "stance rally", "armed; awaiting rally point left-click")
 		"attack":
-			var enemy_building: Node2D = null
-			for b in get_tree().get_nodes_in_group("buildings"):
-				if b.get("team") != GameManager.Team.PLAYER:
-					enemy_building = b
-					break
+			var enemy_building: Node2D = _enemy_building()
 			if enemy_building == null:
 				DebugLog.log_reject("PlayerController", "set_stance attack", "no enemy building")
 				return
@@ -540,6 +566,17 @@ func set_stance(stance: String) -> void:
 				u.garrison_home()
 		_:
 			DebugLog.log_reject("PlayerController", "set_stance", "unknown stance " + stance)
+
+
+func get_stance() -> String:
+	return _current_stance
+
+
+func _enemy_building() -> Node2D:
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.get("team") != GameManager.Team.PLAYER:
+			return b
+	return null
 
 
 func get_selected_units() -> Array:

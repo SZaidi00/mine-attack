@@ -121,7 +121,7 @@ Global singletons accessible from any script via their class name.
   - Supports camera view bookmarks (Tab / Surface / Underground buttons) and pause (Space / Esc toggles `get_tree().paused`). Both layers are always rendered, so `set_view(underground)` only saves the current camera position and slides the camera to the other view's last position (surface base ↔ own mine underground; manual pan cancels the slide), emitting `view_mode_changed(mode)`.
   - Screen shake (Phase 8): connected to both buildings' `hp_changed` (small rumble) and `destroyed` (big shake), applied as a decaying `camera.offset`.
   - Provides UI callbacks: `train_unit(unit_id)`, `upgrade_miner()`, `upgrade_fighter(unit_id)`, `set_stance(stance)`, `set_view(underground)`.
-  - Stances: `"attack"` (rush enemy building), `"defend"` (stop/hold in place), `"garrison"` (fall back and defend the base — underground fighters climb out, everyone gathers at the home building's deposit point and holds there via `garrison_home()`), `"rally"` (arms rally mode — the next **left-click** places an army-wide rally point, right-click cancels; fighters hunt every enemy on the surface, miners included, and fall back to the point; any explicit command cancels a unit's rally).
+  - Stances: `"attack"` (rush enemy building), `"defend"` (stop/hold in place), `"garrison"` (fall back and defend the base — underground fighters climb out, everyone gathers at the home building's deposit point and holds there via `garrison_home()`), `"rally"` (arms rally mode — the next **left-click** places an army-wide rally point, right-click cancels; fighters hunt every enemy on the surface, miners included, and fall back to the point; any explicit command cancels a unit's rally). Attack/Defend/Garrison are persistent **modes** (`_current_stance`, default `"defend"`): setting one works with zero fighters, and every fighter trained afterwards automatically gets the mode's order on spawn (building `unit_spawned` → `_on_fighter_spawned`; miners are exempt and always enter the mine). The HUD stance buttons are toggles highlighting the active mode. Rally is momentary and does not change the mode.
 
 - `ai_controller.gd`
   - Tick-driven AI with separate timers for economy (`ENEMY_DECISION_INTERVAL` = 2s, scaled by the difficulty `upgrade_speed`), mining (1s), attack waves (`ENEMY_ATTACK_WAVE_INTERVAL` = 18s), and aggression updates (`ENEMY_AGGRESSION_INTERVAL` = 10s). The economy tick buys miner upgrades first, then fighter upgrades once a 400-coin reserve is safe (cheapest first).
@@ -148,7 +148,7 @@ Global singletons accessible from any script via their class name.
   - Training queue with `queue_unit(unit_id)` and `cancel_queue(index)` (100% refund). The AI building's training speed and deposit income scale with the difficulty modifiers; the player is always ×1.0.
   - Default building HP is 5000 (`PLAYER_BUILDING_HP` / `ENEMY_BUILDING_HP`).
   - Spawns units at the building front and automatically sends miners into the mine.
-  - Emits `hp_changed`, `queue_changed`, `destroyed`, `coin_deposited`.
+  - Emits `hp_changed`, `queue_changed`, `destroyed`, `coin_deposited`, `unit_spawned`.
   - On destruction: clears the queue, leaves the `"buildings"` group, plays a collapse (one-shot dust burst + squash/darken tween under the slow-mo), and hides its HP bar. Sounds: coin chime on deposit, alarm below 25% HP, blast on destruction.
   - Owns the miner deposit point (Phase 3.1): a `DepositPoint` Marker2D just outside the front edge on the surface row; `deposit(unit)` converts carried coin into team coin and spawns the coin popup there.
   - Draws a team-specific building sprite and a health bar above it.
@@ -346,6 +346,7 @@ The project uses [GUT](https://github.com/bitwes/Gut) 9.6.1 (committed under `ad
 - `tests/test_unit_guards.gd` — fighter `mine_cell` rejected, enemy mine entry rejected, unreachable mine target blacklisted, empty-cargo deposit rejected.
 - `tests/test_ai_retaliation.gd` — damaged AI sieger eventually retaliates against its attacker, undamaged sieger stays on the building, player units never auto-retaliate.
 - `tests/test_rally.gd` — rally targets surface miners, skips underground enemies, engagement keeps the rally active, explicit commands cancel it, miners can't rally, miner death drops full cargo as a pickup.
+- `tests/test_stance_modes.gd` — stance modes persist with zero fighters, attack/garrison/defend modes auto-order newly spawned fighters, miners ignore modes, rally doesn't change the mode.
 
 > Test harness gotcha: every script that boots `main.tscn` must free it **immediately** in `after_all` (`_main.free()`, never `queue_free()`). A deferred free can still be pending when the next script instantiates its own `main.tscn` — the old `Main` name stays taken, the new scene gets renamed, and every hard-coded `/root/Main/...` lookup breaks (flaky, timing-dependent failures).
 

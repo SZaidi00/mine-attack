@@ -440,18 +440,22 @@ text = "Upgrade\nWizard"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 70)
 layout_mode = 2
+toggle_mode = true
 text = "Attack"
 
 [node name="DefendButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 70)
 layout_mode = 2
+toggle_mode = true
+button_pressed = true
 text = "Defend"
 
 [node name="GarrisonButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 70)
 layout_mode = 2
+toggle_mode = true
 text = "Garrison"
 
 [node name="RallyButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]

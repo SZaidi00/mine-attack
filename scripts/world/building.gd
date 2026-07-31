@@ -15,6 +15,7 @@ signal hp_changed(current: int, maximum: int)
 signal queue_changed(entries: Array)
 signal destroyed(team: GameManager.Team)
 signal coin_deposited(team: GameManager.Team, amount: int)
+signal unit_spawned(unit: Node2D)
 
 @export var team: GameManager.Team = GameManager.Team.PLAYER
 @export var max_hp: int = _Constants.PLAYER_BUILDING_HP
@@ -165,6 +166,7 @@ func _spawn_front(_unit_id: String, data: UnitData) -> void:
 	unit.set("team", team)
 	unit.position = _spawn_position()
 	get_node("/root/Main/Units").add_child(unit)
+	unit_spawned.emit(unit)
 	# Make sure miners head straight into the shaft as soon as they spawn.
 	if data_copy.is_miner and unit.has_method("climb_down_ladder"):
 		unit.call("climb_down_ladder")
