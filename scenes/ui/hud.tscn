@@ -460,7 +460,7 @@ custom_minimum_size = Vector2(100, 70)
 layout_mode = 2
 toggle_mode = true
 text = "Rally"
-tooltip_text = "Click, then right-click a rally point: fighters hunt everything on the surface (miners included)"
+tooltip_text = "Click, then left-click a rally point: fighters hunt everything on the surface (right-click cancels)"
 
 [node name="QueuePanel" type="PanelContainer" parent="."]
 anchors_preset = 11

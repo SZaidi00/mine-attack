@@ -71,6 +71,49 @@ func test_explicit_command_cancels_rally() -> void:
 	assert_false(fighter.get("_rally_active"), "any explicit command cancels the rally")
 
 
+func test_rally_underground_point_rejected() -> void:
+	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(0, 16))
+	fighter.call("rally_to", Vector2(0, 200))
+	assert_false(fighter.get("_rally_active"), "underground rally points are rejected (surface hunt only)")
+
+
+func test_fighter_returns_to_post_when_idle() -> void:
+	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(-300, 16))
+	var post: Vector2 = fighter.get("_post_point")
+	assert_eq(post, fighter.global_position, "post defaults to the spawn point")
+	fighter.global_position = Vector2(100, 16)  # teleported far from its post
+	await wait_frames(3)
+	assert_eq(fighter.get("_state"), 1, "idle fighter walks back to its post")  # State.MOVE == 1
+	var path: PackedVector2Array = fighter.get("_path")
+	assert_false(path.is_empty(), "has a path home")
+	if not path.is_empty():
+		assert_true(path[path.size() - 1].distance_to(post) < 20.0, "path ends at the post")
+
+
+func test_move_to_updates_post() -> void:
+	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(-300, 16))
+	fighter.call("move_to", Vector2(100, 16))
+	assert_eq(fighter.get("_post_point"), Vector2(100, 16), "explicit move sets a new post")
+
+
+func test_garrison_recalls_fighters_to_base() -> void:
+	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(-350, 16))
+	fighter.call("move_to", Vector2(300, 16))  # ordered far from home first
+	var pc: Node = _main.get_node("PlayerController")
+	pc.set_stance("garrison")
+	assert_true(fighter.get("_post_point").x < -380.0, "post becomes the home building, not the old spot")
+	assert_eq(fighter.get("_state"), 1, "fighter moves home to defend")  # State.MOVE == 1
+
+
+func test_garrison_exits_mine() -> void:
+	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(-350, 176))
+	fighter.set("is_underground", true)
+	var pc: Node = _main.get_node("PlayerController")
+	pc.set_stance("garrison")
+	assert_eq(fighter.get("_state"), 6, "underground fighters climb out of the mine")  # State.EXIT_MINE == 6
+	assert_true(fighter.get("_post_point").x < -380.0, "post is the home building")
+
+
 func test_rally_rejected_for_miners() -> void:
 	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(-500, 16))
 	miner.call("rally_to", Vector2(200, 16))

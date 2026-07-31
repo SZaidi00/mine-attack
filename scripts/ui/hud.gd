@@ -429,6 +429,8 @@ func _update_selection_label(pc: PlayerController) -> void:
 		var data = unit.get("data")
 		if data != null:
 			_selection_label.text = "%s — HP %d/%d" % [data.unit_name, unit.get("hp"), data.max_hp]
+			if data.is_miner:
+				_selection_label.text += " — Gold %d/%d" % [unit.get("carried_coin"), data.carry_capacity]
 			return
 	_selection_label.text = "Selected: %d" % selected.size()
 

@@ -82,6 +82,11 @@ var _fighter_level_applied: int = 1
 # reaches zero (see _process).
 var _regen_delay: float = 0.0
 var _regen_accum: float = 0.0
+# The spot a fighter returns to when idle on the surface (its "standing
+# point"). Set at spawn, updated by explicit move/stop orders; attack and
+# auto-attack engagements leave it alone, so units regroup after a fight
+# instead of spreading across the map.
+var _post_point: Vector2 = Vector2.ZERO
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -96,6 +101,7 @@ func _ready() -> void:
 	_add_hover_area()
 	add_to_group(team_name())
 	_movement_offset = Vector2(randf_range(-8, 8), randf_range(-6, 6))
+	_post_point = global_position
 	_connect_view_mode()
 	queue_redraw()
 	# Spawners (the building) are responsible for issuing the first command.
@@ -204,6 +210,7 @@ func move_to(world_pos: Vector2) -> void:
 		_set_state(State.IDLE, "move target unreachable")
 		return
 	DebugLog.log_command("Unit %d" % get_instance_id(), "move_to", str(world_pos))
+	_post_point = world_pos
 	_set_state(State.MOVE, "move_to command")
 
 
@@ -349,20 +356,55 @@ func climb_down_ladder() -> void:
 func stop() -> void:
 	DebugLog.log_command("Unit %d" % get_instance_id(), "stop")
 	_clear_target()
+	_post_point = global_position  # Defend/hold means: stay right here.
 	_set_state(State.IDLE, "stop command")
 	_path.clear()
 
 
+## Garrison order (fighters): fall back and defend the home base. Underground
+## fighters come out of the mine first (the idle handler walks them to the
+## post once they surface); surface fighters move straight to the building's
+## deposit point and hold there (it becomes their new standing point).
+func garrison_home() -> void:
+	if data == null or not data.is_fighter:
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "garrison_home", "not a fighter")
+		return
+	_clear_target()
+	var building: Node2D = _friendly_building()
+	if building == null:
+		_set_state(State.IDLE, "no building to garrison")
+		return
+	_post_point = building.call("get_deposit_point") + _movement_offset
+	DebugLog.log_command("Unit %d" % get_instance_id(), "garrison_home", str(_post_point))
+	if is_underground:
+		exit_mine()
+	else:
+		move_to(_post_point)
+
+
 ## Rally stance order (fighters only): move to the point while hunting every
 ## enemy on the surface — miners included. The rally stays active until any
-## explicit command cancels it (_clear_target resets the flag).
+## explicit command cancels it (_clear_target resets the flag). Underground
+## points are rejected (the sweep is a surface hunt); underground fighters
+## ride the ladder up first and resume the rally on the surface.
 func rally_to(world_pos: Vector2) -> void:
 	if data == null or not data.is_fighter:
 		DebugLog.log_reject("Unit %d" % get_instance_id(), "rally_to", "not a fighter")
 		return
+	if world_pos.y > GridWorld.CELL_SIZE:
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "rally_to", "underground rally point")
+		_spawn_reject_popup(world_pos)
+		return
 	_clear_target()
+	if is_underground:
+		# Climb out first; _clear_target inside climb_up_ladder would wipe the
+		# rally state, so it is set below, after the climb is under way.
+		climb_up_ladder()
 	_rally_active = true
 	_rally_point = world_pos
+	if _state == State.CLIMB_UP:
+		DebugLog.log_command("Unit %d" % get_instance_id(), "rally_to", str(world_pos) + " (after climbing out)")
+		return
 	_target_position = world_pos
 	_repath(world_pos)
 	if _path.is_empty():
@@ -1172,6 +1214,21 @@ func _handle_idle_fighter() -> void:
 		return
 	if is_underground:
 		_patrol_underground()
+		return
+	_return_to_post_if_needed()
+
+
+## Idle on the surface with nothing to fight: drift back to the standing point
+## (spawn spot, last move destination, or hold position) so the army regroups
+## instead of spreading across the map after every engagement.
+func _return_to_post_if_needed() -> void:
+	if _post_point == Vector2.ZERO:
+		return
+	if global_position.distance_to(_post_point) <= GridWorld.CELL_SIZE * 1.5:
+		return
+	_repath(_post_point + _movement_offset)
+	if not _path.is_empty():
+		_set_state(State.MOVE, "return to post")
 
 
 ## Rally hunt: engage the best surface target without cancelling the rally.
@@ -1524,6 +1581,11 @@ func _draw() -> void:
 			var src_rect: Rect2 = Rect2(0, 0, fill_texture.get_width() * hp_pct, fill_texture.get_height())
 			draw_texture_rect_region(fill_texture, fill_rect, src_rect)
 
-	# Carried coin indicator for miners.
-	if data.is_miner and carried_coin > 0:
-		draw_rect(Rect2(-6, body_bottom + 2, 12, 6), GameManager.COLOR_RUST, true)
+	# Cargo readout above miners: carried / capacity, shown while hauling and
+	# whenever the miner is hovered or selected.
+	if data.is_miner and (carried_coin > 0 or selected or hovered):
+		var cargo_text: String = "%d/%d" % [carried_coin, data.carry_capacity]
+		var font: Font = ThemeDB.fallback_font
+		var text_pos := Vector2(-20, body_top - 12)
+		draw_string(font, text_pos + Vector2(1, 1), cargo_text, HORIZONTAL_ALIGNMENT_CENTER, 40, 10, Color(0, 0, 0, 0.8))
+		draw_string(font, text_pos, cargo_text, HORIZONTAL_ALIGNMENT_CENTER, 40, 10, Color(0.984, 0.749, 0.141))
