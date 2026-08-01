@@ -16,6 +16,8 @@ var _is_dragging: bool = false
 var _camera_speed: float = 600.0
 var _zoom_min: float = 0.65
 var _zoom_max: float = 2.0
+# User wheel-zoom factor around the resolution-adaptive base zoom (1.0 default).
+var _zoom_factor: float = 1.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -48,6 +50,8 @@ func _ready() -> void:
 	_init_view_positions()
 	_connect_building_shake()
 	_connect_building_spawns()
+	_apply_zoom()
+	get_window().size_changed.connect(_apply_zoom)
 	call_deferred("_validate_setup")
 
 
@@ -110,6 +114,28 @@ func _init_view_positions() -> void:
 		camera.position = _last_surface_cam_pos
 	else:
 		camera.position = _last_underground_cam_pos
+
+
+## Resolution-adaptive base zoom: the stretch setup (canvas_items/expand +
+## stretch/scale) keeps the UI at a fixed logical 1920x1080, but the world
+## should use every pixel the window offers — a 2560x1440 window shows a
+## 2560x1440 world area (nearly the whole map), a 1280x720 window a
+## 1280x720 area. Note `content_scale_factor` does NOT track window size in
+## canvas_items mode (it only carries the stretch scale), so the ratio is
+## computed from the visible rect vs. the actual window size instead.
+## The wheel zoom multiplies on top of this base.
+func _base_zoom() -> float:
+	var win_size: Vector2i = get_window().size
+	if win_size.x <= 0:
+		return 1.0
+	var logical: Vector2 = get_viewport().get_visible_rect().size
+	return logical.x / win_size.x
+
+
+func _apply_zoom() -> void:
+	if camera == null:
+		return
+	camera.zoom = Vector2.ONE * (_base_zoom() * _zoom_factor)
 
 
 func _player_mine_entry() -> Node2D:
@@ -229,9 +255,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed(_Constants.INPUT_SELECT_DRAGONS):
 		_select_units(_filter_dragons(get_tree().get_nodes_in_group("player")))
 	elif event.is_action_pressed(_Constants.INPUT_CAMERA_ZOOM_IN):
-		camera.zoom = (camera.zoom * 1.1).clamp(Vector2(_zoom_min, _zoom_min), Vector2(_zoom_max, _zoom_max))
+		_zoom_factor = clampf(_zoom_factor * 1.1, _zoom_min, _zoom_max)
+		_apply_zoom()
 	elif event.is_action_pressed(_Constants.INPUT_CAMERA_ZOOM_OUT):
-		camera.zoom = (camera.zoom / 1.1).clamp(Vector2(_zoom_min, _zoom_min), Vector2(_zoom_max, _zoom_max))
+		_zoom_factor = clampf(_zoom_factor / 1.1, _zoom_min, _zoom_max)
+		_apply_zoom()
 	elif event.is_action_pressed(_Constants.INPUT_TRAIN_MINER):
 		train_unit("miner")
 	elif event.is_action_pressed(_Constants.INPUT_TRAIN_SWORDSMAN):
