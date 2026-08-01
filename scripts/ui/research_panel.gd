@@ -136,6 +136,11 @@ func _build_ui() -> void:
 
 	var card := PanelContainer.new()
 	card.set_anchors_preset(Control.PRESET_CENTER)
+	# PRESET_CENTER leaves the grow directions at BEGIN, which would expand
+	# the card right/down from the screen center and push the bottom rows
+	# off-screen — grow both ways so it stays centered on its anchor.
+	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	card.grow_vertical = Control.GROW_DIRECTION_BOTH
 	card.custom_minimum_size = Vector2(660, 860)
 	var card_style := StyleBoxFlat.new()
 	card_style.bg_color = Color(0.047, 0.066, 0.106, 0.97)
@@ -145,8 +150,7 @@ func _build_ui() -> void:
 	card_style.shadow_color = Color(0, 0, 0, 0.35)
 	card_style.shadow_size = 6
 	card.add_theme_stylebox_override("panel", card_style)
-	# PRESET_CENTER sets grow-both directions, so the card stays centered
-	# whatever size the content ends up.
+	# Grow-both keeps the card centered whatever size the content ends up.
 	add_child(card)
 
 	var margin := MarginContainer.new()
