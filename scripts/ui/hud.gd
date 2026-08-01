@@ -153,8 +153,8 @@ func _process(_delta: float) -> void:
 		_pause_panel.visible = pause_menu_wanted
 
 
-## Full-screen dim pause menu: resume / restart / quit + difficulty
-## placeholder (functional — applies to the AI immediately).
+## Full-screen dim pause menu: resume / restart / quit + difficulty and
+## resolution selectors (both functional — they apply immediately).
 func _build_pause_menu() -> void:
 	_pause_panel = PanelContainer.new()
 	_pause_panel.name = "PauseMenu"
@@ -194,6 +194,25 @@ func _build_pause_menu() -> void:
 	diff_option.item_selected.connect(func(index: int): GameManager.set_difficulty(index))
 	diff_row.add_child(diff_option)
 	vbox.add_child(diff_row)
+
+	if SettingsManager.is_supported():
+		var res_row: HBoxContainer = HBoxContainer.new()
+		var res_label: Label = Label.new()
+		res_label.text = "Resolution:"
+		res_row.add_child(res_label)
+		var res_option: OptionButton = OptionButton.new()
+		res_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var available: Array[Vector2i] = SettingsManager.get_available_resolutions()
+		var current_res: Vector2i = SettingsManager.get_resolution()
+		if current_res not in available:
+			available.append(current_res)  # Show the actual size (e.g. manually resized window).
+		for res in available:
+			res_option.add_item("%d × %d" % [res.x, res.y])
+			if res == current_res:
+				res_option.selected = res_option.item_count - 1
+		res_option.item_selected.connect(func(index: int): SettingsManager.set_resolution(available[index]))
+		res_row.add_child(res_option)
+		vbox.add_child(res_row)
 
 	add_child(_pause_panel)
 

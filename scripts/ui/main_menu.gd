@@ -1,7 +1,8 @@
 extends Control
 
 ## Main menu: night-sky backdrop with falling snow, both bases on the ground
-## strip, and a centered card with title, difficulty select, Play / Quit.
+## strip, and a centered card with title, difficulty / resolution selects,
+## Play / Quit.
 
 const _SKY: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_sky.png")
 const _GROUND: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_ground.png")
@@ -163,6 +164,28 @@ func _build_card() -> void:
 	_difficulty_option.selected = GameManager.difficulty
 	diff_row.add_child(_difficulty_option)
 	vbox.add_child(diff_row)
+
+	if SettingsManager.is_supported():
+		var res_row := HBoxContainer.new()
+		res_row.add_theme_constant_override("separation", 8)
+		res_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		var res_label := Label.new()
+		res_label.text = "Resolution:"
+		res_label.add_theme_color_override("font_color", Color("#e2e8f0"))
+		res_row.add_child(res_label)
+		var res_option := OptionButton.new()
+		res_option.custom_minimum_size = Vector2(160, 0)
+		var available := SettingsManager.get_available_resolutions()
+		var current := SettingsManager.get_resolution()
+		if current not in available:
+			available.append(current)  # Show the actual size (e.g. manually resized window).
+		for res in available:
+			res_option.add_item("%d × %d" % [res.x, res.y])
+			if res == current:
+				res_option.selected = res_option.item_count - 1
+		res_option.item_selected.connect(func(index: int): SettingsManager.set_resolution(available[index]))
+		res_row.add_child(res_option)
+		vbox.add_child(res_row)
 
 	_add_menu_button(vbox, "Play", _on_play, true)
 	_add_menu_button(vbox, "Quit", func(): get_tree().quit(), false)
