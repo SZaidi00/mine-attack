@@ -78,13 +78,16 @@ var _rally_point: Vector2 = Vector2.ZERO
 var _rally_scan_timer: float = 0.0
 # Team-wide fighter upgrade level already applied to this unit's data.
 var _fighter_level_applied: int = 1
-# Research tree bonuses: _armor is a flat damage reduction (Bulwark); the
-# others track what has already been folded into the duplicated UnitData so
-# re-applying after each completed research never compounds.
+# Research tree bonuses: _armor is a flat damage reduction (Bulwark). The
+# base combat stats below are captured once so research bonuses recompute
+# from them each tick — nothing else mutates them, and the recompute never
+# compounds (miner speed/carry recompute from Constants.MINER_STATS for the
+# same reason: _apply_miner_upgrade rewrites those stats on level-up).
 var _armor: int = 0
-var _applied_archer_range: float = 0.0
-var _applied_wizard_aoe_mult: float = 0.0
-var _applied_miner_carry: float = 0.0
+var _research_base_captured: bool = false
+var _base_attack_range: float = 0.0
+var _base_aoe_radius: float = 0.0
+var _base_attack_cooldown: float = 0.0
 # Out-of-combat regen: counts down after each hit taken; HP accrues once it
 # reaches zero (see _process).
 var _regen_delay: float = 0.0
@@ -434,6 +437,12 @@ func rally_to(world_pos: Vector2) -> void:
 
 
 func take_damage(amount: int, attacker: Node2D = null) -> void:
+	# Corpses take no damage: a dying unit stays valid for its 1s fade-out and
+	# in-flight projectiles can still land on it — without this guard each
+	# extra hit re-runs _die() and leaks a population slot (army grows past
+	# MAX_UNITS over a long match).
+	if _state == State.DEAD:
+		return
 	if not can_be_damaged_by(attacker):
 		_spawn_immune_popup()
 		return
@@ -1179,6 +1188,10 @@ func _nearest_friendly_mine_entry() -> Node2D:
 
 
 func _die() -> void:
+	# Idempotent: take_damage already guards, keep a second line of defence so
+	# population is never removed twice for the same unit.
+	if _state == State.DEAD:
+		return
 	_set_state(State.DEAD, "death")
 	_dead_timer = 1.0
 	_release_claim()
@@ -1533,31 +1546,32 @@ func _apply_miner_upgrade() -> void:
 	queue_redraw()
 
 
-## Research tree bonuses (ResearchManager): folds the team's researched stat
-## bonuses into this unit's duplicated UnitData. Called every tick like the
-## upgrade appliers; each key early-outs when nothing changed, and deltas (or
-## exact multiplier inversion for AoE) keep re-application from compounding.
+## Research tree bonuses (ResearchManager): recomputes the team's researched
+## stat bonuses into this unit's duplicated UnitData every tick from
+## authoritative sources (captured base stats / Constants tables), so the
+## result never compounds and survives upgrades rewriting the same stats.
 func _apply_research_bonuses() -> void:
+	if not _research_base_captured:
+		_research_base_captured = true
+		_base_attack_range = data.attack_range
+		_base_aoe_radius = data.aoe_radius
+		_base_attack_cooldown = data.attack_cooldown
 	if data.is_miner:
-		var carry: float = ResearchManager.get_stat_bonus(team, "miner_carry")
-		if carry != _applied_miner_carry:
-			data.carry_capacity += int(carry - _applied_miner_carry)
-			_applied_miner_carry = carry
-			queue_redraw()
+		var level: int = clampi(data.miner_level, 1, 3)
+		data.speed = Constants.MINER_STATS[level].speed + ResearchManager.get_stat_bonus(team, "miner_speed")
+		data.carry_capacity = Constants.MINER_STATS[level].carry + int(ResearchManager.get_stat_bonus(team, "miner_carry"))
 	elif data.is_fighter:
 		match data.unit_name.to_lower():
 			"swordsman":
 				_armor = int(ResearchManager.get_stat_bonus(team, "swordsman_armor"))
+				data.attack_cooldown = _base_attack_cooldown * (1.0 - ResearchManager.get_stat_bonus(team, "swordsman_cdr"))
 			"archer":
-				var range_bonus: float = ResearchManager.get_stat_bonus(team, "archer_range")
-				if range_bonus != _applied_archer_range:
-					data.attack_range += range_bonus - _applied_archer_range
-					_applied_archer_range = range_bonus
+				data.attack_range = _base_attack_range + ResearchManager.get_stat_bonus(team, "archer_range")
+				data.attack_cooldown = _base_attack_cooldown * (1.0 - ResearchManager.get_stat_bonus(team, "archer_cdr"))
 			"wizard":
-				var aoe_mult: float = ResearchManager.get_stat_bonus(team, "wizard_aoe_mult")
-				if aoe_mult != _applied_wizard_aoe_mult:
-					data.aoe_radius = data.aoe_radius / (1.0 + _applied_wizard_aoe_mult) * (1.0 + aoe_mult)
-					_applied_wizard_aoe_mult = aoe_mult
+				data.aoe_radius = _base_aoe_radius * (1.0 + ResearchManager.get_stat_bonus(team, "wizard_aoe_mult"))
+				var fighter_level: int = EconomyManager.get_fighter_level(team, "wizard")
+				data.damage_per_hit = Constants.FIGHTER_UPGRADES["wizard"][fighter_level].damage * (1.0 + ResearchManager.get_stat_bonus(team, "wizard_damage_mult"))
 
 
 func _draw_pickaxe(draw_body: bool = true) -> void:

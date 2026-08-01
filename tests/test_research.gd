@@ -204,8 +204,117 @@ func test_revealed_ore_marks_cells_for_the_team() -> void:
 	assert_true(found, "scan marks ore cells as revealed for the scanning team")
 
 
-# ─── Reset ───
+# ─── Prerequisites (tree tiers) ───
 
+func test_tier_two_tech_rejected_until_prerequisite_researched() -> void:
+	assert_false(ResearchManager.are_prerequisites_met(PLAYER, "swift_boots"))
+	assert_false(ResearchManager.start_research(PLAYER, "swift_boots"), "needs Reinforced Pack L1 first")
+	ResearchManager._levels[PLAYER]["reinforced_pack"] = 1
+	assert_true(ResearchManager.are_prerequisites_met(PLAYER, "swift_boots"))
+	assert_true(ResearchManager.start_research(PLAYER, "swift_boots"))
+
+
+func test_deep_scan_requires_full_ore_sonar() -> void:
+	ResearchManager._levels[PLAYER]["ore_sonar"] = 1
+	assert_false(ResearchManager.are_prerequisites_met(PLAYER, "deep_scan"), "sonar L1 is not enough")
+	ResearchManager._levels[PLAYER]["ore_sonar"] = 2
+	assert_true(ResearchManager.are_prerequisites_met(PLAYER, "deep_scan"))
+
+
+func test_deep_scan_extends_sonar_level() -> void:
+	ResearchManager._levels[PLAYER]["ore_sonar"] = 2
+	ResearchManager._levels[PLAYER]["deep_scan"] = 1
+	assert_eq(ResearchManager.get_sonar_level(PLAYER), 3)
+	assert_eq(ResearchManager.get_scan_cooldown_total(PLAYER), Constants.SONAR_COOLDOWN[3])
+
+
+# ─── Tier-2 effects ───
+
+func test_swift_boots_raises_miner_speed() -> void:
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(400, 16))
+	ResearchManager._levels[PLAYER]["swift_boots"] = 1
+	miner.call("_apply_research_bonuses")
+	assert_eq(miner.get("data").speed, 60.0 + 15.0)
+
+
+func test_miner_research_bonuses_survive_miner_upgrade() -> void:
+	# The miner upgrade rewrites speed/carry authoritatively; research bonuses
+	# must recompute on top, not get wiped or compound.
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(400, 16))
+	ResearchManager._levels[PLAYER]["swift_boots"] = 1
+	ResearchManager._levels[PLAYER]["reinforced_pack"] = 1
+	assert_true(EconomyManager.upgrade_miner(PLAYER))  # 500 coin → level 2
+	miner.call("_apply_miner_upgrade")
+	miner.call("_apply_research_bonuses")
+	assert_eq(miner.get("data").speed, 70.0 + 15.0, "L2 base speed + swift boots")
+	assert_eq(miner.get("data").carry_capacity, 30 + 15, "L2 base carry + reinforced pack")
+
+
+func test_berserk_lowers_swordsman_cooldown() -> void:
+	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(400, 16))
+	var base_cd: float = swordsman.get("data").attack_cooldown
+	ResearchManager._levels[PLAYER]["berserk"] = 1
+	swordsman.call("_apply_research_bonuses")
+	assert_almost_eq(swordsman.get("data").attack_cooldown, base_cd * 0.8, 0.001)
+
+
+func test_rapid_fire_lowers_archer_cooldown() -> void:
+	var archer: Node2D = _spawn_unit("res://scripts/resources/units/archer.tres", PLAYER, Vector2(400, 16))
+	var base_cd: float = archer.get("data").attack_cooldown
+	ResearchManager._levels[PLAYER]["rapid_fire"] = 1
+	archer.call("_apply_research_bonuses")
+	assert_almost_eq(archer.get("data").attack_cooldown, base_cd * 0.75, 0.001)
+
+
+func test_arcane_might_raises_wizard_damage() -> void:
+	var wizard: Node2D = _spawn_unit("res://scripts/resources/units/wizard.tres", PLAYER, Vector2(400, 16))
+	ResearchManager._levels[PLAYER]["arcane_might"] = 1
+	wizard.call("_apply_research_bonuses")
+	var base_damage: float = Constants.FIGHTER_UPGRADES["wizard"][1].damage
+	assert_almost_eq(wizard.get("data").damage_per_hit, base_damage * 1.25, 0.001)
+
+
+func test_self_repair_regenerates_building_hp() -> void:
+	var building: Node2D = _building_for(PLAYER)
+	building.set("_hp", 3000)
+	ResearchManager._levels[PLAYER]["self_repair"] = 1
+	building.call("_process", 1.0)
+	assert_eq(building.get("_hp"), 3005, "5 HP/s regen")
+	building.call("_process", 10.0)
+	assert_eq(building.get("_hp"), 3055)
+
+
+func test_self_repair_does_not_overheal() -> void:
+	var building: Node2D = _building_for(PLAYER)
+	building.set("_hp", building.get("max_hp") - 2)
+	ResearchManager._levels[PLAYER]["self_repair"] = 1
+	building.call("_process", 5.0)
+	assert_eq(building.get("_hp"), building.get("max_hp"), "capped at max HP")
+
+
+# ─── Overlay pause toggle ───
+
+func test_overlay_pause_toggle_pauses_and_resumes() -> void:
+	# The overlay never pauses by itself; the "Pause game" toggle opts in, and
+	# closing the overlay releases exactly that pause. No awaits here — the
+	# tree is briefly paused, and frames must not pass until it resumes.
+	var hud: CanvasLayer = _main.get_node("UI/HUD")
+	var panel: Control = hud.get_node("ResearchPanel")
+	assert_false(get_tree().paused)
+	panel.visible = true
+	assert_false(get_tree().paused, "opening the overlay does not pause")
+	panel._pause_while_open = true
+	panel._sync_pause()
+	assert_true(get_tree().paused, "toggle pauses the game")
+	assert_true(panel.owns_pause())
+	hud._process(0.016)
+	assert_false(hud._pause_panel.visible, "pause menu stays hidden under the overlay")
+	panel.visible = false
+	assert_false(get_tree().paused, "closing the overlay resumes")
+	assert_false(panel.owns_pause())
+
+
+# ─── Reset ───
 func test_reset_clears_levels_active_and_cooldowns() -> void:
 	ResearchManager._levels[PLAYER]["ore_sonar"] = 1
 	ResearchManager.scan(PLAYER)

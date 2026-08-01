@@ -93,64 +93,139 @@ const ENEMY_BUILDING_HP: float = 5000.0
 # Timed techs bought with coin through the ResearchManager (one active
 # research per team, 100% refund on cancel). These coexist with the instant
 # miner/fighter upgrades above — research only covers new techs.
+# Each tech: name, optional unit branch, tree_pos (column = tier, row =
+# branch) for the research overlay, optional requires (prerequisite tech id →
+# level), and per-level cost/time/effects/desc (desc feeds the hover tooltip).
 # Effect keys are read through ResearchManager.get_stat_bonus():
-#   building_hp    → flat max-HP added to the team's building (heals the delta)
+#   building_hp     → flat max-HP added to the team's building (heals the delta)
+#   building_regen  → building HP regenerated per second
 #   swordsman_armor → flat damage reduction per hit taken
-#   archer_range   → flat attack-range bonus
+#   swordsman_cdr   → swordsman attack-cooldown reduction (0.2 = 20% faster)
+#   archer_range    → flat attack-range bonus
+#   archer_cdr      → archer attack-cooldown reduction
 #   wizard_aoe_mult → fireball AoE radius multiplier bonus (0.5 = +50%)
-#   miner_carry    → flat carry-capacity bonus
+#   wizard_damage_mult → wizard damage multiplier bonus (0.25 = +25%)
+#   miner_carry     → flat carry-capacity bonus
+#   miner_speed     → flat move-speed bonus
 const RESEARCH_TECHS: Dictionary = {
-	"fortify": {
-		"name": "Fortify",
-		"unit": "",
-		"levels": {
-			1: { "cost": 600, "time": 20.0, "building_hp": 2000 },
-			2: { "cost": 1500, "time": 30.0, "building_hp": 3000 },
-		},
-	},
-	"ore_sonar": {
-		"name": "Ore Sonar",
-		"unit": "",
-		"levels": {
-			1: { "cost": 300, "time": 15.0 },
-			2: { "cost": 800, "time": 20.0 },
-		},
-	},
-	"bulwark": {
-		"name": "Bulwark",
-		"unit": "swordsman",
-		"levels": {
-			1: { "cost": 500, "time": 20.0, "swordsman_armor": 2 },
-			2: { "cost": 1000, "time": 25.0, "swordsman_armor": 2 },  # total 4
-		},
-	},
-	"longbow": {
-		"name": "Longbow",
-		"unit": "archer",
-		"levels": {
-			1: { "cost": 500, "time": 20.0, "archer_range": 30.0 },
-		},
-	},
-	"inferno": {
-		"name": "Inferno",
-		"unit": "wizard",
-		"levels": {
-			1: { "cost": 600, "time": 25.0, "wizard_aoe_mult": 0.5 },
-		},
-	},
+	# ── Economy branch ──
 	"reinforced_pack": {
 		"name": "Reinforced Pack",
 		"unit": "miner",
+		"tree_pos": Vector2i(0, 0),
 		"levels": {
-			1: { "cost": 400, "time": 15.0, "miner_carry": 15 },
+			1: { "cost": 400, "time": 15.0, "miner_carry": 15, "desc": "Miners +15 carry capacity" },
+		},
+	},
+	"swift_boots": {
+		"name": "Swift Boots",
+		"unit": "miner",
+		"tree_pos": Vector2i(1, 0),
+		"requires": { "reinforced_pack": 1 },
+		"levels": {
+			1: { "cost": 500, "time": 20.0, "miner_speed": 15, "desc": "Miners +15 move speed" },
+		},
+	},
+	# ── Recon branch ──
+	"ore_sonar": {
+		"name": "Ore Sonar",
+		"unit": "",
+		"tree_pos": Vector2i(0, 1),
+		"levels": {
+			1: { "cost": 300, "time": 15.0, "desc": "Unlock Scan: reveal buried ore within 8 cells of the mine (60s cooldown)" },
+			2: { "cost": 800, "time": 20.0, "desc": "Scan radius 12 cells, cooldown 40s" },
+		},
+	},
+	"deep_scan": {
+		"name": "Deep Scan",
+		"unit": "",
+		"tree_pos": Vector2i(1, 1),
+		"requires": { "ore_sonar": 2 },
+		"levels": {
+			1: { "cost": 1000, "time": 25.0, "desc": "Scan radius 16 cells, cooldown 25s" },
+		},
+	},
+	# ── Defense branch ──
+	"fortify": {
+		"name": "Fortify",
+		"unit": "",
+		"tree_pos": Vector2i(0, 2),
+		"levels": {
+			1: { "cost": 600, "time": 20.0, "building_hp": 2000, "desc": "Building +2000 max HP (heals the difference)" },
+			2: { "cost": 1500, "time": 30.0, "building_hp": 3000, "desc": "Building +3000 more max HP" },
+		},
+	},
+	"self_repair": {
+		"name": "Self-Repair",
+		"unit": "",
+		"tree_pos": Vector2i(1, 2),
+		"requires": { "fortify": 1 },
+		"levels": {
+			1: { "cost": 800, "time": 25.0, "building_regen": 5.0, "desc": "Building regenerates 5 HP per second" },
+		},
+	},
+	# ── Swords branch ──
+	"bulwark": {
+		"name": "Bulwark",
+		"unit": "swordsman",
+		"tree_pos": Vector2i(0, 3),
+		"levels": {
+			1: { "cost": 500, "time": 20.0, "swordsman_armor": 2, "desc": "Swordsmen take 2 less damage per hit" },
+			2: { "cost": 1000, "time": 25.0, "swordsman_armor": 2, "desc": "Swordsmen take 2 less damage per hit (4 total)" },  # total 4
+		},
+	},
+	"berserk": {
+		"name": "Berserk",
+		"unit": "swordsman",
+		"tree_pos": Vector2i(1, 3),
+		"requires": { "bulwark": 2 },
+		"levels": {
+			1: { "cost": 800, "time": 25.0, "swordsman_cdr": 0.2, "desc": "Swordsmen attack 20% faster" },
+		},
+	},
+	# ── Bows branch ──
+	"longbow": {
+		"name": "Longbow",
+		"unit": "archer",
+		"tree_pos": Vector2i(0, 4),
+		"levels": {
+			1: { "cost": 500, "time": 20.0, "archer_range": 30.0, "desc": "Archers +30 attack range" },
+		},
+	},
+	"rapid_fire": {
+		"name": "Rapid Fire",
+		"unit": "archer",
+		"tree_pos": Vector2i(1, 4),
+		"requires": { "longbow": 1 },
+		"levels": {
+			1: { "cost": 700, "time": 25.0, "archer_cdr": 0.25, "desc": "Archers attack 25% faster" },
+		},
+	},
+	# ── Arcane branch ──
+	"inferno": {
+		"name": "Inferno",
+		"unit": "wizard",
+		"tree_pos": Vector2i(0, 5),
+		"levels": {
+			1: { "cost": 600, "time": 25.0, "wizard_aoe_mult": 0.5, "desc": "Fireballs +50% blast radius" },
+		},
+	},
+	"arcane_might": {
+		"name": "Arcane Might",
+		"unit": "wizard",
+		"tree_pos": Vector2i(1, 5),
+		"requires": { "inferno": 1 },
+		"levels": {
+			1: { "cost": 900, "time": 25.0, "wizard_damage_mult": 0.25, "desc": "Wizards +25% damage" },
 		},
 	},
 }
 
 # Ore Sonar scan ability: reveals buried ore around the team's mine so miners
-# path straight to it. Radius is in grid cells, cooldown in seconds.
-const SONAR_RADIUS: Dictionary = { 1: 8, 2: 12 }
-const SONAR_COOLDOWN: Dictionary = { 1: 60.0, 2: 40.0 }
+# path straight to it. Radius is in grid cells, cooldown in seconds. The
+# effective sonar level is ore_sonar + deep_scan levels (3 = Deep Scan).
+const SONAR_RADIUS: Dictionary = { 1: 8, 2: 12, 3: 16 }
+const SONAR_COOLDOWN: Dictionary = { 1: 60.0, 2: 40.0, 3: 25.0 }
 
 # ─── OUT-OF-COMBAT REGEN ───
 # Units that avoid damage for this long slowly recover HP. Slow on purpose:

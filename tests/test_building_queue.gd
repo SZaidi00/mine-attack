@@ -85,3 +85,28 @@ func test_queue_rejects_unaffordable() -> void:
 	EconomyManager.spend_coin(PLAYER, 450)  # 50 left: miner OK, swordsman not
 	assert_false(_building.call("queue_unit", "swordsman"))
 	assert_true(_building.call("queue_unit", "miner"))
+
+
+func test_queue_accepts_beyond_population_cap() -> void:
+	# Queueing is coin-limited, not cap-limited: over-cap orders are accepted
+	# and the queue pauses at the cap instead of rejecting or despawning.
+	EconomyManager.add_coin(PLAYER, 105 * 50)
+	for i in range(Constants.MAX_UNITS + 5):
+		assert_true(_building.call("queue_unit", "miner"), "entry %d accepted" % (i + 1))
+	assert_eq(_building.call("get_queue").size(), Constants.MAX_UNITS + 5)
+
+
+func test_queue_pauses_at_population_cap_and_resumes() -> void:
+	# At the cap the queue holds: the trained unit is never despawned and the
+	# coin never refunded away. Once a unit dies, training resumes.
+	EconomyManager.add_population(PLAYER, Constants.MAX_UNITS)
+	_building.call("queue_unit", "miner")
+	var coin_after_order: int = EconomyManager.get_coin(PLAYER)
+	await wait_seconds(4.0)  # miner trains in 3s — but the queue is paused
+	assert_eq(_building.call("get_queue").size(), 1, "queue holds at the population cap")
+	assert_eq(EconomyManager.get_population(PLAYER), Constants.MAX_UNITS)
+	assert_eq(EconomyManager.get_coin(PLAYER), coin_after_order, "no refund churn while paused")
+	EconomyManager.remove_population(PLAYER, 1)
+	await wait_seconds(3.5)  # full train time once unpaused
+	assert_eq(_building.call("get_queue").size(), 0, "queue resumes once population frees up")
+	assert_eq(EconomyManager.get_population(PLAYER), Constants.MAX_UNITS, "spawned unit refills the slot")

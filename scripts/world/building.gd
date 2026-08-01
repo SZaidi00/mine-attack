@@ -33,6 +33,8 @@ var _deposit_point: Marker2D
 # seconds (stretched by the game-over slow-mo, which is the point).
 var _collapsing: bool = false
 var _collapse_t: float = 0.0
+# Fractional HP accumulator for the Self-Repair research regen.
+var _regen_accum: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -138,9 +140,24 @@ func _process(delta: float) -> void:
 		return
 	if not GameManager.game_active:
 		return
+	# Self-Repair research: slow regeneration up to max HP.
+	var regen: float = ResearchManager.get_stat_bonus(team, "building_regen")
+	if regen > 0.0 and _hp < max_hp:
+		_regen_accum += regen * delta
+		var whole: int = int(_regen_accum)
+		if whole > 0:
+			_regen_accum -= whole
+			_hp = mini(_hp + whole, max_hp)
+			hp_changed.emit(_hp, max_hp)
+			queue_redraw()
 	if _queue.is_empty():
 		return
 	var current = _queue[0]
+	# Population cap: the queue holds (training paused) until a unit dies.
+	# The unit is never despawned and the coin never refunded away — the order
+	# simply waits, like a supply block in classic RTS.
+	if not EconomyManager.can_add_population(team, current.data.population):
+		return
 	# AI difficulty scales training speed (rates, never rules); players are 1.0.
 	var train_time_mult: float = 1.0
 	if team == GameManager.Team.ENEMY:
@@ -161,9 +178,9 @@ func queue_unit(unit_id: String) -> bool:
 	if not EconomyManager.can_afford(team, data.cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "cannot afford " + unit_id)
 		return false
-	if not EconomyManager.can_add_population(team, data.population):
-		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "population cap")
-		return false
+	# Population is not checked here: over-cap orders are accepted and the
+	# queue simply pauses at the cap (see _process) instead of rejecting or
+	# refunding the finished unit.
 	if not EconomyManager.spend_coin(team, data.cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "spend failed " + unit_id)
 		return false

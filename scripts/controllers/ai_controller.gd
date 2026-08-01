@@ -129,14 +129,15 @@ func _pick_research(building: Node2D) -> String:
 			best_unit = unit_id
 	if _research_open(tech_by_unit[best_unit]):
 		return tech_by_unit[best_unit]
-	for tech in ["bulwark", "longbow", "inferno", "reinforced_pack", "fortify"]:
+	for tech in ["bulwark", "longbow", "inferno", "berserk", "rapid_fire", "arcane_might", "reinforced_pack", "swift_boots", "deep_scan", "self_repair", "fortify"]:
 		if _research_open(tech):
 			return tech
 	return ""
 
 
 func _research_open(tech_id: String) -> bool:
-	return not ResearchManager.get_next_level_data(team, tech_id).is_empty()
+	return not ResearchManager.get_next_level_data(team, tech_id).is_empty() \
+		and ResearchManager.are_prerequisites_met(team, tech_id)
 
 
 func _run_mining() -> void:

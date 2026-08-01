@@ -57,7 +57,10 @@ func _update_progress() -> void:
 	pct = clampf(pct, 0.0, 1.0)
 	_progress_bar.value = pct
 	if _current_label:
-		_current_label.text = "%s — %d%%" % [current.id.capitalize(), int(pct * 100)]
+		if not EconomyManager.can_add_population(_building.get("team"), current.data.population):
+			_current_label.text = "%s — paused (population cap)" % current.id.capitalize()
+		else:
+			_current_label.text = "%s — %d%%" % [current.id.capitalize(), int(pct * 100)]
 
 
 func _on_queue_changed(_entries: Array) -> void:
