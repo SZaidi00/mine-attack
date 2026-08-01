@@ -103,6 +103,13 @@ theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
 text = "0"
 
+[node name="DragonCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
+text = "0"
+
 [node name="Spacer2" type="Control" parent="TopBar/MarginContainer/VBoxContainer/StatsRow"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -172,6 +179,20 @@ custom_minimum_size = Vector2(40, 28)
 layout_mode = 2
 toggle_mode = true
 text = "3×"
+
+[node name="Speed5Button" type="Button" parent="TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(40, 28)
+layout_mode = 2
+toggle_mode = true
+text = "5×"
+
+[node name="Speed10Button" type="Button" parent="TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(44, 28)
+layout_mode = 2
+toggle_mode = true
+text = "10×"
 
 [node name="SpeedSpacer" type="Control" parent="TopBar/MarginContainer/VBoxContainer/TabsRow"]
 custom_minimum_size = Vector2(12, 0)
@@ -413,6 +434,54 @@ theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
 text = "10.0s"
 horizontal_alignment = 1
 
+[node name="DragonButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 70)
+layout_mode = 2
+text = "Dragon"
+script = ExtResource("2_unit_btn")
+unit_id = "dragon"
+
+[node name="KeyLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/DragonButton"]
+layout_mode = 0
+offset_left = 6.0
+offset_top = 4.0
+offset_right = 22.0
+offset_bottom = 18.0
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
+text = "5"
+mouse_filter = 2
+
+[node name="Icon" type="TextureRect" parent="BottomBar/MarginContainer/HBoxContainer/DragonButton"]
+layout_mode = 0
+offset_left = 42.0
+offset_top = 8.0
+offset_right = 58.0
+offset_bottom = 24.0
+
+[node name="CostLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/DragonButton"]
+layout_mode = 0
+offset_left = 36.0
+offset_top = 28.0
+offset_right = 64.0
+offset_bottom = 44.0
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.984314, 0.74902, 0.141176, 1)
+text = "400"
+horizontal_alignment = 1
+
+[node name="TimeLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/DragonButton"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 46.0
+offset_right = 68.0
+offset_bottom = 62.0
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
+text = "14.0s"
+horizontal_alignment = 1
+
 [node name="UpgradeMinerButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(120, 70)
@@ -421,21 +490,27 @@ text = "Upgrade Miner"
 
 [node name="UpgradeSwordsmanButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(110, 70)
+custom_minimum_size = Vector2(100, 70)
 layout_mode = 2
 text = "Upgrade\nSwordsman"
 
 [node name="UpgradeArcherButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(110, 70)
+custom_minimum_size = Vector2(100, 70)
 layout_mode = 2
 text = "Upgrade\nArcher"
 
 [node name="UpgradeWizardButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(110, 70)
+custom_minimum_size = Vector2(100, 70)
 layout_mode = 2
 text = "Upgrade\nWizard"
+
+[node name="UpgradeDragonButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 70)
+layout_mode = 2
+text = "Upgrade\nDragon"
 
 [node name="AttackButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true

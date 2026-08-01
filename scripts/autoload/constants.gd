@@ -16,6 +16,7 @@ const COSTS: Dictionary = {
 	"swordsman": 100,
 	"archer": 150,
 	"wizard": 250,
+	"dragon": 400,
 }
 
 # ─── TRAIN TIMES (seconds) ───
@@ -24,6 +25,7 @@ const TRAIN_TIMES: Dictionary = {
 	"swordsman": 5.0,
 	"archer": 6.0,
 	"wizard": 10.0,
+	"dragon": 14.0,
 }
 
 # ─── UNIT STATS ───
@@ -58,6 +60,7 @@ const FIGHTER_UPGRADE_COSTS: Dictionary = {
 	"swordsman": { 2: 400, 3: 1200 },
 	"archer": { 2: 500, 3: 1500 },
 	"wizard": { 2: 600, 3: 1800 },
+	"dragon": { 2: 800, 3: 2400 },
 }
 const FIGHTER_UPGRADES: Dictionary = {
 	"swordsman": {
@@ -74,6 +77,11 @@ const FIGHTER_UPGRADES: Dictionary = {
 		1: { "hp": 60, "damage": 37.5 },
 		2: { "hp": 80, "damage": 47.0 },
 		3: { "hp": 100, "damage": 58.0 },
+	},
+	"dragon": {
+		1: { "hp": 120, "damage": 45.0 },
+		2: { "hp": 155, "damage": 56.0 },
+		3: { "hp": 200, "damage": 70.0 },
 	},
 }
 
@@ -280,10 +288,12 @@ const INPUT_COMMAND: StringName = &"rmb"
 const INPUT_SELECT_ALL: StringName = &"select_all"
 const INPUT_SELECT_MINERS: StringName = &"select_miners"
 const INPUT_SELECT_FIGHTERS: StringName = &"select_fighters"
+const INPUT_SELECT_DRAGONS: StringName = &"select_dragons"
 const INPUT_TRAIN_MINER: StringName = &"train_miner"
 const INPUT_TRAIN_SWORDSMAN: StringName = &"train_swordsman"
 const INPUT_TRAIN_ARCHER: StringName = &"train_archer"
 const INPUT_TRAIN_WIZARD: StringName = &"train_wizard"
+const INPUT_TRAIN_DRAGON: StringName = &"train_dragon"
 const INPUT_TOGGLE_VIEW: StringName = &"toggle_view"
 const INPUT_TOGGLE_RESEARCH: StringName = &"toggle_research"
 const INPUT_PAUSE: StringName = &"pause"

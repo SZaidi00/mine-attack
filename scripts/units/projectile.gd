@@ -39,7 +39,10 @@ func _process(delta: float) -> void:
 
 func _update_target_position() -> void:
 	if homing_target != null and is_instance_valid(homing_target):
-		target_position = homing_target.global_position
+		if homing_target.has_method("get_combat_position"):
+			target_position = homing_target.get_combat_position()
+		else:
+			target_position = homing_target.global_position
 	elif homing_building != null and is_instance_valid(homing_building):
 		target_position = homing_building.global_position
 
@@ -50,7 +53,10 @@ func _impact() -> void:
 	for unit in get_tree().get_nodes_in_group("units"):
 		if unit.get("team") == team:
 			continue
-		if unit.global_position.distance_to(pos) <= hit_radius:
+		var hit_pos: Vector2 = unit.global_position
+		if unit.has_method("get_combat_position"):
+			hit_pos = unit.get_combat_position()
+		if hit_pos.distance_to(pos) <= hit_radius:
 			unit.take_damage(damage, source)
 	if not is_fireball:
 		return

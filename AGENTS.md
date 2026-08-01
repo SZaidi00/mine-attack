@@ -97,7 +97,7 @@ Global singletons accessible from any script via their class name.
   - Constants: team colors (`COLOR_PLAYER`, `COLOR_ENEMY`), terrain colors.
   - `DIFFICULTY_MODIFIERS`: per-difficulty AI multipliers — `coin` (deposit income), `train_time` (training duration), `upgrade_speed` (economy decision rate), `push_ratio`/`defend_ratio` (aggression thresholds), `retaliation` (per-hit chance a damaged AI sieger fights back). Fair-play rule: rates only, never rules (same unit stats, pop cap).
   - `difficulty` persists across `reset()` so Play Again keeps the choice; set via the debug overlay dropdown (Phase 6) or main menu (Phase 7).
-  - `game_speed` (1.0 / 2.0 / 3.0) is the player-chosen `Engine.time_scale`, set from the HUD speed buttons; it also persists across `reset()`. The win cinematic overrides it temporarily (0.3 slow-mo), then `_process` restores `game_speed` on the wall clock.
+  - `game_speed` (1.0 / 2.0 / 3.0 / 5.0 / 10.0) is the player-chosen `Engine.time_scale`, set from the HUD speed buttons; it also persists across `reset()`. The win cinematic overrides it temporarily (0.3 slow-mo), then `_process` restores `game_speed` on the wall clock.
   - Accessors: `get_ai_coin_multiplier()`, `get_ai_train_time_multiplier()`, `get_ai_upgrade_speed()`, `get_aggression_thresholds()`, `get_ai_retaliation_chance()`.
   - `signal game_over(winner: Team)`
   - `game_active: bool`, `match_time: float`
@@ -118,7 +118,7 @@ Global singletons accessible from any script via their class name.
 ### `scripts/controllers/`
 
 - `player_controller.gd`
-  - Handles selection box, single/box selection (with Shift add-to-selection), camera pan/zoom, hotkeys.
+  - Handles selection box, single/box selection (with Shift add-to-selection), camera pan/zoom, hotkeys (Ctrl+A/M/F/D for all/miners/fighters/dragons; click and box pick use combat position so flying dragons are selectable).
   - Issues context-sensitive commands on right-click: attack, mine, breach wall, enter/exit mine, move. Right-clicking the enemy mine entry is rejected with a log line and red-X popup — units can never enter the enemy mine.
   - Supports camera view bookmarks (Tab / Surface / Underground buttons) and pause (Space / Esc toggles `get_tree().paused`). Both layers are always rendered, so `set_view(underground)` only saves the current camera position and slides the camera to the other view's last position (surface base ↔ own mine underground; manual pan cancels the slide), emitting `view_mode_changed(mode)`.
   - Screen shake (Phase 8): connected to both buildings' `hp_changed` (small rumble) and `destroyed` (big shake), applied as a decaying `camera.offset`.
@@ -181,21 +181,23 @@ Global singletons accessible from any script via their class name.
   - Out-of-combat regen: `take_damage` starts a 5s no-damage countdown; once it elapses the unit regains 2 HP/s up to `max_hp`, with a green `+N` popup on each heal tick. Applies to all units, both teams (miners heal between trips too).
   - Applies miner upgrade bonuses dynamically (`_apply_miner_upgrade`) and team-wide fighter upgrade stats (`_apply_fighter_upgrade` — swordsman/archer/wizard HP/damage per level from `Constants.FIGHTER_UPGRADES`, healing the max_hp delta on level-up), plus research-tree bonuses (`_apply_research_bonuses` — bulwark armor, longbow range, inferno AoE, reinforced-pack carry, applied as deltas so re-application never compounds).
   - Custom `_draw()` renders units as sprite assets from `frost_mines_assets/units/` when available, falling back to colored rectangles with class-specific weapon icons if no sprite is assigned. Miners swap sprite by team and upgrade level. All units show an HP bar when damaged, hovered, or selected; miners also show a gold `carried/capacity` cargo readout above the HP bar while hauling or when hovered/selected. Units use `frost_mines_assets/effects/selection_ring.png` for selection (with a gentle pulse), a warm lantern glow when mining underground, and flash `frost_mines_assets/effects/impact_hit.png` briefly on damage. Units are always visible in both views (surface and underground render simultaneously). Mining swings, melee hits, and projectile launches play positional SFX via `AudioManager`.
+  - Dragon flight: feet stay on the ground for A*/kiting (`global_position`); surface dragons use `flight_altitude` (40px) via `get_combat_position()` for draw offset, shadow, hover, click/box pick, attack/sight range, and projectile spawn/homing/impact. Altitude is 0 underground. Dragons take damage only from archers/wizards (Euclidean range to the air aim point).
   - Phase 3.4 traffic: each unit gets a small `_movement_offset` applied to miner deposit and mine-entry targets, and `_follow_path()` applies soft repulsion from nearby friendly units so surface parades don't stack into a single sprite. Path arrival is step-aware (`max(2px, speed * delta)`) so large deltas (lag spikes, high `Engine.time_scale`) can't orbit a path point forever against the separation nudge.
 
 - `projectile.gd`
   - Homing arrow / fireball projectile.
   - Fireballs deal splash damage to units and buildings in a larger radius.
+  - Homing and unit impact use `get_combat_position()` when present (flying dragons).
   - Draws `frost_mines_assets/effects/projectile_arrow.png` for arrows and `frost_mines_assets/effects/projectile_blast.png` for fireballs.
 
 ### `scripts/resources/`
 
-- `unit_data.gd` — `Resource` subclass defining all unit stats and per-team sprite textures (`player_textures`, `enemy_textures`).
-- `units/*.tres` — concrete stats for Miner, Swordsman, Archer, Wizard. These are the authoritative source of unit stats at runtime; `building.gd` duplicates the resource for each spawned unit.
+- `unit_data.gd` — `Resource` subclass defining all unit stats and per-team sprite textures (`player_textures`, `enemy_textures`), plus optional `flight_altitude` / `draw_scale` for flyers.
+- `units/*.tres` — concrete stats for Miner, Swordsman, Archer, Wizard, Dragon. These are the authoritative source of unit stats at runtime; `building.gd` duplicates the resource for each spawned unit.
 
 ### `scripts/ui/`
 
-- `hud.gd` — wires non-training buttons to `PlayerController`, listens to economy signals, updates labels (including the live per-unit-type counts in the top bar), toggles surface/underground view, owns the 1×/2×/3× game-speed buttons (via `GameManager.set_game_speed`), shows the game-over stats panel (1.4s after `game_over`, fading in once the slow-mo collapse has played) with Play Again and Quit to Menu, and adds icon sprites from `frost_mines_assets/icons/` to stat labels and the attack stance button. Runs with `process_mode = ALWAYS` and owns the pause menu (full-screen dim: Resume / Restart / Quit to Menu / difficulty), synced to `get_tree().paused` — Space/Esc toggles it via `PlayerController`. In-game Quit buttons return to the main menu (`_quit_to_menu`: unpause, reset autoloads, `change_scene_to_file`) instead of closing the app — quitting is a no-op in the web export; only the main menu's own Quit exits.
+- `hud.gd` — wires non-training buttons to `PlayerController`, listens to economy signals, updates labels (including the live per-unit-type counts in the top bar), toggles surface/underground view, owns the 1×/2×/3×/5×/10× game-speed buttons (via `GameManager.set_game_speed`), shows the game-over stats panel (1.4s after `game_over`, fading in once the slow-mo collapse has played) with Play Again and Quit to Menu, and adds icon sprites from `frost_mines_assets/icons/` to stat labels and the attack stance button. Runs with `process_mode = ALWAYS` and owns the pause menu (full-screen dim: Resume / Restart / Quit to Menu / difficulty), synced to `get_tree().paused` — Space/Esc toggles it via `PlayerController`. In-game Quit buttons return to the main menu (`_quit_to_menu`: unpause, reset autoloads, `change_scene_to_file`) instead of closing the app — quitting is a no-op in the web export; only the main menu's own Quit exits.
 - `main_menu.gd` — main menu: night-sky backdrop with falling snow (CPUParticles2D), both bases and units on the ground strip, and a centered card (title, difficulty dropdown, gold Play button, Quit, hotkey hint line); Play sets `GameManager.difficulty` and switches to `main.tscn`.
 - `unit_button.gd` — train button with cost/train-time labels, a hotkey hint badge, affordability/disable state, and failure shake.
 - `training_queue_panel.gd` — vertical queue panel docked on the right edge of the screen (between the top and bottom bars); shows the currently training unit's progress and a scrollable list of queued units; both the in-progress unit and queued units can be cancelled (100% refund).
@@ -282,6 +284,7 @@ Defined in `project.godot` under `[input]`:
 | `select_all` | Ctrl+A |
 | `select_miners` | Ctrl+M |
 | `select_fighters` | Ctrl+F |
+| `select_dragons` | Ctrl+D |
 | `camera_up` | W / Up arrow |
 | `camera_down` | S / Down arrow |
 | `camera_left` | A / Left arrow |
@@ -292,6 +295,7 @@ Defined in `project.godot` under `[input]`:
 | `train_swordsman` | `2` |
 | `train_archer` | `3` |
 | `train_wizard` | `4` |
+| `train_dragon` | `5` |
 | `toggle_view` | Tab |
 | `toggle_research` | R |
 | `pause` | Space / Esc |
@@ -306,7 +310,7 @@ Defined in `project.godot` under `[input]`:
 - **Starting coin:** 500 per team (`STARTING_COIN`).
 - **Starting units:** each base spawns 2 free miners at match start (`STARTING_MINERS`); they count toward population.
 - **Training queue:** uncapped — limited only by coin. Population never blocks *queueing*: at the 100-unit cap the queue pauses mid-training (the queue panel shows "paused (population cap)") and resumes when a unit dies — the finished unit is never despawned and the coin never refunded away.
-- **Units:** Miner, Swordsman, Archer, Wizard.
+- **Units:** Miner, Swordsman, Archer, Wizard, Dragon.
 - **Unit costs / train times:**
   - Miner: 50 coin, 3.0s
   - Swordsman: 100 coin, 5.0s
@@ -361,6 +365,7 @@ The project uses [GUT](https://github.com/bitwes/Gut) 9.6.1 (committed under `ad
 - `tests/test_rally.gd` — rally targets surface miners, skips underground enemies, engagement keeps the rally active, explicit commands cancel it, miners can't rally, miner death drops full cargo as a pickup.
 - `tests/test_stance_modes.gd` — stance modes persist with zero fighters, attack/garrison/defend modes auto-order newly spawned fighters, miners ignore modes, rally doesn't change the mode.
 - `tests/test_research.gd` — research purchase guards (unknown/busy/unaffordable/maxed/prerequisites), timed completion and pause freeze, 100% cancel refund, fortify/longbow/bulwark/reinforced-pack effects, tier-2 effects (swift boots, berserk, rapid fire, arcane might, self-repair regen + overheat cap, deep scan sonar level), research bonuses surviving miner upgrades, sonar scan reveal + cooldown, `reset()` clearing.
+- `tests/test_dragon.gd` — dragon immunity (archer/wizard only), auto-attack skip, fireball splash via source, train queue, surface flight combat position / underground grounded, Euclidean air-range gate, projectile homing to combat pos, `_filter_dragons`.
 
 > Test harness gotcha: every script that boots `main.tscn` must free it **immediately** in `after_all` (`_main.free()`, never `queue_free()`). A deferred free can still be pending when the next script instantiates its own `main.tscn` — the old `Main` name stays taken, the new scene gets renamed, and every hard-coded `/root/Main/...` lookup breaks (flaky, timing-dependent failures).
 
@@ -400,7 +405,7 @@ Fully offline, single-player game: no network code, authentication, saved-game s
 - **Building footprint writes into `_cells` directly:** `building.gd` mutates `GridWorld._cells` and `_astar` directly rather than using a public API.
 - **No null-safe node access for UI:** `hud.gd` looks up the player controller and building at runtime with `get_node_or_null`; if the scene hierarchy changes, the HUD may silently stop updating.
 - **Only the Web export preset is configured** (`build/MineAttack.html`); desktop presets were never set up. `tools/serve_web.py` serves the build with the COOP/COEP headers Godot 4 web builds require.
-- **Viewport is 2560×1440** (`window/size` in `project.godot`, stretch `canvas_items`/`expand`). Camera zoom range is 0.4–2.0; HUD layout is anchored, so larger viewports show more of the world rather than scaling the UI.
+- **Viewport is 1920×1080** (`window/size` in `project.godot`, stretch `canvas_items`/`expand`). Camera zoom range is 0.65–2.0 (default 1.0); HUD layout is anchored, so larger viewports show more of the world rather than scaling the UI. The Web export injects full-bleed canvas CSS via `html/head_include`.
 - **Headless teardown spam:** in `-s` SceneTree harnesses, after `quit()` the script unregistration can race node teardown and spam `Trying to return a value of type 'Node' ... 'PlayerController'` from `hud._get_player_controller` (kept alive by `process_mode = ALWAYS`). Harness-only noise after the check result; normal boots and gameplay are clean.
 - **Resources are duplicated at spawn:** `building.gd` calls `data.duplicate(true)` so each unit gets its own mutable `UnitData`. Upgrades mutate that copy in `unit.gd`.
 - **Autoloads survive scene reload:** `hud.gd` explicitly calls `GameManager.reset()` and `EconomyManager.reset()` before `get_tree().reload_current_scene()` so a new match starts fresh.
