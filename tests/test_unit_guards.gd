@@ -38,6 +38,21 @@ func _spawn_unit(tres_path: String, team: int, pos: Vector2) -> Node2D:
 	return unit
 
 
+func test_corpse_hits_do_not_leak_population() -> void:
+	# A dying unit stays valid for its 1s fade-out and in-flight projectiles
+	# can still land on it. Without the DEAD guard in take_damage, each extra
+	# hit re-runs _die() and removes population again — over a match the cap
+	# drifts and the army grows past MAX_UNITS.
+	EconomyManager.reset()
+	EconomyManager.add_population(PLAYER, 2)  # this unit plus one committed slot
+	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(-480, 80))
+	fighter.call("take_damage", 100000)
+	assert_eq(fighter.get("_state"), 9, "lethal hit kills (State.DEAD == 9)")  # State.DEAD == 9
+	fighter.call("take_damage", 50)  # stray projectile landing on the corpse
+	fighter.call("take_damage", 50)
+	assert_eq(EconomyManager.get_population(PLAYER), 1, "population removed exactly once")
+
+
 func test_fighter_cannot_mine() -> void:
 	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(-480, 80))
 	fighter.call("mine_cell", Vector2i(-14, 2))

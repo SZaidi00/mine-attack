@@ -108,6 +108,18 @@ func is_researching(team: GameManager.Team) -> bool:
 	return not _active[team].is_empty()
 
 
+## Prerequisite techs (the "requires" table) must be fully researched first —
+## this is what gives the tree its tiers.
+func are_prerequisites_met(team: GameManager.Team, tech_id: String) -> bool:
+	if not _Constants.RESEARCH_TECHS.has(tech_id):
+		return false
+	for prereq_id in _Constants.RESEARCH_TECHS[tech_id].get("requires", {}):
+		var needed: int = _Constants.RESEARCH_TECHS[tech_id].requires[prereq_id]
+		if get_level(team, prereq_id) < needed:
+			return false
+	return true
+
+
 func start_research(team: GameManager.Team, tech_id: String) -> bool:
 	if not _Constants.RESEARCH_TECHS.has(tech_id):
 		DebugLog.log_reject("ResearchManager", "start_research", "unknown tech " + tech_id)
@@ -118,6 +130,9 @@ func start_research(team: GameManager.Team, tech_id: String) -> bool:
 	var data: Dictionary = get_next_level_data(team, tech_id)
 	if data.is_empty():
 		DebugLog.log_reject("ResearchManager", "start_research", tech_id + " already maxed")
+		return false
+	if not are_prerequisites_met(team, tech_id):
+		DebugLog.log_reject("ResearchManager", "start_research", "prerequisites not met for " + tech_id)
 		return false
 	if not EconomyManager.spend_coin(team, data.cost):
 		DebugLog.log_reject("ResearchManager", "start_research", "cannot afford " + tech_id)
@@ -160,8 +175,9 @@ func get_stat_bonus(team: GameManager.Team, key: String) -> float:
 
 # ─── Ore Sonar ───
 
+## Effective sonar level: Ore Sonar levels plus Deep Scan on top (3 = max).
 func get_sonar_level(team: GameManager.Team) -> int:
-	return get_level(team, "ore_sonar")
+	return get_level(team, "ore_sonar") + get_level(team, "deep_scan")
 
 
 func get_scan_cooldown_remaining(team: GameManager.Team) -> float:

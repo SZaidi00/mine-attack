@@ -55,7 +55,7 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 @onready var _garrison_button: Button = $BottomBar/MarginContainer/HBoxContainer/GarrisonButton
 @onready var _rally_button: Button = $BottomBar/MarginContainer/HBoxContainer/RallyButton
 @onready var _research_button: Button = $BottomBar/MarginContainer/HBoxContainer/ResearchButton
-@onready var _research_panel: PanelContainer = $ResearchPanel
+@onready var _research_panel: Control = $ResearchPanel
 @onready var _stance_buttons: Dictionary = {}
 @onready var _game_over_panel: PanelContainer = $GameOverPanel
 
@@ -72,7 +72,6 @@ func _ready() -> void:
 	_style_panel($TopBar)
 	_style_panel($BottomBar)
 	_style_panel($QueuePanel)
-	_style_panel(_research_panel)
 	_style_panel(_game_over_panel)
 	_style_tab_buttons()
 	_style_speed_buttons()
@@ -142,9 +141,11 @@ func _process(_delta: float) -> void:
 	_update_fighter_upgrade_buttons()
 	_update_unit_breakdown()
 	# Keep the pause menu in sync with the tree state (pause is toggled from
-	# PlayerController via Space/Esc).
-	if _pause_panel != null and _pause_panel.visible != get_tree().paused:
-		_pause_panel.visible = get_tree().paused
+	# PlayerController via Space/Esc) — except when the pause is owned by the
+	# research overlay's "Pause game" toggle, which has its own UI on top.
+	var pause_menu_wanted: bool = get_tree().paused and not _research_panel.owns_pause()
+	if _pause_panel != null and _pause_panel.visible != pause_menu_wanted:
+		_pause_panel.visible = pause_menu_wanted
 
 
 ## Full-screen dim pause menu: resume / restart / quit + difficulty

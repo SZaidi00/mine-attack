@@ -81,13 +81,13 @@ Autoload singletons (configured in `project.godot`, loaded in this order):
 Global singletons accessible from any script via their class name.
 
 - `constants.gd`
-  - Centralized balance numbers: `STARTING_COIN` (500), `STARTING_MINERS` (2 free miners per base at match start), `MAX_UNITS` (100). The training queue is uncapped (limited only by coin and population).
+  - Centralized balance numbers: `STARTING_COIN` (500), `STARTING_MINERS` (2 free miners per base at match start), `MAX_UNITS` (100). The training queue is uncapped (limited only by coin); training pauses while the team is at the population cap and resumes when a unit dies.
   - `COSTS`: miner 50, swordsman 100, archer 150, wizard 250.
   - `TRAIN_TIMES`: miner 3.0s, swordsman 5.0s, archer 6.0s, wizard 10.0s.
   - `MINER_STATS`: per-level HP, speed, mining DPS, carry capacity, and max layer.
   - `MINER_UPGRADE_COSTS`: level 2 → 500, level 3 → 1500.
   - `FIGHTER_UPGRADE_COSTS` / `FIGHTER_UPGRADES`: team-wide per-type fighter levels (swordsman/archer/wizard, L1→L3). Costs: swordsman 400/1200, archer 500/1500, wizard 600/1800. Stats are authoritative per-level HP/damage overrides (~+30% HP, +25% damage per level); level 1 rows mirror the `.tres` base stats.
-  - `RESEARCH_TECHS`: timed research tree (coexists with the instant upgrades). Fortify L1/L2 (600g/20s, 1500g/30s → building +2000/+3000 max HP, heals the delta), Ore Sonar L1/L2 (300g/15s, 800g/20s → unlocks the ore scan), Bulwark L1/L2 (swordsman +2/+2 flat damage reduction), Longbow (archer +30 range), Inferno (wizard +50% AoE), Reinforced Pack (miner +15 carry). Level values are per-level increments summed by `ResearchManager.get_stat_bonus()`. `SONAR_RADIUS` (8/12 cells) and `SONAR_COOLDOWN` (60s/40s) size the scan.
+  - `RESEARCH_TECHS`: timed research tree (coexists with the instant upgrades). Six branches of two tiers; each tech declares `tree_pos` (tier column, branch row) and tier-2 techs declare `requires` (prerequisite tech → level): Economy — Reinforced Pack (miner +15 carry) → Swift Boots (+15 miner speed); Recon — Ore Sonar L1/L2 (unlocks the ore scan) → Deep Scan; Defense — Fortify L1/L2 (+2000/+3000 building max HP, heals the delta) → Self-Repair (5 HP/s building regen); Swords — Bulwark L1/L2 (swordsman −2/−2 flat damage taken) → Berserk (20% faster attacks); Bows — Longbow (+30 archer range) → Rapid Fire (25% faster attacks); Arcane — Inferno (+50% fireball AoE) → Arcane Might (+25% wizard damage). Level values are per-level increments summed by `ResearchManager.get_stat_bonus()`. `SONAR_RADIUS` (8/12/16 cells) and `SONAR_COOLDOWN` (60s/40s/25s) are keyed by effective sonar level (ore_sonar + deep_scan). Per-level `desc` strings feed the research overlay's hover tooltips.
   - Building HP, wall HP, layer data, grid bounds, and input action `StringName` constants.
   - `UNIT_REGEN_DELAY` (5s) / `UNIT_REGEN_PER_SEC` (2 HP/s): out-of-combat regeneration — units that avoid damage for the delay slowly recover HP.
   - Fighter stats are stored in `UnitData` resources under `scripts/resources/units/*.tres`; `FIGHTER_STATS` was removed in Phase 2 to keep a single source of truth.
@@ -147,7 +147,7 @@ Global singletons accessible from any script via their class name.
   - Draws both layers every frame — sky, surface ground, and the surface row, plus the underground background, ceiling, and all subterranean tiles — so surface and underground activity are visible simultaneously.
 
 - `building.gd`
-  - Training queue with `queue_unit(unit_id)` and `cancel_queue(index)` (100% refund). The AI building's training speed and deposit income scale with the difficulty modifiers; the player is always ×1.0.
+  - Training queue with `queue_unit(unit_id)` and `cancel_queue(index)` (100% refund). At the population cap, training pauses mid-progress and resumes when a unit dies (no despawn, no refund churn). The AI building's training speed and deposit income scale with the difficulty modifiers; the player is always ×1.0.
   - Default building HP is 5000 (`PLAYER_BUILDING_HP` / `ENEMY_BUILDING_HP`); the Fortify research adds on top of the stored base (`_base_max_hp`) and heals the delta via `research_completed`.
   - Spawns units at the building front and automatically sends miners into the mine.
   - Emits `hp_changed`, `queue_changed`, `destroyed`, `coin_deposited`, `unit_spawned`.
@@ -199,7 +199,7 @@ Global singletons accessible from any script via their class name.
 - `main_menu.gd` — main menu: night-sky backdrop with falling snow (CPUParticles2D), both bases and units on the ground strip, and a centered card (title, difficulty dropdown, gold Play button, Quit, hotkey hint line); Play sets `GameManager.difficulty` and switches to `main.tscn`.
 - `unit_button.gd` — train button with cost/train-time labels, a hotkey hint badge, affordability/disable state, and failure shake.
 - `training_queue_panel.gd` — vertical queue panel docked on the right edge of the screen (between the top and bottom bars); shows the currently training unit's progress and a scrollable list of queued units; both the in-progress unit and queued units can be cancelled (100% refund).
-- `research_panel.gd` — research tree panel docked on the left edge, toggled by the BottomBar Research button / `R` hotkey. Rows are built in code from `Constants.RESEARCH_TECHS` (adding a tech to the table adds a row); shows the active research progress with a 100%-refund cancel, and the Ore Sonar **Scan** button with its cooldown countdown.
+- `research_panel.gd` — research tree overlay: full-screen dim with a centered card, toggled by the BottomBar Research button / `R` hotkey (click outside or Close to dismiss). Techs from `Constants.RESEARCH_TECHS` are laid out as a tree — nodes at their `tree_pos` (tier column × branch row), elbow connectors drawn from the `requires` table (gold when unlocked, dim when locked), so progression is visible at a glance. Hovering a node shows a native tooltip with per-level effects, costs, and unmet prerequisites. Footer holds the active-research progress bar with 100%-refund cancel and the Ore Sonar Scan button with cooldown countdown. The overlay never pauses the game by itself; a "Pause game" checkbox in the header opts in (the panel owns that pause via `owns_pause()`, releases it on close, and the HUD keeps the pause menu hidden while the panel owns it).
 - `layer_indicator.gd` — highlights accessible underground layers based on miner upgrade level.
 
 ### `scripts/effects/`
@@ -305,7 +305,7 @@ Defined in `project.godot` under `[input]`:
 - **Population cap:** 100 per team (`MAX_UNITS`).
 - **Starting coin:** 500 per team (`STARTING_COIN`).
 - **Starting units:** each base spawns 2 free miners at match start (`STARTING_MINERS`); they count toward population.
-- **Training queue:** uncapped — limited only by coin and population.
+- **Training queue:** uncapped — limited only by coin. Population never blocks *queueing*: at the 100-unit cap the queue pauses mid-training (the queue panel shows "paused (population cap)") and resumes when a unit dies — the finished unit is never despawned and the coin never refunded away.
 - **Units:** Miner, Swordsman, Archer, Wizard.
 - **Unit costs / train times:**
   - Miner: 50 coin, 3.0s
@@ -321,11 +321,14 @@ Defined in `project.godot` under `[input]`:
   - Wizard L2 600 / L3 1800 → HP 80/100, damage 47/58.
   - The AI buys them in its economy tick once it keeps a 400-coin reserve (cheapest first).
 - **Research tree (timed techs, one active research per team, 100% refund on cancel):**
-  - Fortify L1 600g/20s, L2 1500g/30s → building max HP +2000 / +3000 (heals the delta).
-  - Ore Sonar L1 300g/15s, L2 800g/20s → unlocks the Scan ability: reveals buried ore in an 8/12-cell radius of the own mine so miners path straight to it; 60s/40s cooldown.
-  - Bulwark L1 500g, L2 1000g → swordsmen take 2/4 less damage per hit (min 1).
-  - Longbow 500g → archers +30 attack range. Inferno 600g → wizard fireballs +50% AoE. Reinforced Pack 400g → miners +15 carry.
-  - Coexists with the instant upgrades above; the AI researches the same tree in its economy tick.
+  - Six branches of two tiers; tier-2 techs have prerequisites (e.g. Deep Scan needs Ore Sonar L2, Berserk needs Bulwark L2).
+  - Economy: Reinforced Pack 400g → miners +15 carry; Swift Boots 500g → +15 miner speed.
+  - Recon: Ore Sonar 300g/800g → Scan ability reveals buried ore in 8/12-cell radius (60s/40s cooldown); Deep Scan 1000g → 16 cells, 25s cooldown.
+  - Defense: Fortify 600g/1500g → building max HP +2000/+3000 (heals the delta); Self-Repair 800g → building regenerates 5 HP/s.
+  - Swords: Bulwark 500g/1000g → swordsmen take 2/4 less damage per hit (min 1); Berserk 800g → 20% faster attacks.
+  - Bows: Longbow 500g → archers +30 range; Rapid Fire 700g → 25% faster attacks.
+  - Arcane: Inferno 600g → fireballs +50% AoE; Arcane Might 900g → wizards +25% damage.
+  - Coexists with the instant upgrades above; the AI researches the same tree in its economy tick (prerequisite-gated).
 - **Layers:**
   - 7 underground layers, 3 grid rows each (`ROWS_PER_LAYER = 3`, ~32 px per row).
   - Layers 1–2: miner level 1, tile HP 50, ore coin 25–40 / 30–50.
@@ -351,13 +354,13 @@ Defined in `project.godot` under `[input]`:
 The project uses [GUT](https://github.com/bitwes/Gut) 9.6.1 (committed under `addons/gut/`). The suite lives in `tests/` and boots the real `main.tscn`, so it exercises the actual building/grid/unit wiring:
 
 - `tests/test_economy.gd` — spend/refund/upgrade math, cap guards, team wallet separation.
-- `tests/test_building_queue.gd` — FIFO order, queue-cap rejection, cancel refunds (queued + in-progress).
+- `tests/test_building_queue.gd` — FIFO order, queue accepts beyond the population cap, training pauses at the cap and resumes when population frees (no despawn, no refund churn), cancel refunds (queued + in-progress).
 - `tests/test_grid_world.gd` — ore trickle totals, A* clearing on destruction, level gates, wall shared-HP pool, `nearest_walkable_cell`/`cells_adjacent_to_rect` around the building footprint, no tile regen.
-- `tests/test_unit_guards.gd` — fighter `mine_cell` rejected, enemy mine entry rejected, unreachable mine target blacklisted, empty-cargo deposit rejected.
+- `tests/test_unit_guards.gd` — fighter `mine_cell` rejected, enemy mine entry rejected, unreachable mine target blacklisted, empty-cargo deposit rejected, corpse hits don't double-remove population (`take_damage` ignores `DEAD` units — in-flight projectiles can still land during the 1s fade-out, and without the guard each hit re-ran `_die()` and leaked a population slot past `MAX_UNITS`).
 - `tests/test_ai_retaliation.gd` — damaged AI sieger eventually retaliates against its attacker, undamaged sieger stays on the building, player units never auto-retaliate.
 - `tests/test_rally.gd` — rally targets surface miners, skips underground enemies, engagement keeps the rally active, explicit commands cancel it, miners can't rally, miner death drops full cargo as a pickup.
 - `tests/test_stance_modes.gd` — stance modes persist with zero fighters, attack/garrison/defend modes auto-order newly spawned fighters, miners ignore modes, rally doesn't change the mode.
-- `tests/test_research.gd` — research purchase guards (unknown/busy/unaffordable/maxed), timed completion and pause freeze, 100% cancel refund, fortify/longbow/bulwark/reinforced-pack effects, sonar scan reveal + cooldown, `reset()` clearing.
+- `tests/test_research.gd` — research purchase guards (unknown/busy/unaffordable/maxed/prerequisites), timed completion and pause freeze, 100% cancel refund, fortify/longbow/bulwark/reinforced-pack effects, tier-2 effects (swift boots, berserk, rapid fire, arcane might, self-repair regen + overheat cap, deep scan sonar level), research bonuses surviving miner upgrades, sonar scan reveal + cooldown, `reset()` clearing.
 
 > Test harness gotcha: every script that boots `main.tscn` must free it **immediately** in `after_all` (`_main.free()`, never `queue_free()`). A deferred free can still be pending when the next script instantiates its own `main.tscn` — the old `Main` name stays taken, the new scene gets renamed, and every hard-coded `/root/Main/...` lookup breaks (flaky, timing-dependent failures).
 
