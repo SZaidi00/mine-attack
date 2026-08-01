@@ -68,13 +68,24 @@ var _wall_hp: int = WALL_HP_TOTAL
 var _wall_max_hp: int = WALL_HP_TOTAL
 var _central_wall_cells: Array[Vector2i] = []
 
+# Backgrounds are padded this far beyond the map on every side so wide or
+# tall windows (where the whole world fits in view) never show unpainted void.
+const _BG_PAD: float = 3200.0
+
 var _view_mode: PlayerController.ViewMode = PlayerController.ViewMode.SURFACE
 var _cell_flash: Dictionary = {}  # Vector2i -> remaining flash time
 # Drives the magma/crystal shimmer redraws on the deep layers (Phase 8).
 var _shimmer_timer: float = 0.0
+# Edge colors sampled from the background textures, used to fill the padded
+# bands above the sky and below the deepest layer (tiling those textures
+# vertically would visibly repeat the horizon/ground seam).
+var _sky_top_color: Color = Color(0.02, 0.03, 0.06)
+var _underground_bottom_color: Color = Color(0.02, 0.03, 0.06)
 
 
 func _ready() -> void:
+	_sky_top_color = _SKY_TEXTURE.get_image().get_pixel(0, 0)
+	_underground_bottom_color = _UNDERGROUND_TEXTURE.get_image().get_pixel(0, _UNDERGROUND_TEXTURE.get_height() - 1)
 	_generate_map()
 	_init_astar()
 	_connect_view_mode()
@@ -539,13 +550,15 @@ func _draw() -> void:
 
 
 func _draw_surface() -> void:
-	var world_left: float = (X_MIN - 1) * CELL_SIZE
-	var world_right: float = (X_MAX + 2) * CELL_SIZE
+	var world_left: float = (X_MIN - 1) * CELL_SIZE - _BG_PAD
+	var world_right: float = (X_MAX + 2) * CELL_SIZE + _BG_PAD
 	var world_width: float = world_right - world_left
 
-	# Sky background.
+	# Sky background, plus a solid band above it in its top-edge color so tall
+	# windows never show void (tiling it vertically would repeat the horizon).
 	var sky_height: float = _SKY_TEXTURE.get_height()
 	draw_texture_rect(_SKY_TEXTURE, Rect2(world_left, -sky_height, world_width, sky_height), true)
+	draw_rect(Rect2(world_left, -_BG_PAD, world_width, _BG_PAD - sky_height), _sky_top_color, true)
 
 	# Surface ground background.
 	var ground_height: float = _SURFACE_GROUND_TEXTURE.get_height()
@@ -563,18 +576,21 @@ func _draw_surface() -> void:
 
 
 func _draw_underground() -> void:
-	var world_left: float = (X_MIN - 1) * CELL_SIZE
-	var world_right: float = (X_MAX + 2) * CELL_SIZE
+	var world_left: float = (X_MIN - 1) * CELL_SIZE - _BG_PAD
+	var world_right: float = (X_MAX + 2) * CELL_SIZE + _BG_PAD
 	var world_width: float = world_right - world_left
 
 	# Surface ceiling.
 	var ground_height: float = _SURFACE_GROUND_TEXTURE.get_height()
 	draw_texture_rect(_SURFACE_GROUND_TEXTURE, Rect2(world_left, 0, world_width, ground_height), true)
 
-	# Underground background.
+	# Underground background, plus a solid band below the deepest layer in its
+	# bottom-edge color so tall windows never show void.
 	var underground_y: float = CELL_SIZE
 	var underground_height: float = Y_MAX * CELL_SIZE
 	draw_texture_rect(_UNDERGROUND_TEXTURE, Rect2(world_left, underground_y, world_width, underground_height), true)
+	var underground_bottom: float = underground_y + underground_height
+	draw_rect(Rect2(world_left, underground_bottom, world_width, _BG_PAD), _underground_bottom_color, true)
 
 	for pos in _cells.keys():
 		if pos.y < 1:

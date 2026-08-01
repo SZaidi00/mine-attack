@@ -199,9 +199,10 @@ func _process(delta: float) -> void:
 		_shake_strength = move_toward(_shake_strength, 0.0, delta * 30.0)
 	elif camera.offset != Vector2.ZERO:
 		camera.offset = Vector2.ZERO
-	# Clamp camera within world bounds. Only clamp when the viewport is smaller
-	# than the playable area; otherwise the whole world is visible and the player
-	# should be free to pan (e.g. to follow surface/underground views).
+	# Clamp camera within world bounds. When the view is larger than the
+	# bounds on an axis (e.g. a 1440p+ window where the whole world fits),
+	# pin the camera to the bounds center on that axis instead of leaving it
+	# free to drift past the world into empty space.
 	var half_size: Vector2 = get_viewport().get_visible_rect().size / (2.0 * camera.zoom)
 	var min_pos: Vector2 = Vector2((GridWorld.X_MIN - 2) * GridWorld.CELL_SIZE, -300)
 	var max_pos: Vector2 = Vector2((GridWorld.X_MAX + 3) * GridWorld.CELL_SIZE, (GridWorld.Y_MAX + 4) * GridWorld.CELL_SIZE)
@@ -209,8 +210,12 @@ func _process(delta: float) -> void:
 	var hi: Vector2 = max_pos - half_size
 	if lo.x <= hi.x:
 		camera.position.x = clampf(camera.position.x, lo.x, hi.x)
+	else:
+		camera.position.x = (min_pos.x + max_pos.x) / 2.0
 	if lo.y <= hi.y:
 		camera.position.y = clampf(camera.position.y, lo.y, hi.y)
+	else:
+		camera.position.y = (min_pos.y + max_pos.y) / 2.0
 
 
 func _unhandled_input(event: InputEvent) -> void:
