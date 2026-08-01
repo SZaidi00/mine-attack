@@ -17,6 +17,11 @@ func setup(amount: int, is_healing: bool = false) -> void:
 	modulate = Color.GREEN if is_healing else Color.RED
 
 
+func setup_immune() -> void:
+	text = "IMMUNE"
+	modulate = Color(0.75, 0.78, 0.85, 1.0)
+
+
 func _process(delta: float) -> void:
 	position.y -= RISE_SPEED * delta
 	_timer -= delta

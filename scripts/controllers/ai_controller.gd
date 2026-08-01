@@ -69,7 +69,7 @@ func _run_economy() -> void:
 	# Fighter upgrades once the economy is comfortable (keep a coin reserve so
 	# training never stalls); cheapest first so the army scales steadily.
 	coin = EconomyManager.get_coin(team)
-	for unit_id in ["swordsman", "archer", "wizard"]:
+	for unit_id in ["swordsman", "archer", "wizard", "dragon"]:
 		var upgrade_cost: int = EconomyManager.get_fighter_upgrade_cost(team, unit_id)
 		if upgrade_cost > 0 and coin >= upgrade_cost + 400:
 			EconomyManager.upgrade_fighter(team, unit_id)
@@ -95,6 +95,8 @@ func _run_economy() -> void:
 			building.call("queue_unit", "miner")
 		elif fighters < 3 and coin >= _Constants.COSTS["swordsman"]:
 			building.call("queue_unit", "swordsman")
+		elif coin >= _Constants.COSTS["dragon"]:
+			building.call("queue_unit", "dragon")
 		elif coin >= _Constants.COSTS["wizard"]:
 			building.call("queue_unit", "wizard")
 		elif coin >= _Constants.COSTS["archer"]:
@@ -112,10 +114,14 @@ func _pick_research(building: Node2D) -> String:
 	var hurt: bool = building != null and float(building.get("_hp")) < float(building.get("max_hp")) * 0.6
 	if hurt and _research_open("fortify"):
 		return "fortify"
+	# Only count fighter types that have a matching research tech — dragons
+	# have no tech row, so they must not become best_unit and index-miss.
 	var counts: Dictionary = { "swordsman": 0, "archer": 0, "wizard": 0 }
 	for unit in get_tree().get_nodes_in_group(team_name()):
 		if unit.data.is_fighter:
-			counts[unit.data.unit_name.to_lower()] += 1
+			var unit_id: String = unit.data.unit_name.to_lower()
+			if counts.has(unit_id):
+				counts[unit_id] += 1
 	var tech_by_unit: Dictionary = { "swordsman": "bulwark", "archer": "longbow", "wizard": "inferno" }
 	var best_unit: String = "swordsman"
 	for unit_id in counts:

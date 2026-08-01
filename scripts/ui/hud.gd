@@ -22,6 +22,7 @@ const _ICON_MINER: Texture2D = preload("res://frost_mines_assets/icons/icon_mine
 const _ICON_SWORDSMAN: Texture2D = preload("res://frost_mines_assets/icons/icon_swordsman.png")
 const _ICON_ARCHER: Texture2D = preload("res://frost_mines_assets/icons/icon_archer.png")
 const _ICON_WIZARD: Texture2D = preload("res://frost_mines_assets/icons/icon_wizard.png")
+const _ICON_DRAGON: Texture2D = preload("res://frost_mines_assets/icons/icon_dragon.png")
 const _ICON_HP: Texture2D = preload("res://frost_mines_assets/icons/icon_hp.png")
 const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_attack.png")
 
@@ -33,6 +34,7 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 	"Swordsman": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/SwordsmanCountLabel,
 	"Archer": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/ArcherCountLabel,
 	"Wizard": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/WizardCountLabel,
+	"Dragon": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/DragonCountLabel,
 }
 @onready var _player_hp_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/PlayerHPLabel
 @onready var _enemy_hp_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyHPLabel
@@ -43,12 +45,15 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 	1.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed1Button,
 	2.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed2Button,
 	3.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed3Button,
+	5.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed5Button,
+	10.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed10Button,
 }
 @onready var _upgrade_button: Button = $BottomBar/MarginContainer/HBoxContainer/UpgradeMinerButton
 @onready var _fighter_upgrade_buttons: Dictionary = {
 	"swordsman": $BottomBar/MarginContainer/HBoxContainer/UpgradeSwordsmanButton,
 	"archer": $BottomBar/MarginContainer/HBoxContainer/UpgradeArcherButton,
 	"wizard": $BottomBar/MarginContainer/HBoxContainer/UpgradeWizardButton,
+	"dragon": $BottomBar/MarginContainer/HBoxContainer/UpgradeDragonButton,
 }
 @onready var _attack_button: Button = $BottomBar/MarginContainer/HBoxContainer/AttackButton
 @onready var _defend_button: Button = $BottomBar/MarginContainer/HBoxContainer/DefendButton
@@ -345,6 +350,7 @@ func _add_unit_breakdown_icons() -> void:
 		"Swordsman": _ICON_SWORDSMAN,
 		"Archer": _ICON_ARCHER,
 		"Wizard": _ICON_WIZARD,
+		"Dragon": _ICON_DRAGON,
 	}
 	for unit_name: String in _unit_count_labels:
 		var label: Label = _unit_count_labels[unit_name]
@@ -353,7 +359,7 @@ func _add_unit_breakdown_icons() -> void:
 
 
 func _update_unit_breakdown() -> void:
-	var counts: Dictionary = { "Miner": 0, "Swordsman": 0, "Archer": 0, "Wizard": 0 }
+	var counts: Dictionary = { "Miner": 0, "Swordsman": 0, "Archer": 0, "Wizard": 0, "Dragon": 0 }
 	for unit in get_tree().get_nodes_in_group("player"):
 		var data = unit.get("data")
 		if data == null:

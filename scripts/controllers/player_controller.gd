@@ -14,7 +14,7 @@ var _selected_units: Array = []
 var _drag_start: Vector2 = Vector2.ZERO
 var _is_dragging: bool = false
 var _camera_speed: float = 600.0
-var _zoom_min: float = 0.4
+var _zoom_min: float = 0.65
 var _zoom_max: float = 2.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
@@ -226,6 +226,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_select_units(_filter_miners(get_tree().get_nodes_in_group("player")))
 	elif event.is_action_pressed(_Constants.INPUT_SELECT_FIGHTERS):
 		_select_units(_filter_fighters(get_tree().get_nodes_in_group("player")))
+	elif event.is_action_pressed(_Constants.INPUT_SELECT_DRAGONS):
+		_select_units(_filter_dragons(get_tree().get_nodes_in_group("player")))
 	elif event.is_action_pressed(_Constants.INPUT_CAMERA_ZOOM_IN):
 		camera.zoom = (camera.zoom * 1.1).clamp(Vector2(_zoom_min, _zoom_min), Vector2(_zoom_max, _zoom_max))
 	elif event.is_action_pressed(_Constants.INPUT_CAMERA_ZOOM_OUT):
@@ -238,6 +240,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		train_unit("archer")
 	elif event.is_action_pressed(_Constants.INPUT_TRAIN_WIZARD):
 		train_unit("wizard")
+	elif event.is_action_pressed(_Constants.INPUT_TRAIN_DRAGON):
+		train_unit("dragon")
 	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_VIEW):
 		_toggle_view()
 	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_RESEARCH):
@@ -287,9 +291,14 @@ func _box_select(start: Vector2, end: Vector2) -> void:
 	var units: Array = []
 	var min_p: Vector2 = Vector2(min(start.x, end.x), min(start.y, end.y))
 	var max_p: Vector2 = Vector2(max(start.x, end.x), max(start.y, end.y))
+	var canvas: Transform2D = get_viewport().get_canvas_transform()
 	for unit in get_tree().get_nodes_in_group("player"):
-		var sp: Vector2 = get_viewport().get_canvas_transform() * unit.global_position
-		if sp.x >= min_p.x and sp.x <= max_p.x and sp.y >= min_p.y and sp.y <= max_p.y:
+		# Feet or combat body (flying dragons) — either inside the box counts.
+		var feet_sp: Vector2 = canvas * unit.global_position
+		var combat_sp: Vector2 = canvas * unit.get_combat_position()
+		var feet_in: bool = feet_sp.x >= min_p.x and feet_sp.x <= max_p.x and feet_sp.y >= min_p.y and feet_sp.y <= max_p.y
+		var combat_in: bool = combat_sp.x >= min_p.x and combat_sp.x <= max_p.x and combat_sp.y >= min_p.y and combat_sp.y <= max_p.y
+		if feet_in or combat_in:
 			units.append(unit)
 	if Input.is_key_pressed(KEY_SHIFT):
 		for u in units:
@@ -336,8 +345,17 @@ func _issue_command(screen_pos: Vector2) -> void:
 		if fighters.is_empty():
 			_reject_command("attack_unit", "no fighters selected", world_pos)
 			return
-		DebugLog.log_command("PlayerController", "attack_unit", "target=%d fighters=%d" % [enemy_unit.get_instance_id(), fighters.size()])
+		# Only order units that can actually hurt the target (e.g. dragons are
+		# immune to swordsmen — mixed selections should still send archers).
+		var capable: Array = []
 		for u in fighters:
+			if u.can_damage_unit(enemy_unit):
+				capable.append(u)
+		if capable.is_empty():
+			_reject_command("attack_unit", "target immune to selected units", world_pos)
+			return
+		DebugLog.log_command("PlayerController", "attack_unit", "target=%d fighters=%d" % [enemy_unit.get_instance_id(), capable.size()])
+		for u in capable:
 			u.attack_unit(enemy_unit)
 		return
 
@@ -411,7 +429,7 @@ func _unit_at(world_pos: Vector2) -> Unit:
 	var best: Unit = null
 	var best_dist: float = 999999.0
 	for unit in get_tree().get_nodes_in_group("units"):
-		var d: float = unit.global_position.distance_to(world_pos)
+		var d: float = unit.get_combat_position().distance_to(world_pos)
 		if d < GridWorld.CELL_SIZE / 1.5 and d < best_dist:
 			best_dist = d
 			best = unit
@@ -466,6 +484,10 @@ func _filter_miners(units: Array) -> Array:
 
 func _filter_fighters(units: Array) -> Array:
 	return units.filter(func(u): return u.data.is_fighter)
+
+
+func _filter_dragons(units: Array) -> Array:
+	return units.filter(func(u): return u.data != null and u.data.unit_name.to_lower() == "dragon")
 
 
 # ---------- UI callbacks ----------

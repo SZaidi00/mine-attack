@@ -94,6 +94,8 @@ var _regen_accum: float = 0.0
 # auto-attack engagements leave it alone, so units regroup after a fight
 # instead of spreading across the map.
 var _post_point: Vector2 = Vector2.ZERO
+# Last applied flight altitude for HoverArea / z_index sync.
+var _flight_visual_altitude: float = -1.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -163,6 +165,7 @@ func _process(delta: float) -> void:
 		return
 
 	_apply_research_bonuses()
+	_sync_flight_visuals()
 	if data.is_miner:
 		_apply_miner_upgrade()
 		if _mine_exhausted:
@@ -182,7 +185,7 @@ func _process(delta: float) -> void:
 				_rally_scan_timer = 0.25
 				_engage_rally_target_if_any()
 	# Keep the selection ring pulsing and the lantern glow flickering.
-	if selected or (data.is_miner and is_underground):
+	if selected or (data.is_miner and is_underground) or get_flight_altitude() > 0.0:
 		queue_redraw()
 	match _state:
 		State.MOVE:
@@ -230,11 +233,15 @@ func attack_unit(target) -> void:
 	if target.team == team:
 		DebugLog.log_reject("Unit %d" % get_instance_id(), "attack_unit", "friendly target")
 		return
+	if not can_damage_unit(target):
+		DebugLog.log_reject("Unit %d" % get_instance_id(), "attack_unit", "target immune")
+		_spawn_reject_popup(target.get_combat_position() if target.has_method("get_combat_position") else target.global_position)
+		return
 	_clear_target()
 	_repath(target.global_position)
 	if _path.is_empty():
 		DebugLog.log_reject("Unit %d" % get_instance_id(), "attack_unit", "no path to target")
-		_spawn_reject_popup(target.global_position)
+		_spawn_reject_popup(target.get_combat_position() if target.has_method("get_combat_position") else target.global_position)
 		_set_state(State.IDLE, "attack target unreachable")
 		return
 	DebugLog.log_command("Unit %d" % get_instance_id(), "attack_unit", "target=%d" % target.get_instance_id())
@@ -427,6 +434,9 @@ func rally_to(world_pos: Vector2) -> void:
 
 
 func take_damage(amount: int, attacker: Node2D = null) -> void:
+	if not can_be_damaged_by(attacker):
+		_spawn_immune_popup()
+		return
 	# Bulwark research: flat damage reduction, but a hit always lands for 1+.
 	if _armor > 0:
 		amount = maxi(1, amount - _armor)
@@ -441,6 +451,58 @@ func take_damage(amount: int, attacker: Node2D = null) -> void:
 		_start_flee()
 	elif team == GameManager.Team.ENEMY:
 		_maybe_retaliate(attacker)
+
+
+## Dragons only take damage from Archers and Wizards. All other units are
+## fully vulnerable to any attacker (including null for legacy call sites).
+func can_be_damaged_by(attacker: Node2D) -> bool:
+	if data == null or data.unit_name.to_lower() != "dragon":
+		return true
+	if attacker == null or not is_instance_valid(attacker):
+		return false
+	if not (attacker is Unit):
+		return false
+	var atk_data: UnitData = attacker.data
+	if atk_data == null:
+		return false
+	var unit_id: String = atk_data.unit_name.to_lower()
+	return unit_id == "archer" or unit_id == "wizard"
+
+
+func can_damage_unit(target: Node2D) -> bool:
+	if target == null or not is_instance_valid(target):
+		return false
+	if target.has_method("can_be_damaged_by"):
+		return target.can_be_damaged_by(self)
+	return true
+
+
+## Surface flight height in pixels (0 underground / non-flyers). Feet stay on
+## the ground for pathing; combat and draw use the offset aim point.
+func get_flight_altitude() -> float:
+	if data == null or data.flight_altitude <= 0.0 or is_underground:
+		return 0.0
+	return data.flight_altitude
+
+
+func get_combat_position() -> Vector2:
+	return global_position + Vector2(0, -get_flight_altitude())
+
+
+func combat_distance_squared_to(other: Node2D) -> float:
+	if other == null or not is_instance_valid(other):
+		return INF
+	var other_pos: Vector2 = other.global_position
+	if other.has_method("get_combat_position"):
+		other_pos = other.get_combat_position()
+	return get_combat_position().distance_squared_to(other_pos)
+
+
+func _uses_fireball() -> bool:
+	if data == null:
+		return false
+	var unit_id: String = data.unit_name.to_lower()
+	return unit_id == "wizard" or unit_id == "dragon"
 
 
 ## AI-only target re-evaluation: a fighter locked onto a building ignores
@@ -466,7 +528,7 @@ func _maybe_retaliate(attacker: Node2D) -> void:
 func _pick_retaliation_target(attacker: Node2D) -> Unit:
 	if attacker is Unit and is_instance_valid(attacker) and attacker._state != State.DEAD \
 			and attacker.data.is_fighter and attacker.is_underground == is_underground \
-			and global_position.distance_to(attacker.global_position) <= data.sight_range * 1.5:
+			and combat_distance_squared_to(attacker) <= (data.sight_range * 1.5) * (data.sight_range * 1.5):
 		return attacker
 	var best: Unit = null
 	var best_dist: float = data.sight_range * data.sight_range
@@ -475,7 +537,7 @@ func _pick_retaliation_target(attacker: Node2D) -> Unit:
 			continue
 		if not unit.data.is_fighter or unit.is_underground != is_underground:
 			continue
-		var d: float = global_position.distance_squared_to(unit.global_position)
+		var d: float = combat_distance_squared_to(unit)
 		if d <= best_dist:
 			best_dist = d
 			best = unit
@@ -485,14 +547,21 @@ func _pick_retaliation_target(attacker: Node2D) -> Unit:
 func _spawn_damage_popup(amount: int) -> void:
 	var popup: DamagePopup = preload("res://scenes/effects/damage_popup.tscn").instantiate()
 	popup.setup(amount)
-	popup.global_position = global_position + Vector2(0, -20)
+	popup.global_position = get_combat_position() + Vector2(0, -20)
+	get_tree().current_scene.add_child(popup)
+
+
+func _spawn_immune_popup() -> void:
+	var popup: DamagePopup = preload("res://scenes/effects/damage_popup.tscn").instantiate()
+	popup.setup_immune()
+	popup.global_position = get_combat_position() + Vector2(0, -20)
 	get_tree().current_scene.add_child(popup)
 
 
 func _spawn_heal_popup(amount: int) -> void:
 	var popup: DamagePopup = preload("res://scenes/effects/damage_popup.tscn").instantiate()
 	popup.setup(amount, true)
-	popup.global_position = global_position + Vector2(0, -20)
+	popup.global_position = get_combat_position() + Vector2(0, -20)
 	get_tree().current_scene.add_child(popup)
 
 
@@ -579,30 +648,30 @@ func _is_walkable_point(world_pos: Vector2) -> bool:
 
 func _process_attack(delta: float) -> void:
 	_attack_timer -= delta
-	var target_pos: Vector2 = Vector2.ZERO
-	var range_pos: Vector2 = Vector2.ZERO  # Point the attack range is measured to.
+	var path_pos: Vector2 = Vector2.ZERO  # Ground feet / stand point for A*.
+	var range_pos: Vector2 = Vector2.ZERO  # Combat aim point for range + shots.
 	var target_alive: bool = false
 
 	if _target_unit != null and is_instance_valid(_target_unit) and _target_unit._state != State.DEAD:
-		target_pos = _target_unit.global_position
-		range_pos = target_pos
+		path_pos = _target_unit.global_position
+		range_pos = _target_unit.get_combat_position() if _target_unit.has_method("get_combat_position") else path_pos
 		target_alive = true
 	elif _target_building != null and is_instance_valid(_target_building) and _target_building.is_in_group("buildings"):
 		# Measure range to the closest point on the building's body rect, not
 		# its center, so melee units engage at the edge of the footprint.
 		var rect: Rect2 = _target_building.call("get_bounds_rect")
-		range_pos = _closest_point_on_rect(rect, global_position)
-		target_pos = _building_stand_point(_target_building)
+		range_pos = _closest_point_on_rect(rect, get_combat_position())
+		path_pos = _building_stand_point(_target_building)
 		target_alive = true
 	else:
 		_set_state(State.IDLE, "target lost")
 		return
 
-	if global_position.distance_to(range_pos) > data.attack_range:
+	if get_combat_position().distance_to(range_pos) > data.attack_range:
 		# Re-path only when there is no path or the destination has moved
 		# significantly (moving unit targets), not every physics frame.
-		if _path.is_empty() or _path[_path.size() - 1].distance_to(target_pos) > GridWorld.CELL_SIZE * 0.75:
-			_repath(target_pos)
+		if _path.is_empty() or _path[_path.size() - 1].distance_to(path_pos) > GridWorld.CELL_SIZE * 0.75:
+			_repath(path_pos)
 		if _path.is_empty():
 			_set_state(State.IDLE, "attack target unreachable")
 			return
@@ -612,11 +681,12 @@ func _process_attack(delta: float) -> void:
 	_path.clear()
 	# Ranged standoff: if a unit target slips inside 40% of the attack range,
 	# step back to re-establish distance before the next shot. Melee units
-	# (attack_range <= 35) and building sieges are unaffected.
+	# (attack_range <= 35) and building sieges are unaffected. Gap uses combat
+	# positions (air vs ground); kite steering still moves feet on the ground.
 	if data.attack_range > 35.0 and _target_unit != null:
-		var gap: float = global_position.distance_to(target_pos)
+		var gap: float = sqrt(combat_distance_squared_to(_target_unit))
 		if gap < data.attack_range * 0.4:
-			_kite_away_from(target_pos, delta)
+			_kite_away_from(path_pos, delta)
 	if _attack_timer <= 0:
 		_attack_timer = data.attack_cooldown
 		var hit_damage: int = roundi(data.damage_per_hit)
@@ -634,12 +704,14 @@ func _process_attack(delta: float) -> void:
 
 
 func _spawn_projectile(target_pos: Vector2) -> void:
-	AudioManager.play("blast" if data.unit_name == "Wizard" else "bow", global_position, -6.0)
+	var fireball: bool = _uses_fireball()
+	var spawn_pos: Vector2 = get_combat_position()
+	AudioManager.play("blast" if fireball else "bow", spawn_pos, -6.0)
 	var proj: Node2D = preload("res://scenes/projectile.tscn").instantiate()
-	proj.position = global_position
+	proj.position = spawn_pos
 	proj.set("team", team)
 	proj.set("damage", roundi(data.damage_per_hit))
-	proj.set("is_fireball", data.unit_name == "Wizard")
+	proj.set("is_fireball", fireball)
 	proj.set("speed", data.projectile_speed)
 	proj.set("aoe_radius", data.aoe_radius)
 	proj.set("target_position", target_pos)
@@ -1261,6 +1333,7 @@ func _engage_rally_target_if_any() -> bool:
 
 ## Rally targets: any living enemy on the surface — fighters AND miners.
 ## Underground enemies are out of scope (the rally sweep is a surface hunt).
+## Skip targets this unit cannot damage (e.g. swordsman vs dragon).
 func _find_rally_target() -> Unit:
 	if is_underground:
 		return null
@@ -1271,7 +1344,9 @@ func _find_rally_target() -> Unit:
 			continue
 		if unit.is_underground:
 			continue
-		var d: float = global_position.distance_squared_to(unit.global_position)
+		if not can_damage_unit(unit):
+			continue
+		var d: float = combat_distance_squared_to(unit)
 		if d <= best_dist:
 			best_dist = d
 			best = unit
@@ -1296,7 +1371,9 @@ func _find_auto_attack_target():
 			continue
 		if not unit.data.is_fighter:
 			continue
-		var d: float = global_position.distance_squared_to(unit.global_position)
+		if not can_damage_unit(unit):
+			continue
+		var d: float = combat_distance_squared_to(unit)
 		if d <= best_dist:
 			best_dist = d
 			best = unit
@@ -1311,7 +1388,9 @@ func _find_auto_attack_target():
 			continue
 		if not unit.data.is_fighter:
 			continue
-		var d: float = global_position.distance_squared_to(unit.global_position)
+		if not can_damage_unit(unit):
+			continue
+		var d: float = combat_distance_squared_to(unit)
 		if d <= best_dist:
 			best_dist = d
 			best = unit
@@ -1321,7 +1400,7 @@ func _find_auto_attack_target():
 	# 3. Enemy building in sight range.
 	var enemy_building: Node2D = _get_enemy_building()
 	if enemy_building != null:
-		var d: float = global_position.distance_squared_to(enemy_building.global_position)
+		var d: float = get_combat_position().distance_squared_to(enemy_building.global_position)
 		if d <= data.sight_range * data.sight_range:
 			return enemy_building
 
@@ -1338,7 +1417,7 @@ func _find_auto_attack_target():
 			var grid_x: int = _grid.world_to_grid(unit.global_position).x
 			if grid_x * team_dir < 2:
 				continue
-			var d: float = global_position.distance_squared_to(unit.global_position)
+			var d: float = combat_distance_squared_to(unit)
 			if d <= best_dist:
 				best_dist = d
 				best = unit
@@ -1384,13 +1463,29 @@ func _add_hover_area() -> void:
 	var shape: CollisionShape2D = CollisionShape2D.new()
 	var rect: RectangleShape2D = RectangleShape2D.new()
 	var sprite_texture: Texture2D = _get_unit_texture()
+	var scale_factor: float = data.draw_scale if data != null and data.draw_scale > 0.0 else 1.0
 	if sprite_texture != null:
-		rect.size = sprite_texture.get_size()
+		rect.size = sprite_texture.get_size() * scale_factor
 	else:
-		rect.size = Vector2(22, 22)
+		rect.size = Vector2(22, 22) * scale_factor
 	shape.shape = rect
 	area.add_child(shape)
 	add_child(area)
+	_sync_flight_visuals()
+
+
+## Keep HoverArea / z_index aligned with surface flight altitude (drops to 0
+## underground so tunnel dragons don't float through the ceiling).
+func _sync_flight_visuals() -> void:
+	var altitude: float = get_flight_altitude()
+	if is_equal_approx(altitude, _flight_visual_altitude):
+		return
+	_flight_visual_altitude = altitude
+	z_index = 1 if altitude > 0.0 else 0
+	var area: Area2D = get_node_or_null("HoverArea") as Area2D
+	if area != null:
+		area.position = Vector2(0, -altitude)
+	queue_redraw()
 
 
 ## Team-wide fighter upgrades (swordsman/archer/wizard): applies the
@@ -1552,20 +1647,27 @@ func _get_unit_texture() -> Texture2D:
 func _draw() -> void:
 	var color: Color = GameManager.COLOR_PLAYER if team == GameManager.Team.PLAYER else GameManager.COLOR_ENEMY
 	var sprite_texture: Texture2D = _get_unit_texture()
+	var scale_factor: float = data.draw_scale if data != null and data.draw_scale > 0.0 else 1.0
+	var altitude: float = get_flight_altitude()
 	var body_top: float
-	var body_bottom: float
 	var selection_radius: float
 
 	if sprite_texture != null:
-		var sprite_size: Vector2 = sprite_texture.get_size()
-		body_top = -sprite_size.y / 2.0
-		body_bottom = sprite_size.y / 2.0
+		var sprite_size: Vector2 = sprite_texture.get_size() * scale_factor
+		body_top = -altitude - sprite_size.y / 2.0
 		selection_radius = max(sprite_size.x, sprite_size.y) / 2.0 + 4.0
 	else:
-		var size: float = 18.0
-		body_top = -size / 2.0
-		body_bottom = size / 2.0
+		var size: float = 18.0 * scale_factor
+		body_top = -altitude - size / 2.0
 		selection_radius = size + 4.0
+
+	# Ground shadow under flying units (feet stay at local origin).
+	if altitude > 0.0:
+		var shadow_w: float = 18.0 * scale_factor
+		var shadow_h: float = 6.0 * scale_factor
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(shadow_w / 10.0, shadow_h / 10.0))
+		draw_circle(Vector2.ZERO, 5.0, Color(0, 0, 0, 0.35))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	# Lantern glow: a warm halo around miners working underground (Phase 8).
 	if data.is_miner and is_underground:
@@ -1575,30 +1677,35 @@ func _draw() -> void:
 		var glow_size: float = 100.0
 		draw_texture_rect(_glow_texture, Rect2(-glow_size / 2.0, -glow_size / 2.0, glow_size, glow_size), false, Color(1.0, 0.85, 0.55, flicker))
 
-	# Selection indicator (gentle pulse).
+	# Selection indicator (gentle pulse) centered on the combat body.
 	if selected:
 		var pulse: float = 1.0 + 0.08 * sin(Time.get_ticks_msec() / 160.0)
 		var ring_radius: float = selection_radius * pulse
-		draw_texture_rect(_SELECTION_RING, Rect2(-ring_radius, -ring_radius, ring_radius * 2.0, ring_radius * 2.0), false)
+		draw_texture_rect(_SELECTION_RING, Rect2(-ring_radius, -altitude - ring_radius, ring_radius * 2.0, ring_radius * 2.0), false)
 
-	# Body.
+	# Body (offset upward when flying).
 	if sprite_texture != null:
-		var sprite_size: Vector2 = sprite_texture.get_size()
-		draw_texture(sprite_texture, -sprite_size / 2.0)
+		var sprite_size: Vector2 = sprite_texture.get_size() * scale_factor
+		var dest := Rect2(-sprite_size / 2.0 + Vector2(0, -altitude), sprite_size)
+		draw_texture_rect(sprite_texture, dest, false)
 	else:
-		var size: float = 18.0
-		draw_rect(Rect2(-size / 2.0, -size / 2.0, size, size), color, true)
-		draw_rect(Rect2(-size / 2.0, -size / 2.0, size, size), GameManager.COLOR_SHADOW, false, 1.0)
+		var size: float = 18.0 * scale_factor
+		var body_offset := Vector2(0, -altitude)
+		draw_rect(Rect2(-size / 2.0 + body_offset.x, -size / 2.0 + body_offset.y, size, size), color, true)
+		draw_rect(Rect2(-size / 2.0 + body_offset.x, -size / 2.0 + body_offset.y, size, size), GameManager.COLOR_SHADOW, false, 1.0)
 
 		# Weapon / class indicator (fallback body).
 		if data.unit_name == "Swordsman":
-			draw_line(Vector2(4, 4), Vector2(16, -8), Color.WHITE, 3.0)
+			draw_line(Vector2(4, 4) + body_offset, Vector2(16, -8) + body_offset, Color.WHITE, 3.0)
 		elif data.unit_name == "Archer":
-			draw_arc(Vector2(10, 0), 7, -PI / 2, PI / 2, 8, GameManager.COLOR_RUST, 2.0)
-			draw_line(Vector2(10, -7), Vector2(10, 7), GameManager.COLOR_RUST, 2.0)
+			draw_arc(Vector2(10, 0) + body_offset, 7, -PI / 2, PI / 2, 8, GameManager.COLOR_RUST, 2.0)
+			draw_line(Vector2(10, -7) + body_offset, Vector2(10, 7) + body_offset, GameManager.COLOR_RUST, 2.0)
 		elif data.unit_name == "Wizard":
-			draw_line(Vector2(6, 6), Vector2(12, -14), GameManager.COLOR_RUST, 2.0)
-			draw_circle(Vector2(12, -16), 4, Color.PURPLE)
+			draw_line(Vector2(6, 6) + body_offset, Vector2(12, -14) + body_offset, GameManager.COLOR_RUST, 2.0)
+			draw_circle(Vector2(12, -16) + body_offset, 4, Color.PURPLE)
+		elif data.unit_name == "Dragon":
+			draw_circle(Vector2(0, -2) + body_offset, 8 * scale_factor, color.darkened(0.15))
+			draw_circle(Vector2(10, -6) + body_offset, 3 * scale_factor, Color(1.0, 0.45, 0.15))
 
 	# Miner pickaxe animation and spark burst. Drawn on top of sprites as well
 	# so the mining strike is readable even when textured miners are used.
@@ -1608,7 +1715,7 @@ func _draw() -> void:
 	# Impact hit flash.
 	if _hit_flash_timer > 0:
 		var impact_size: Vector2 = _IMPACT_TEXTURE.get_size()
-		draw_texture(_IMPACT_TEXTURE, -impact_size / 2.0)
+		draw_texture(_IMPACT_TEXTURE, -impact_size / 2.0 + Vector2(0, -altitude))
 
 	# HP bar when damaged, hovered, or selected.
 	if selected or hovered or hp < data.max_hp:

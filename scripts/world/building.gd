@@ -46,6 +46,7 @@ func _ready() -> void:
 	_resources["swordsman"] = preload("res://scripts/resources/units/swordsman.tres")
 	_resources["archer"] = preload("res://scripts/resources/units/archer.tres")
 	_resources["wizard"] = preload("res://scripts/resources/units/wizard.tres")
+	_resources["dragon"] = preload("res://scripts/resources/units/dragon.tres")
 	_mark_footprint_solid()
 	_add_deposit_point()
 	_connect_view_mode()

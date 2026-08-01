@@ -25,6 +25,10 @@ extends Resource
 @export var projectile_speed: float = 300.0
 @export var aoe_radius: float = 0.0
 
+# Flight (dragons): feet stay on the ground for pathing; combat/draw use altitude.
+@export var flight_altitude: float = 0.0
+@export var draw_scale: float = 1.0
+
 # Mining only
 @export var miner_level: int = 1
 @export var carry_capacity: int = 0
