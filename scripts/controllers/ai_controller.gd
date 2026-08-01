@@ -3,6 +3,11 @@ extends Node
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
+## Target army composition — the economy tick trains whichever type is
+## furthest below its share, so the AI fields a mixed force (tanky frontline,
+## ranged support, a few dragons) instead of a stream of swordsmen.
+const _ARMY_MIX: Dictionary = { "swordsman": 0.4, "archer": 0.3, "wizard": 0.2, "dragon": 0.1 }
+
 @export var team: GameManager.Team = GameManager.Team.ENEMY
 
 var _economy_tick: float = 0.0
@@ -54,16 +59,19 @@ func _run_economy() -> void:
 		return
 
 	var miners: int = _count_miners()
-	var fighters: int = _count_fighters()
 	var coin: int = EconomyManager.get_coin(team)
 	var level: int = EconomyManager.get_miner_level(team)
 	var population: int = EconomyManager.get_population(team)
 
-	# Upgrade miners first: banking 500/1500 for the upgrade takes priority
-	# over expensive units, otherwise the AI never saves enough to advance.
-	if level == 1 and coin >= _Constants.MINER_UPGRADE_COSTS[2]:
-		EconomyManager.upgrade_miner(team)
-	elif level == 2 and coin >= _Constants.MINER_UPGRADE_COSTS[3]:
+	# Bank for the next miner upgrade: without a reserve the training drain
+	# keeps the wallet under 500/1500 forever and miners never advance past
+	# level 1. Miner training is exempt from the reserve — miners pay for
+	# themselves — but fighter upgrades, research, and fighter training may
+	# only spend what is on top of the banked amount.
+	var reserve: int = 0
+	if _Constants.MINER_UPGRADE_COSTS.has(level + 1):
+		reserve = _Constants.MINER_UPGRADE_COSTS[level + 1]
+	if reserve > 0 and coin >= reserve:
 		EconomyManager.upgrade_miner(team)
 
 	# Fighter upgrades once the economy is comfortable (keep a coin reserve so
@@ -71,7 +79,7 @@ func _run_economy() -> void:
 	coin = EconomyManager.get_coin(team)
 	for unit_id in ["swordsman", "archer", "wizard", "dragon"]:
 		var upgrade_cost: int = EconomyManager.get_fighter_upgrade_cost(team, unit_id)
-		if upgrade_cost > 0 and coin >= upgrade_cost + 400:
+		if upgrade_cost > 0 and coin - reserve >= upgrade_cost + 400:
 			EconomyManager.upgrade_fighter(team, unit_id)
 			coin -= upgrade_cost
 
@@ -82,27 +90,52 @@ func _run_economy() -> void:
 		var tech: String = _pick_research(building)
 		if tech != "":
 			var data: Dictionary = ResearchManager.get_next_level_data(team, tech)
-			if EconomyManager.get_coin(team) >= int(data.cost) + 400:
+			if EconomyManager.get_coin(team) - reserve >= int(data.cost) + 400:
 				ResearchManager.start_research(team, tech)
 	# The scan is free — fire it whenever the cooldown is up.
 	if ResearchManager.can_scan(team):
 		ResearchManager.scan(team)
 
-	# Queue decisions (respecting queue size and population cap).
+	# Queue decisions (respecting queue size and population cap). Deeper miner
+	# levels justify a larger mining crew to exploit the newly unlocked layers.
 	var queue_size: int = building.call("get_queue").size()
 	if queue_size < 3 and population < _Constants.MAX_UNITS:
-		if miners < 5 and coin >= _Constants.COSTS["miner"]:
+		coin = EconomyManager.get_coin(team)
+		var miner_target: int = 4 + level * 2
+		if miners < miner_target and coin >= _Constants.COSTS["miner"]:
 			building.call("queue_unit", "miner")
-		elif fighters < 3 and coin >= _Constants.COSTS["swordsman"]:
-			building.call("queue_unit", "swordsman")
-		elif coin >= _Constants.COSTS["dragon"]:
-			building.call("queue_unit", "dragon")
-		elif coin >= _Constants.COSTS["wizard"]:
-			building.call("queue_unit", "wizard")
-		elif coin >= _Constants.COSTS["archer"]:
-			building.call("queue_unit", "archer")
-		elif coin >= _Constants.COSTS["swordsman"]:
-			building.call("queue_unit", "swordsman")
+		else:
+			var pick: String = _pick_fighter_to_train(coin - reserve)
+			if pick != "":
+				building.call("queue_unit", pick)
+
+
+## Picks the fighter type furthest below its target share of the army that the
+## budget affords, so the AI trains a combined-arms force per _ARMY_MIX.
+func _pick_fighter_to_train(budget: int) -> String:
+	var counts: Dictionary = {}
+	for unit_id in _ARMY_MIX:
+		counts[unit_id] = 0
+	var total: int = 0
+	for unit in get_tree().get_nodes_in_group(team_name()):
+		if unit.data.is_fighter and unit._state != Unit.State.DEAD:
+			var unit_id: String = unit.data.unit_name.to_lower()
+			if counts.has(unit_id):
+				counts[unit_id] += 1
+				total += 1
+	var best: String = ""
+	var best_deficit: float = 0.0
+	for unit_id in _ARMY_MIX:
+		if _Constants.COSTS[unit_id] > budget:
+			continue
+		# Score against a floor of a 10-unit army so the first picks already
+		# follow the mix instead of training one of each.
+		var desired: float = _ARMY_MIX[unit_id] * maxf(10.0, float(total))
+		var deficit: float = desired - counts[unit_id]
+		if deficit > best_deficit:
+			best_deficit = deficit
+			best = unit_id
+	return best
 
 
 ## Next research to buy, by priority: sonar first (revealed ore shortens
@@ -157,32 +190,63 @@ func _run_mining() -> void:
 
 
 func _run_attack_wave() -> void:
+	_launch_wave_if_ready()
+
+
+## Group attack: the army holds at home until it reaches critical mass
+## (_wave_threshold), then everyone free moves out together. Launching
+## stragglers the moment they spawned is what made the old AI feed one
+## swordsman at a time.
+func _launch_wave_if_ready() -> void:
 	var target: Node2D = _get_enemy_building()
 	if target == null:
 		return
-	var sent: int = 0
+	var free_fighters: Array = []
+	var total: int = 0
 	for unit in get_tree().get_nodes_in_group(team_name()):
-		if not unit.data.is_fighter:
+		if not unit.data.is_fighter or unit._state == Unit.State.DEAD:
 			continue
-		if unit._state == Unit.State.IDLE or unit._state == Unit.State.MOVE:
-			unit.attack_building(target)
-			sent += 1
-			if sent >= 12:
-				break
+		total += 1
+		# Engaged fighters keep their duel; underground ones stay put. Only
+		# free surface fighters get the wave order.
+		if (unit._state == Unit.State.IDLE or unit._state == Unit.State.MOVE) and not unit.is_underground:
+			free_fighters.append(unit)
+	if total < _wave_threshold(target):
+		return
+	for unit in free_fighters:
+		unit.attack_building(target)
+
+
+## Minimum army size before a wave launches, by aggression level. A
+## nearly-dead enemy base triggers an all-in with whatever is on hand.
+func _wave_threshold(target: Node2D) -> int:
+	var hp_ratio: float = float(target.get("_hp")) / maxf(1.0, float(target.get("max_hp")))
+	if hp_ratio < 0.25:
+		return 3
+	match _aggression_level:
+		"push":
+			return 4
+		"balanced":
+			return 7
+		_:
+			return 12  # defend: only march with a real army
 
 
 func _defend_building() -> void:
 	var building: Node2D = _get_building()
 	if building == null:
 		return
-	var threat: Unit = _nearest_enemy_unit(building.global_position, 350)
-	if threat == null:
+	if _nearest_enemy_unit(building.global_position, 450) == null:
 		return
 	for unit in get_tree().get_nodes_in_group(team_name()):
 		if not unit.data.is_fighter:
 			continue
 		if unit._state == Unit.State.IDLE or unit._state == Unit.State.MOVE:
-			unit.attack_unit(threat)
+			# Each defender picks its own nearest threat so the defense spreads
+			# damage instead of overkill-focusing a single intruder.
+			var threat: Unit = _nearest_enemy_unit(unit.global_position, 500)
+			if threat != null:
+				unit.attack_unit(threat)
 
 
 func _update_aggression_level() -> void:
@@ -213,26 +277,23 @@ func _update_aggression_level() -> void:
 func _apply_aggression_behavior() -> void:
 	match _aggression_level:
 		"push":
-			# Continuously send idle fighters to attack.
-			var target: Node2D = _get_enemy_building()
-			if target == null:
-				return
-			for unit in get_tree().get_nodes_in_group(team_name()):
-				if not unit.data.is_fighter:
-					continue
-				if unit._state == Unit.State.IDLE:
-					unit.attack_building(target)
+			# While pushing, check for a launch every frame instead of waiting
+			# for the 18s wave tick — a gathered army marches immediately.
+			_launch_wave_if_ready()
 			# Also attempt wall breach if miners have run out of accessible tiles.
 			_attempt_wall_breach()
 		"defend":
-			# Garrison ~30% of idle fighters underground.
-			var idle_fighters: Array = []
+			# Recall strays: fighters idling far from home fall back to the
+			# base instead of being picked off across the map. garrison_home()
+			# sets their standing point at the base, so they hold there.
+			var building: Node2D = _get_building()
+			if building == null:
+				return
 			for unit in get_tree().get_nodes_in_group(team_name()):
-				if unit.data.is_fighter and unit._state == Unit.State.IDLE and not unit.is_underground:
-					idle_fighters.append(unit)
-			var garrison_count: int = int(idle_fighters.size() * 0.3)
-			for i in range(min(garrison_count, idle_fighters.size())):
-				idle_fighters[i].enter_mine()
+				if not unit.data.is_fighter or unit._state != Unit.State.IDLE or unit.is_underground:
+					continue
+				if unit.global_position.distance_to(building.global_position) > 450.0:
+					unit.garrison_home()
 
 
 func _attempt_wall_breach() -> void:
@@ -324,14 +385,6 @@ func _count_miners() -> int:
 	var n: int = 0
 	for unit in get_tree().get_nodes_in_group(team_name()):
 		if unit.data.is_miner and unit._state != Unit.State.DEAD:
-			n += 1
-	return n
-
-
-func _count_fighters() -> int:
-	var n: int = 0
-	for unit in get_tree().get_nodes_in_group(team_name()):
-		if unit.data.is_fighter and unit._state != Unit.State.DEAD:
 			n += 1
 	return n
 
