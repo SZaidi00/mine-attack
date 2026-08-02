@@ -261,7 +261,7 @@ To export from the command line:
 tools/export_all.sh   # all three presets in one go (set GODOT=/path/to/Godot if it isn't found)
 ```
 
-The script also zips the desktop builds for distribution: `build/MineAttack-macOS.zip` (via `ditto`, preserving the bundle metadata) and `build/MineAttack-Windows.zip` (the single-file exe).
+The script also zips the desktop builds for distribution into the **project root** (easier to find than `build/`): `MineAttack-macOS.zip` (via `ditto`, preserving the bundle metadata) and `MineAttack-Windows.zip` (the single-file exe). The root zips are gitignored.
 
 or one preset at a time:
 
