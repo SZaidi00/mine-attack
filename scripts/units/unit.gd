@@ -469,7 +469,7 @@ func take_damage(amount: int, attacker: Node2D = null) -> void:
 		_die()
 	elif data.is_miner:
 		_start_flee()
-	elif team == GameManager.Team.ENEMY:
+	else:
 		_maybe_retaliate(attacker)
 
 
@@ -530,16 +530,16 @@ func _uses_fireball() -> bool:
 	return unit_id == "wizard" or unit_id == "dragon"
 
 
-## AI-only target re-evaluation: a fighter locked onto a building ignores
-## nothing forever — when enemy fighters damage it, some peel off to fight
-## back (per-hit roll against the difficulty's retaliation chance), so a siege
-## under fire turns into a real battle instead of a shooting gallery. Units
-## already engaging units are left alone, so a retaliate decision never
-## flip-flops mid-duel.
+## Target re-evaluation while sieging: a fighter locked onto a building
+## ignores nothing forever — when an enemy fighter damages it, it peels off
+## to fight back, so a siege under fire turns into a real battle instead of a
+## shooting gallery. Player units always retaliate; AI units roll per hit
+## against the difficulty's retaliation chance. Units already engaging units
+## are left alone, so a retaliate decision never flip-flops mid-duel.
 func _maybe_retaliate(attacker: Node2D) -> void:
 	if _state != State.ATTACK or _target_building == null:
 		return
-	if randf() > GameManager.get_ai_retaliation_chance():
+	if team == GameManager.Team.ENEMY and randf() > GameManager.get_ai_retaliation_chance():
 		return
 	var target: Unit = _pick_retaliation_target(attacker)
 	if target != null:

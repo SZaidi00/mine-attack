@@ -1,9 +1,10 @@
 extends GutTest
 
-# AI retaliation: enemy fighters besieging a building re-evaluate when enemy
-# fighters damage them — some peel off to fight back (per-hit coin flip), so
-# enough hits always flip the target. Player units never auto-retaliate:
-# explicit player orders stay sovereign.
+# Siege retaliation: a fighter besieging a building re-evaluates when an enemy
+# fighter damages it — it peels off to fight back, so a siege under fire turns
+# into a real battle instead of a shooting gallery. Player units always
+# retaliate; AI units roll per hit against the difficulty's retaliation
+# chance, so enough hits always flip the target.
 
 const PLAYER: int = 0
 const ENEMY: int = 1
@@ -80,13 +81,15 @@ func test_retaliation_chance_scales_with_difficulty() -> void:
 	GameManager.set_difficulty(before)
 
 
-func test_player_units_never_auto_retaliate() -> void:
+func test_player_sieger_retaliates_against_attacker() -> void:
 	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(440, 16))
 	var enemy_attacker: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(460, 16))
 	var enemy_building: Node2D = _building_for(ENEMY)
 	fighter.call("attack_building", enemy_building)
-	fighter.set("hp", 100000)
-	for i in range(10):
-		fighter.call("take_damage", 1, enemy_attacker)
-	assert_null(fighter.get("_target_unit"), "player orders stay sovereign — no auto-retaliation")
 	assert_eq(fighter.get("_target_building"), enemy_building)
+	fighter.set("hp", 100000)
+	# Player retaliation is deterministic: a single hit flips the siege onto
+	# the attacker (no difficulty roll for the player's own army).
+	fighter.call("take_damage", 1, enemy_attacker)
+	assert_eq(fighter.get("_target_unit"), enemy_attacker, "player sieger must fight back when attacked")
+	assert_null(fighter.get("_target_building"))
