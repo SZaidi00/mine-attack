@@ -18,7 +18,7 @@ The game is fully local (no networking or server). The player controls the blue 
 - **Renderer:** `gl_compatibility` (OpenGL / GL Compatibility backend)
 - **Physics:** Jolt Physics
 - **Language:** GDScript (static typing is used where practical)
-- **Target platforms:** Web (primary configured export). `export_presets.cfg` lists runnable presets for both **macOS** and **Web**, but only the Web preset is actually defined.
+- **Target platforms:** Web, macOS, and Windows (all three presets defined in `export_presets.cfg`; macOS and Web are runnable presets).
 - **Version control:** Git with LF-normalized text files (`.gitattributes`)
 
 Key configuration files: `project.godot` (project settings, autoloads, input map, display, rendering, physics) and `export_presets.cfg` (Web export preset).
@@ -249,17 +249,27 @@ A debug overlay is wired into `scenes/main.tscn` as `DebugOverlay`; it frees its
 
 ### Export
 
-The project has one configured export preset in `export_presets.cfg`:
+The project has three configured export presets in `export_presets.cfg` (all exclude `addons/*` and `tests/*` — GUT is dev tooling and must not ship in the release pck):
 
-- **Web** — exports to `build/MineAttack.html`. The preset excludes `addons/*` and `tests/*` (GUT is dev tooling and must not ship in the release pck).
+- **Web** — exports to `build/MineAttack.html`.
+- **macOS** — exports a universal (x86_64 + arm64) `build/MineAttack.app`; runnable preset. Unsigned: on other Macs Gatekeeper will block it until the user right-clicks → Open (or runs `xattr -cr MineAttack.app`); sign + notarize with an Apple Developer ID for friction-free distribution.
+- **Windows** — exports a single-file `build/MineAttack.exe` (x86_64, pck embedded via `binary_format/embed_pck=true`). Unsigned: SmartScreen may warn on first run.
 
-Runnable presets are configured for **macOS** and **Web** in the `[runnable_presets]` section, but only the Web preset is defined. To export from the command line:
+To export from the command line:
+
+```bash
+tools/export_all.sh   # all three presets in one go (set GODOT=/path/to/Godot if it isn't found)
+```
+
+or one preset at a time:
 
 ```bash
 godot --headless --path . --export-release "Web" build/MineAttack.html
+godot --headless --path . --export-release "macOS" build/MineAttack.app
+godot --headless --path . --export-release "Windows" build/MineAttack.exe
 ```
 
-> Export templates: the engine (4.7.1.stable) looks in `~/Library/Application Support/Godot/export_templates/4.7.1.stable/`. This machine has the 4.7.0 templates under `4.7.stable/` with a `4.7.1.stable` symlink pointing at them — works for dev smoke builds, but for a release download the exact `Godot_v4.7.1-stable_export_templates.tpz`.
+> Export templates: the exact `Godot_v4.7.1-stable_export_templates.tpz` templates are installed in `~/Library/Application Support/Godot/export_templates/4.7.1.stable/` (a real directory now — the old `4.7.stable` dir holds the 4.7.0 templates as a fallback). The macOS/Windows exports require `textures/vram_compression/import_etc2_astc=true` in `project.godot` (enabled for the universal macOS binary).
 
 > Note: There is no CI/CD pipeline or dependency manager. Godot itself is the only build tool required; tests run via GUT (see §Testing).
 
@@ -424,7 +434,7 @@ Fully offline, single-player game: no network code, authentication, saved-game s
 - **AI controller relies on `Unit` internals:** `ai_controller.gd` reads `unit._state` and `unit.data` directly, including the underscore-prefixed `_state` variable. Refactoring `Unit`'s state machine requires updating the AI controller too.
 - **Building footprint writes into `_cells` directly:** `building.gd` mutates `GridWorld._cells` and `_astar` directly rather than using a public API.
 - **No null-safe node access for UI:** `hud.gd` looks up the player controller and building at runtime with `get_node_or_null`; if the scene hierarchy changes, the HUD may silently stop updating.
-- **Only the Web export preset is configured** (`build/MineAttack.html`); desktop presets were never set up. `tools/serve_web.py` serves the build with the COOP/COEP headers Godot 4 web builds require.
+- **Web, macOS, and Windows export presets are configured** (`build/MineAttack.html`, `build/MineAttack.app`, `build/MineAttack.exe`). `tools/serve_web.py` serves the web build with the COOP/COEP headers Godot 4 web builds require.
 - **Viewport is 2560×1440** (`window/size` in `project.godot`, stretch `canvas_items`/`expand` with `window/stretch/scale=1.333333`). The stretch scale keeps UI and menus at a fixed logical 1920×1080 (`get_viewport().get_visible_rect()` always reports it), so layout never changes with window size. The in-game world is different: `PlayerController` sets the camera's base zoom to `visible_rect.width / window.size.x` (recomputed on `Window.size_changed`), so world pixels render 1:1 with physical pixels — a 2560×1440 window shows a 2560×1440 world area (nearly the whole map), a 1280×720 window a 1280×720 area. Wheel zoom is a 0.65–2.0 factor on top of that base (`_zoom_factor`, `_apply_zoom()`). Note `Window.content_scale_factor` does NOT track window size in `canvas_items` mode (it only carries the stretch scale) — don't use it for this math. When the view exceeds the camera-clamp bounds on an axis (whole world fits), the camera pins to the bounds center on that axis instead of panning into empty space, and `GridWorld` pads its backgrounds (`_BG_PAD` = 3200px, with solid edge-color bands above the sky and below the deepest layer) so oversize views never show unpainted void. The Web export injects full-bleed canvas CSS via `html/head_include`.
 - **Headless teardown spam:** in `-s` SceneTree harnesses, after `quit()` the script unregistration can race node teardown and spam `Trying to return a value of type 'Node' ... 'PlayerController'` from `hud._get_player_controller` (kept alive by `process_mode = ALWAYS`). Harness-only noise after the check result; normal boots and gameplay are clean.
 - **Resources are duplicated at spawn:** `building.gd` calls `data.duplicate(true)` so each unit gets its own mutable `UnitData`. Upgrades mutate that copy in `unit.gd`.

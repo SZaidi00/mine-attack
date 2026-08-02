@@ -44,6 +44,9 @@ The project uses [GUT](https://github.com/bitwes/Gut) (bundled in `addons/gut/`)
 godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit
 ```
 
+cd /Users/shumail/Documents/Projects/mine-attack                          
+tools/export_all.sh  
+
 ---
 
 ## Controls
