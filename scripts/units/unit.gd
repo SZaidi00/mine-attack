@@ -380,6 +380,17 @@ func stop() -> void:
 	_path.clear()
 
 
+## Disband: instant self-destruct on the owner's order. No coin refund — the
+## point is freeing the population slot. Goes through _die() like any death:
+## the corpse fades and a miner's cargo still drops as a pickup.
+func kill() -> void:
+	if _state == State.DEAD:
+		return
+	DebugLog.log_command("Unit %d" % get_instance_id(), "kill", "disbanded by owner")
+	_die()
+
+
+
 ## Garrison order (fighters): fall back and defend the home base. Underground
 ## fighters come out of the mine first (the idle handler walks them to the
 ## post once they surface); surface fighters move straight to the building's
@@ -480,6 +491,11 @@ func can_be_damaged_by(attacker: Node2D) -> bool:
 
 func can_damage_unit(target: Node2D) -> bool:
 	if target == null or not is_instance_valid(target):
+		return false
+	# Combat never crosses the surface/underground boundary — flying dragons
+	# included. A* can't path between layers, so cross-layer locks only ever
+	# produced free hits on units (e.g. dragons sniping miners in the mine).
+	if target is Unit and target.is_underground != is_underground:
 		return false
 	if target.has_method("can_be_damaged_by"):
 		return target.can_be_damaged_by(self)
@@ -583,8 +599,7 @@ func _follow_path(delta: float) -> void:
 			_set_state(State.IDLE, "path empty/start")
 		return
 	var target: Vector2 = _path[_path_index]
-	var dir: Vector2 = target - global_position
-	var dist: float = dir.length()
+	var dist: float = target.distance_to(global_position)
 	# Arrive when within one movement step of the point (or 2px, whichever is
 	# larger). Without the step-aware threshold, a large delta (lag spike, high
 	# time scale) plus the separation nudge can orbit the point forever without
@@ -592,16 +607,24 @@ func _follow_path(delta: float) -> void:
 	var step: float = data.speed * delta
 	if is_underground and data.is_fighter:
 		step *= 0.6
-	if dist <= maxf(2.0, step):
+	var arrive: float = maxf(2.0, step)
+	# Advance past every point the step covers — at high game speeds with a
+	# low frame rate a single step can span several cell centers.
+	while dist <= arrive:
 		_path_index += 1
 		if _path_index >= _path.size():
+			# Move onto the final point before transitioning. Without this a
+			# large step completes the path while still far from the
+			# destination (e.g. out of mining range), and the miner freezes
+			# mid-approach bouncing between MINE and IDLE at 10x speed.
+			global_position = global_position.move_toward(target, minf(step, dist))
 			if _state != State.CLIMB_UP and _state != State.CLIMB_DOWN:
 				_set_state(State.IDLE, "path completed")
 			return
 		target = _path[_path_index]
-		dir = target - global_position
-		dist = dir.length()
-	var move: Vector2 = dir.normalized() * min(step, dist)
+		dist = target.distance_to(global_position)
+	var dir: Vector2 = target - global_position
+	var move: Vector2 = dir.normalized() * minf(step, dist)
 	# Phase 3.4: soft separation so same-team units don't hard-collide or stack.
 	# Skip separation while walking to a ladder; it can push the unit away from
 	# the exact ladder bottom/top and make it oscillate around the arrival threshold.
@@ -662,6 +685,12 @@ func _process_attack(delta: float) -> void:
 	var target_alive: bool = false
 
 	if _target_unit != null and is_instance_valid(_target_unit) and _target_unit._state != State.DEAD:
+		if _target_unit.is_underground != is_underground:
+			# The target crossed the surface/underground boundary mid-chase
+			# (a miner escaped down the shaft) — the chase can't follow.
+			_clear_target()
+			_set_state(State.IDLE, "target crossed layers")
+			return
 		path_pos = _target_unit.global_position
 		range_pos = _target_unit.get_combat_position() if _target_unit.has_method("get_combat_position") else path_pos
 		target_alive = true
@@ -721,6 +750,8 @@ func _spawn_projectile(target_pos: Vector2) -> void:
 	proj.set("team", team)
 	proj.set("damage", roundi(data.damage_per_hit))
 	proj.set("is_fireball", fireball)
+	# Dragons breathe fire: same splash as a fireball, flame-breath visuals.
+	proj.set("is_dragon_flame", data.unit_name.to_lower() == "dragon")
 	proj.set("speed", data.projectile_speed)
 	proj.set("aoe_radius", data.aoe_radius)
 	proj.set("target_position", target_pos)
@@ -1426,6 +1457,8 @@ func _find_auto_attack_target():
 			if unit.team == team or unit._state == State.DEAD:
 				continue
 			if not unit.data.is_miner:
+				continue
+			if not can_damage_unit(unit):
 				continue
 			var grid_x: int = _grid.world_to_grid(unit.global_position).x
 			if grid_x * team_dir < 2:

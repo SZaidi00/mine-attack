@@ -281,6 +281,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		var hud: CanvasLayer = get_node_or_null("/root/Main/UI/HUD")
 		if hud:
 			hud.toggle_research_panel()
+	elif event.is_action_pressed(_Constants.INPUT_KILL_UNITS):
+		kill_selected()
 	elif event.is_action_pressed(_Constants.INPUT_PAUSE):
 		get_tree().paused = not get_tree().paused
 
@@ -640,6 +642,19 @@ func _enemy_building() -> Node2D:
 
 func get_selected_units() -> Array:
 	return _selected_units
+
+
+## Disband every selected unit (no coin refund — frees population slots).
+func kill_selected() -> void:
+	_selected_units = _selected_units.filter(func(u): return is_instance_valid(u))
+	if _selected_units.is_empty():
+		DebugLog.log_reject("PlayerController", "kill_selected", "no selected units")
+		return
+	DebugLog.log_command("PlayerController", "kill_selected", "units=%d" % _selected_units.size())
+	var victims: Array = _selected_units.duplicate()
+	_select_units([])  # dying units must not linger in the selection
+	for u in victims:
+		u.kill()
 
 
 func is_rally_armed() -> bool:

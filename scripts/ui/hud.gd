@@ -59,6 +59,7 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 @onready var _defend_button: Button = $BottomBar/MarginContainer/HBoxContainer/DefendButton
 @onready var _garrison_button: Button = $BottomBar/MarginContainer/HBoxContainer/GarrisonButton
 @onready var _rally_button: Button = $BottomBar/MarginContainer/HBoxContainer/RallyButton
+@onready var _kill_button: Button = $BottomBar/MarginContainer/HBoxContainer/KillButton
 @onready var _research_button: Button = $BottomBar/MarginContainer/HBoxContainer/ResearchButton
 @onready var _research_panel: Control = $ResearchPanel
 @onready var _stance_buttons: Dictionary = {}
@@ -99,6 +100,7 @@ func _ready() -> void:
 	_defend_button.pressed.connect(_stance.bind("defend"))
 	_garrison_button.pressed.connect(_stance.bind("garrison"))
 	_rally_button.pressed.connect(_stance.bind("rally"))
+	_kill_button.pressed.connect(_kill_selected)
 	_research_button.pressed.connect(toggle_research_panel)
 	_surface_button.pressed.connect(_set_view.bind(false))
 	_underground_button.pressed.connect(_set_view.bind(true))
@@ -106,7 +108,7 @@ func _ready() -> void:
 		_speed_buttons[speed].pressed.connect(_set_game_speed.bind(speed))
 	$GameOverPanel/MarginContainer/VBoxContainer/QuitButton.pressed.connect(_quit_to_menu)
 	$GameOverPanel/MarginContainer/VBoxContainer/PlayAgainButton.pressed.connect(_play_again)
-	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _research_button, _surface_button, _underground_button]:
+	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _kill_button, _research_button, _surface_button, _underground_button]:
 		btn.pressed.connect(func(): AudioManager.play("click"))
 	for unit_id: String in _fighter_upgrade_buttons:
 		_fighter_upgrade_buttons[unit_id].pressed.connect(func(): AudioManager.play("click"))
@@ -316,7 +318,7 @@ func _style_upgrade_button() -> void:
 
 
 func _style_stance_buttons() -> void:
-	for btn in [_attack_button, _defend_button, _garrison_button, _rally_button]:
+	for btn in [_attack_button, _defend_button, _garrison_button, _rally_button, _kill_button]:
 		btn.custom_minimum_size = Vector2(100, 70)
 		btn.add_theme_font_size_override("font_size", 12)
 		btn.add_theme_color_override("font_color", Color("#e2e8f0"))
@@ -464,6 +466,12 @@ func _stance(stance: String) -> void:
 	var pc: PlayerController = _get_player_controller()
 	if pc:
 		pc.set_stance(stance)
+
+
+func _kill_selected() -> void:
+	var pc: PlayerController = _get_player_controller()
+	if pc:
+		pc.kill_selected()
 
 
 ## BottomBar Research button / R hotkey: shows or hides the research panel.

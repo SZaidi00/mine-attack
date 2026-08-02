@@ -296,6 +296,7 @@ const INPUT_TRAIN_WIZARD: StringName = &"train_wizard"
 const INPUT_TRAIN_DRAGON: StringName = &"train_dragon"
 const INPUT_TOGGLE_VIEW: StringName = &"toggle_view"
 const INPUT_TOGGLE_RESEARCH: StringName = &"toggle_research"
+const INPUT_KILL_UNITS: StringName = &"kill_units"
 const INPUT_PAUSE: StringName = &"pause"
 
 const INPUT_CAMERA_UP: StringName = &"camera_up"

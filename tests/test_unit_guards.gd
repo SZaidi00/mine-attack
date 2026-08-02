@@ -186,3 +186,58 @@ func _find_seek_candidates(miner: Node2D) -> Dictionary:
 				ore_d = d
 				ore = pos
 	return { "dirt": dirt, "dirt_d": dirt_d, "ore": ore, "ore_d": ore_d }
+
+
+func test_cross_layer_attack_is_rejected() -> void:
+	# Combat never crosses the surface/underground boundary: a surface dragon
+	# must not be able to lock onto a miner working in the mine.
+	var dragon: Node2D = _spawn_unit("res://scripts/resources/units/dragon.tres", PLAYER, Vector2(440, 16))
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(460, 80))
+	miner.set("is_underground", true)
+	assert_false(dragon.call("can_damage_unit", miner), "surface unit cannot damage an underground unit")
+	dragon.call("attack_unit", miner)
+	assert_ne(dragon.get("_state"), 2, "cross-layer attack_unit must be rejected")  # State.ATTACK == 2
+	assert_null(dragon.get("_target_unit"))
+
+
+func test_same_layer_underground_attack_is_allowed() -> void:
+	# Sanity: the layer guard must not block legitimate underground combat.
+	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(-460, 80))
+	fighter.set("is_underground", true)
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(-440, 80))
+	miner.set("is_underground", true)
+	assert_true(fighter.call("can_damage_unit", miner), "same-layer underground combat still works")
+
+
+func test_auto_attack_ignores_underground_units() -> void:
+	# A surface dragon's auto-attack scan must not acquire underground targets.
+	var dragon: Node2D = _spawn_unit("res://scripts/resources/units/dragon.tres", PLAYER, Vector2(440, 16))
+	var enemy: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(460, 80))
+	enemy.set("is_underground", true)
+	var found = dragon.call("_find_auto_attack_target")
+	assert_true(found == null or found != enemy, "auto-attack must skip underground units")
+
+
+func test_chase_drops_target_that_crosses_layers() -> void:
+	# A miner fleeing down the shaft breaks the lock: the chaser goes idle
+	# instead of following into the mine.
+	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/dragon.tres", PLAYER, Vector2(-440, 16))
+	var target: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(-460, 16))
+	fighter.call("attack_unit", target)
+	assert_eq(fighter.get("_state"), 2, "attack order accepted")  # State.ATTACK == 2
+	target.set("is_underground", true)
+	fighter.call("_process_attack", 0.016)
+	assert_eq(fighter.get("_state"), 0, "chaser drops a target that crossed layers")  # State.IDLE == 0
+	assert_null(fighter.get("_target_unit"))
+
+
+func test_follow_path_arrives_at_destination_with_large_delta() -> void:
+	# At 10x game speed with a low frame rate, speed * delta spans several
+	# cells: the path must still carry the unit onto its final point, not
+	# complete far from the destination (miners froze mid-approach).
+	var unit: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(300, 16))
+	unit.set("_path", [Vector2(400, 16), Vector2(500, 16)])
+	unit.set("_path_index", 0)
+	unit.call("_follow_path", 3.0)  # one huge frame: step covers both points
+	assert_true(unit.global_position.distance_to(Vector2(500, 16)) < 1.0,
+		"unit must arrive at the final path point, pos=%s" % unit.global_position)

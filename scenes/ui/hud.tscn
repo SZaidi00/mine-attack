@@ -542,6 +542,13 @@ toggle_mode = true
 text = "Rally"
 tooltip_text = "Click, then left-click a rally point: fighters hunt everything on the surface (right-click cancels)"
 
+[node name="KillButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 70)
+layout_mode = 2
+text = "Kill\n(K)"
+tooltip_text = "Disband the selected units (K / Delete): they die immediately — no coin refund, but the population slot is freed"
+
 [node name="ResearchButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(100, 70)

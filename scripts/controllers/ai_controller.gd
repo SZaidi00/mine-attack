@@ -96,6 +96,13 @@ func _run_economy() -> void:
 	if ResearchManager.can_scan(team):
 		ResearchManager.scan(team)
 
+	# Population pressure: training pauses at the cap, so when the AI is
+	# boxed in it disbands surplus miners (keeping 3 for income) to free
+	# slots for fighters. No refund — the population slot is the resource.
+	if population >= _Constants.MAX_UNITS - 2 and miners > 3:
+		_cull_miners(miners - 3)
+		miners = _count_miners()
+
 	# Queue decisions (respecting queue size and population cap). Deeper miner
 	# levels justify a larger mining crew to exploit the newly unlocked layers.
 	var queue_size: int = building.call("get_queue").size()
@@ -171,6 +178,19 @@ func _pick_research(building: Node2D) -> String:
 func _research_open(tech_id: String) -> bool:
 	return not ResearchManager.get_next_level_data(team, tech_id).is_empty() \
 		and ResearchManager.are_prerequisites_met(team, tech_id)
+
+
+## Disbands n miners (emptiest bags first) to free population slots when the
+## cap is blocking army growth. Death drops any carried coin as a pickup, so
+## culling miners with cargo wastes nothing the AI can still collect.
+func _cull_miners(n: int) -> void:
+	var miners_by_cargo: Array = []
+	for unit in get_tree().get_nodes_in_group(team_name()):
+		if unit.data.is_miner and unit._state != Unit.State.DEAD:
+			miners_by_cargo.append(unit)
+	miners_by_cargo.sort_custom(func(a: Unit, b: Unit) -> bool: return a.carried_coin < b.carried_coin)
+	for i in range(mini(n, miners_by_cargo.size())):
+		miners_by_cargo[i].kill()
 
 
 func _run_mining() -> void:
