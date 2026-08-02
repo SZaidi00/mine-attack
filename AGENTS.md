@@ -93,12 +93,12 @@ Global singletons accessible from any script via their class name.
   - Fighter stats are stored in `UnitData` resources under `scripts/resources/units/*.tres`; `FIGHTER_STATS` was removed in Phase 2 to keep a single source of truth.
 
 - `game_manager.gd`
-  - `enum Team { PLAYER, ENEMY }`, `enum Difficulty { EASY, NORMAL, HARD, NIGHTMARE }`
+  - `enum Team { PLAYER, ENEMY }`, `enum Difficulty { EASY, NORMAL, HARD, NIGHTMARE, GODLY }`
   - Constants: team colors (`COLOR_PLAYER`, `COLOR_ENEMY`), terrain colors.
-  - `DIFFICULTY_MODIFIERS`: per-difficulty AI multipliers — `coin` (deposit income), `train_time` (training duration), `upgrade_speed` (economy decision rate), `push_ratio`/`defend_ratio` (aggression thresholds), `retaliation` (per-hit chance a damaged AI sieger fights back). Fair-play rule: rates only, never rules (same unit stats, pop cap).
+  - `DIFFICULTY_MODIFIERS`: per-difficulty AI modifiers — `coin` (deposit income), `train_time` (training duration), `upgrade_speed` (economy decision rate), `push_ratio`/`defend_ratio` (aggression thresholds), `retaliation` (per-hit chance a damaged AI sieger fights back), and `smarts` (0–3 behavior tier gating the AIController's smart behaviors: 1 = focus-fire defense + wounded retreat, 2 = + counter-attack windows + miner harassment, 3 = + counter-composition army mix). Fair-play rule (Easy–Nightmare): rates and behavior only, never rules (same unit stats, pop cap). **GODLY deliberately abandons fair play** — every smart behavior plus openly stacked rates (coin ×2, train ×0.6, decisions ×2, retaliation 1.0, near-constant push).
   - `difficulty` persists across `reset()` so Play Again keeps the choice; set via the debug overlay dropdown (Phase 6) or main menu (Phase 7).
   - `game_speed` (1.0 / 2.0 / 3.0 / 5.0 / 10.0) is the player-chosen `Engine.time_scale`, set from the HUD speed buttons; it also persists across `reset()`. The win cinematic overrides it temporarily (0.3 slow-mo), then `_process` restores `game_speed` on the wall clock.
-  - Accessors: `get_ai_coin_multiplier()`, `get_ai_train_time_multiplier()`, `get_ai_upgrade_speed()`, `get_aggression_thresholds()`, `get_ai_retaliation_chance()`.
+  - Accessors: `get_ai_coin_multiplier()`, `get_ai_train_time_multiplier()`, `get_ai_upgrade_speed()`, `get_aggression_thresholds()`, `get_ai_retaliation_chance()`, `get_ai_smarts()`.
   - `signal game_over(winner: Team)`
   - `game_active: bool`, `match_time: float`
   - `declare_winner(winner: Team)`, `reset()`
@@ -136,7 +136,12 @@ Global singletons accessible from any script via their class name.
   - Culls surplus miners (`_cull_miners`) when population reaches `MAX_UNITS - 2`: training pauses at the cap, so the AI disbands miners beyond 3 (emptiest bags first, via `unit.kill()` — no refund) to free slots for fighters.
   - Attacks in **gathered waves** (`_launch_wave_if_ready`): the army holds at home until it reaches `_wave_threshold` (push 4 / balanced 7 / defend 12; all-in at 3 when the enemy base is under 25% HP), then every free surface fighter marches together — engaged fighters keep their duels. While `"push"` the launch check runs every frame instead of waiting for the 18s tick.
   - Maintains an `_aggression_level` (`"defend"`, `"balanced"`, `"push"`) based on relative fighter counts; the push/defend ratios come from the difficulty modifiers. On `"defend"` the AI recalls strays idling far from home via `garrison_home()` instead of hiding part of the army underground.
-  - Defends building when enemy units are nearby; each defender picks its own nearest threat so the defense spreads damage instead of focusing one intruder.
+  - Defends building when enemy units are nearby. Defender targeting depends on the `smarts` tier: tier 0 (Easy) has each defender pick its own nearest threat so the defense spreads damage; tier 1+ scores intruders by `hp_fraction * 1000 + distance` so the defense focus-fires wounded enemies first.
+  - Smart behaviors, gated by the difficulty `smarts` tier (see `GameManager.DIFFICULTY_MODIFIERS`; tuning constants `ENEMY_HARASS_INTERVAL` / `ENEMY_WOUNDED_HP_RATIO` / `ENEMY_COUNTERATTACK_DROP` in `constants.gd`):
+    - **Wounded retreat (tier 1+, 1s tactics tick):** fighters under 30% HP are pulled home (`garrison_home()`) to heal via out-of-combat regen — never while the base itself is under attack, and never units already near home. Healed fighters are swept into the next wave naturally.
+    - **Counter-attack window (tier 2+):** `_update_aggression_level` samples the player fighter count every 10s; a drop of ≥3 since the last sample immediately launches a wave with override threshold 4 (`_launch_wave_if_ready(4)`) instead of waiting out the wave timer.
+    - **Miner harassment (tier 2+, 20s tick):** while not defending and with ≥ wave-threshold+2 fighters, up to 2 free surface fighters `attack_unit()` the enemy's exposed surface miners (combat can't cross layers, so only deposit-trip miners are valid targets). Raiders in ATTACK are ignored by wave/defense logic and are re-swept when their target dies.
+    - **Counter-composition army mix (tier 3):** `_effective_army_mix()` adjusts `_ARMY_MIX` against the player's army — dragon weight ×3 when player anti-air (archers+wizards) is under 30% of their fighters (dragons are only damageable by archers/wizards), and weight shifted from swordsman to archer/wizard against a melee-majority army. `_pick_fighter_to_train` uses it only at tier 3.
   - Selects ore based on distance, value, and side ownership — but only *discovered* ore (cells that already took mining damage or were revealed by an Ore Sonar scan; miners don't know where buried ore is), skipping cells reserved by other miners or blacklisted as unreachable by that miner.
   - Attempts central wall breach when pushing and no accessible unmined tiles remain.
 
@@ -351,14 +356,17 @@ Defined in `project.godot` under `[input]`:
 - **Mining requires being inside the mine:** `mine_cell` only executes while the miner is underground. A mine order given to a surface miner (right-click ore/wall, AI ore orders) is deferred: the miner rides the ladder down first, then `_handle_idle_miner` re-issues the pending cell. Ore yields are sized so each side's layers can fund the 500 / 1500 miner upgrades before the next tier unlocks.
 - **Central wall:** A 3-tile thick wall at `x = -1, 0, 1` spans all layers and shares a single 2000 HP pool. Miners on either team can breach it with an explicit right-click command. Wall damage scales with miner level.
 - **Win condition:** Destroy the enemy building.
-- **AI difficulty** (`GameManager.DIFFICULTY_MODIFIERS`; rates only, never rules):
+- **AI difficulty** (`GameManager.DIFFICULTY_MODIFIERS`; Easy–Nightmare are fair-play — rates and behavior only, never rules. Godly abandons fair play on purpose):
 
-  | Difficulty | AI coin × | Train time × | Decision rate × | Retaliation | Aggression bias |
-  |------------|-----------|--------------|------------------|-------------|-----------------|
-  | Easy | 0.8 | 1.0 | 0.7 | 0.25 | Defensive (push 2.0×, defend 0.75×) |
-  | Normal | 1.0 | 1.0 | 1.0 | 0.5 | Balanced (push 1.5×, defend 0.5×) |
-  | Hard | 1.2 | 0.9 | 1.2 | 0.7 | Aggressive (push 1.3×, defend 0.4×) |
-  | Nightmare | 1.5 | 0.8 | 1.5 | 0.9 | Very aggressive (push 1.1×, defend 0.25×) |
+  | Difficulty | AI coin × | Train time × | Decision rate × | Retaliation | Smarts | Aggression bias |
+  |------------|-----------|--------------|------------------|-------------|--------|-----------------|
+  | Easy | 0.8 | 1.0 | 0.7 | 0.25 | 0 | Defensive (push 2.0×, defend 0.75×) |
+  | Normal | 1.0 | 1.0 | 1.0 | 0.5 | 1 | Balanced (push 1.5×, defend 0.5×) |
+  | Hard | 1.2 | 0.9 | 1.2 | 0.7 | 2 | Aggressive (push 1.3×, defend 0.4×) |
+  | Nightmare | 1.5 | 0.8 | 1.5 | 0.9 | 3 | Very aggressive (push 1.1×, defend 0.25×) |
+  | Godly | 2.0 | 0.6 | 2.0 | 1.0 | 3 | Relentless (push 1.0×, defend 0.15×) |
+
+  Smarts tiers: 1 = focus-fire defense + wounded retreat, 2 = + counter-attack windows + miner harassment, 3 = + counter-composition army mix (see `ai_controller.gd`).
 
 ---
 
@@ -372,6 +380,7 @@ The project uses [GUT](https://github.com/bitwes/Gut) 9.6.1 (committed under `ad
 - `tests/test_unit_guards.gd` — fighter `mine_cell` rejected, enemy mine entry rejected, unreachable mine target blacklisted, empty-cargo deposit rejected, cross-layer attack rejected (auto-attack skip, mid-chase drop), `_follow_path` large-delta arrival, corpse hits don't double-remove population (`take_damage` ignores `DEAD` units — in-flight projectiles can still land during the 1s fade-out, and without the guard each hit re-ran `_die()` and leaked a population slot past `MAX_UNITS`).
 - `tests/test_ai_retaliation.gd` — damaged AI sieger eventually retaliates against its attacker, undamaged sieger stays on the building, player units never auto-retaliate.
 - `tests/test_ai_strategy.gd` — AI banks and buys miner upgrades despite ongoing training, never spends the upgrade bank on fighters, army-mix picker diversifies, waves hold below threshold / launch together at it, all-in when the enemy base is nearly dead.
+- `tests/test_ai_smarts.gd` — difficulty `smarts` tier gating: focus-fire vs nearest defense targeting, wounded retreat (skipped on Easy / held under base attack), miner harassment raids (surface-only targets, never below wave critical mass, gated off on Easy), counter-attack windows on sharp player losses, counter-composition mix (dragon spike vs missing anti-air), Godly modifiers.
 - `tests/test_rally.gd` — rally targets surface miners, skips underground enemies, engagement keeps the rally active, explicit commands cancel it, miners can't rally, miner death drops full cargo as a pickup.
 - `tests/test_stance_modes.gd` — stance modes persist with zero fighters, attack/garrison/defend modes auto-order newly spawned fighters, miners ignore modes, rally doesn't change the mode.
 - `tests/test_kill_units.gd` — `kill()` disbands without refund but frees population, disbanded miners drop cargo pickups, `kill_selected` only kills the selection, AI culls surplus miners at the population cap (never below it).

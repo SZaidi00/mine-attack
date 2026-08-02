@@ -276,6 +276,11 @@ const ROWS_PER_LAYER: int = 3
 const ENEMY_DECISION_INTERVAL: float = 2.0
 const ENEMY_AGGRESSION_INTERVAL: float = 10.0
 const ENEMY_ATTACK_WAVE_INTERVAL: float = 18.0
+# Smart-behavior tuning (gated by the difficulty "smarts" tier — see
+# GameManager.DIFFICULTY_MODIFIERS).
+const ENEMY_HARASS_INTERVAL: float = 20.0  # seconds between miner-raid attempts
+const ENEMY_WOUNDED_HP_RATIO: float = 0.3  # fighters below this HP fraction retreat to heal
+const ENEMY_COUNTERATTACK_DROP: int = 3  # player fighter losses per sample that open a counter-attack window
 
 # ─── AI DIFFICULTY ───
 # The DIFFICULTY_MODIFIERS table lives in game_manager.gd (keyed by

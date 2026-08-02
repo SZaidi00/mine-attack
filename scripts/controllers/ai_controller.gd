@@ -17,6 +17,12 @@ var _attack_tick: float = 0.0
 var _attack_interval: float = _Constants.ENEMY_ATTACK_WAVE_INTERVAL
 var _aggression_tick: float = 0.0
 var _aggression_interval: float = _Constants.ENEMY_AGGRESSION_INTERVAL
+# Smart-behavior ticks (gated by the difficulty "smarts" tier).
+var _tactics_tick: float = 0.0
+var _harass_tick: float = 0.0
+# Player fighter count at the previous aggression sample; a sharp drop opens
+# a counter-attack window (smarts >= 2).
+var _last_player_fighters: int = -1
 
 var _aggression_level: String = "balanced"  # "defend", "balanced", "push"
 
@@ -48,6 +54,18 @@ func _process(delta: float) -> void:
 	if _aggression_tick >= _aggression_interval:
 		_aggression_tick = 0.0
 		_update_aggression_level()
+
+	var smarts: int = GameManager.get_ai_smarts()
+	if smarts >= 1:
+		_tactics_tick += delta
+		if _tactics_tick >= 1.0:
+			_tactics_tick = 0.0
+			_retreat_wounded()
+	if smarts >= 2:
+		_harass_tick += delta
+		if _harass_tick >= _Constants.ENEMY_HARASS_INTERVAL:
+			_harass_tick = 0.0
+			_run_harassment()
 
 	_defend_building()
 	_apply_aggression_behavior()
@@ -119,9 +137,11 @@ func _run_economy() -> void:
 
 ## Picks the fighter type furthest below its target share of the army that the
 ## budget affords, so the AI trains a combined-arms force per _ARMY_MIX.
+## Smarts tier 3 counter-picks the player's composition (_effective_army_mix).
 func _pick_fighter_to_train(budget: int) -> String:
+	var mix: Dictionary = _effective_army_mix() if GameManager.get_ai_smarts() >= 3 else _ARMY_MIX
 	var counts: Dictionary = {}
-	for unit_id in _ARMY_MIX:
+	for unit_id in mix:
 		counts[unit_id] = 0
 	var total: int = 0
 	for unit in get_tree().get_nodes_in_group(team_name()):
@@ -132,17 +152,45 @@ func _pick_fighter_to_train(budget: int) -> String:
 				total += 1
 	var best: String = ""
 	var best_deficit: float = 0.0
-	for unit_id in _ARMY_MIX:
+	for unit_id in mix:
 		if _Constants.COSTS[unit_id] > budget:
 			continue
 		# Score against a floor of a 10-unit army so the first picks already
 		# follow the mix instead of training one of each.
-		var desired: float = _ARMY_MIX[unit_id] * maxf(10.0, float(total))
+		var desired: float = mix[unit_id] * maxf(10.0, float(total))
 		var deficit: float = desired - counts[unit_id]
 		if deficit > best_deficit:
 			best_deficit = deficit
 			best = unit_id
 	return best
+
+
+## Army mix for training, counter-picked against the player's composition
+## (smarts tier 3 only): dragons punish an army light on archers/wizards
+## (the only units that can hurt flyers), and ranged units punish a
+## melee-heavy army by kiting it.
+func _effective_army_mix() -> Dictionary:
+	var mix: Dictionary = _ARMY_MIX.duplicate()
+	var player_counts: Dictionary = { "swordsman": 0, "archer": 0, "wizard": 0, "dragon": 0 }
+	var total: int = 0
+	var other_team_name: String = "player" if team == GameManager.Team.ENEMY else "enemy"
+	for unit in get_tree().get_nodes_in_group(other_team_name):
+		if not unit.data.is_fighter or unit._state == Unit.State.DEAD:
+			continue
+		var unit_id: String = unit.data.unit_name.to_lower()
+		if player_counts.has(unit_id):
+			player_counts[unit_id] += 1
+			total += 1
+	if total < 3:
+		return mix  # too early to read a composition
+	var anti_air_share: float = float(player_counts["archer"] + player_counts["wizard"]) / float(total)
+	if anti_air_share < 0.3:
+		mix["dragon"] = _ARMY_MIX["dragon"] * 3.0
+	if float(player_counts["swordsman"]) / float(total) > 0.5:
+		mix["swordsman"] = _ARMY_MIX["swordsman"] - 0.15
+		mix["archer"] = _ARMY_MIX["archer"] + 0.1
+		mix["wizard"] = _ARMY_MIX["wizard"] + 0.05
+	return mix
 
 
 ## Next research to buy, by priority: sonar first (revealed ore shortens
@@ -216,8 +264,9 @@ func _run_attack_wave() -> void:
 ## Group attack: the army holds at home until it reaches critical mass
 ## (_wave_threshold), then everyone free moves out together. Launching
 ## stragglers the moment they spawned is what made the old AI feed one
-## swordsman at a time.
-func _launch_wave_if_ready() -> void:
+## swordsman at a time. threshold_override replaces the computed threshold
+## (used by the counter-attack window to strike with whatever is gathered).
+func _launch_wave_if_ready(threshold_override: int = -1) -> void:
 	var target: Node2D = _get_enemy_building()
 	if target == null:
 		return
@@ -231,7 +280,8 @@ func _launch_wave_if_ready() -> void:
 		# free surface fighters get the wave order.
 		if (unit._state == Unit.State.IDLE or unit._state == Unit.State.MOVE) and not unit.is_underground:
 			free_fighters.append(unit)
-	if total < _wave_threshold(target):
+	var threshold: int = threshold_override if threshold_override >= 0 else _wave_threshold(target)
+	if total < threshold:
 		return
 	for unit in free_fighters:
 		unit.attack_building(target)
@@ -262,11 +312,57 @@ func _defend_building() -> void:
 		if not unit.data.is_fighter:
 			continue
 		if unit._state == Unit.State.IDLE or unit._state == Unit.State.MOVE:
-			# Each defender picks its own nearest threat so the defense spreads
-			# damage instead of overkill-focusing a single intruder.
-			var threat: Unit = _nearest_enemy_unit(unit.global_position, 500)
+			var threat: Unit = _pick_defense_target(unit)
 			if threat != null:
 				unit.attack_unit(threat)
+
+
+## Which intruder a defender engages. Smarts tier 0 keeps the legacy behavior
+## (each defender picks its own nearest threat so the defense spreads damage).
+## Tier 1+ scores by hp_fraction * 1000 + distance and takes the minimum, so
+## the defense focuses fire to finish wounded enemies first, with distance as
+## the tiebreak to still spread across multiple intruders.
+func _pick_defense_target(defender: Unit) -> Unit:
+	if GameManager.get_ai_smarts() < 1:
+		return _nearest_enemy_unit(defender.global_position, 500)
+	var best: Unit = null
+	var best_score: float = INF
+	var other_team_name: String = "player" if team == GameManager.Team.ENEMY else "enemy"
+	for unit in get_tree().get_nodes_in_group(other_team_name):
+		if unit._state == Unit.State.DEAD:
+			continue
+		var d: float = unit.global_position.distance_to(defender.global_position)
+		if d > 500.0:
+			continue
+		var hp_fraction: float = float(unit.hp) / maxf(1.0, float(unit.data.max_hp))
+		var score: float = hp_fraction * 1000.0 + d
+		if score < best_score:
+			best_score = score
+			best = unit
+	return best
+
+
+## Smarts tier 1+: pull fighters under ENEMY_WOUNDED_HP_RATIO back to the base
+## so out-of-combat regen (unit.gd) heals them instead of feeding them into
+## losing fights. Never retreats while the base itself is under attack (the
+## defense needs every body), and leaves units already near home alone.
+## Healed fighters go IDLE at base and are swept into the next wave/defense.
+func _retreat_wounded() -> void:
+	if GameManager.get_ai_smarts() < 1:
+		return
+	var building: Node2D = _get_building()
+	if building == null:
+		return
+	if _nearest_enemy_unit(building.global_position, 450) != null:
+		return  # base under attack: hold the line, no retreats
+	for unit in get_tree().get_nodes_in_group(team_name()):
+		if not unit.data.is_fighter or unit._state == Unit.State.DEAD:
+			continue
+		if unit.hp >= int(float(unit.data.max_hp) * _Constants.ENEMY_WOUNDED_HP_RATIO):
+			continue
+		if unit.global_position.distance_to(building.global_position) <= 400.0:
+			continue  # already home (or close enough to heal in safety)
+		unit.garrison_home()
 
 
 func _update_aggression_level() -> void:
@@ -293,6 +389,15 @@ func _update_aggression_level() -> void:
 	else:
 		_aggression_level = "balanced"
 
+	# Counter-attack window (smarts tier 2+): if the enemy just lost several
+	# fighters since the last sample, strike immediately with whatever is
+	# gathered instead of waiting out the wave timer — the enemy is at its
+	# weakest right after losing a fight.
+	if GameManager.get_ai_smarts() >= 2 and _last_player_fighters >= 0:
+		if _last_player_fighters - their_fighters >= _Constants.ENEMY_COUNTERATTACK_DROP:
+			_launch_wave_if_ready(4)
+	_last_player_fighters = their_fighters
+
 
 func _apply_aggression_behavior() -> void:
 	match _aggression_level:
@@ -314,6 +419,49 @@ func _apply_aggression_behavior() -> void:
 					continue
 				if unit.global_position.distance_to(building.global_position) > 450.0:
 					unit.garrison_home()
+
+
+## Smarts tier 2+: send up to 2 free fighters to kill enemy miners caught on
+## the surface (combat can't cross layers, so only deposit-trip miners are
+## valid targets). Raiding the economy forces the enemy to defend instead of
+## turtling safely underground. Never runs while defending, and never strips
+## the wave below critical mass. Raiders in ATTACK are ignored by the wave and
+## defense logic (both only command IDLE/MOVE units); when their target dies
+## they go IDLE and are re-swept naturally.
+func _run_harassment() -> void:
+	if GameManager.get_ai_smarts() < 2:
+		return
+	if _aggression_level == "defend":
+		return
+	var target_building: Node2D = _get_enemy_building()
+	if target_building == null:
+		return
+	var free_fighters: Array = []
+	var total: int = 0
+	for unit in get_tree().get_nodes_in_group(team_name()):
+		if not unit.data.is_fighter or unit._state == Unit.State.DEAD:
+			continue
+		total += 1
+		if (unit._state == Unit.State.IDLE or unit._state == Unit.State.MOVE) and not unit.is_underground:
+			free_fighters.append(unit)
+	if total < _wave_threshold(target_building) + 2:
+		return
+	# Exposed enemy miners, nearest to our base first (shortest raid trip).
+	var building: Node2D = _get_building()
+	if building == null:
+		return
+	var other_team_name: String = "player" if team == GameManager.Team.ENEMY else "enemy"
+	var exposed_miners: Array = []
+	for unit in get_tree().get_nodes_in_group(other_team_name):
+		if unit.data.is_miner and unit._state != Unit.State.DEAD and not unit.is_underground:
+			exposed_miners.append(unit)
+	if exposed_miners.is_empty():
+		return
+	exposed_miners.sort_custom(func(a: Unit, b: Unit) -> bool:
+		return a.global_position.distance_squared_to(building.global_position) \
+			< b.global_position.distance_squared_to(building.global_position))
+	for i in range(mini(2, free_fighters.size())):
+		(free_fighters[i] as Unit).attack_unit(exposed_miners.front())
 
 
 func _attempt_wall_breach() -> void:
