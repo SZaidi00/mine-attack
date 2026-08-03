@@ -17,12 +17,14 @@ enum Difficulty { EASY, NORMAL, HARD, NIGHTMARE, GODLY }
 #                  1: focus-fire defense + wounded retreat,
 #                  2: + counter-attack windows + miner harassment,
 #                  3: + counter-composition army mix.
+#   wave:          attack-tempo multiplier (lower = earlier, more frequent
+#                  waves); scales the wave size thresholds and the wave tick.
 const DIFFICULTY_MODIFIERS: Dictionary = {
-	Difficulty.EASY: { "coin": 0.8, "train_time": 1.0, "upgrade_speed": 0.7, "push_ratio": 2.0, "defend_ratio": 0.75, "retaliation": 0.25, "smarts": 0 },
-	Difficulty.NORMAL: { "coin": 1.0, "train_time": 1.0, "upgrade_speed": 1.0, "push_ratio": 1.5, "defend_ratio": 0.5, "retaliation": 0.5, "smarts": 1 },
-	Difficulty.HARD: { "coin": 1.2, "train_time": 0.9, "upgrade_speed": 1.2, "push_ratio": 1.3, "defend_ratio": 0.4, "retaliation": 0.7, "smarts": 2 },
-	Difficulty.NIGHTMARE: { "coin": 1.5, "train_time": 0.8, "upgrade_speed": 1.5, "push_ratio": 1.1, "defend_ratio": 0.25, "retaliation": 0.9, "smarts": 3 },
-	Difficulty.GODLY: { "coin": 2.0, "train_time": 0.6, "upgrade_speed": 2.0, "push_ratio": 1.0, "defend_ratio": 0.15, "retaliation": 1.0, "smarts": 3 },
+	Difficulty.EASY: { "coin": 0.9, "train_time": 1.0, "upgrade_speed": 0.8, "push_ratio": 1.8, "defend_ratio": 0.8, "retaliation": 0.35, "smarts": 0, "wave": 1.15 },
+	Difficulty.NORMAL: { "coin": 1.15, "train_time": 0.95, "upgrade_speed": 1.15, "push_ratio": 1.4, "defend_ratio": 0.5, "retaliation": 0.6, "smarts": 2, "wave": 1.0 },
+	Difficulty.HARD: { "coin": 1.4, "train_time": 0.8, "upgrade_speed": 1.45, "push_ratio": 1.2, "defend_ratio": 0.35, "retaliation": 0.8, "smarts": 3, "wave": 0.85 },
+	Difficulty.NIGHTMARE: { "coin": 1.75, "train_time": 0.65, "upgrade_speed": 1.8, "push_ratio": 1.1, "defend_ratio": 0.2, "retaliation": 1.0, "smarts": 3, "wave": 0.7 },
+	Difficulty.GODLY: { "coin": 2.5, "train_time": 0.45, "upgrade_speed": 2.5, "push_ratio": 1.0, "defend_ratio": 0.15, "retaliation": 1.0, "smarts": 3, "wave": 0.55 },
 }
 
 const COLOR_PLAYER: Color = Color("#3B82F6")
@@ -125,3 +127,9 @@ func get_ai_retaliation_chance() -> float:
 ## AI behavior tier (0-3) gating the smart behaviors in AIController.
 func get_ai_smarts() -> int:
 	return int(get_difficulty_modifiers().smarts)
+
+
+## Attack-tempo multiplier: scales the AI's wave size thresholds and wave
+## tick (lower = smaller, more frequent waves).
+func get_ai_wave_multiplier() -> float:
+	return get_difficulty_modifiers().wave

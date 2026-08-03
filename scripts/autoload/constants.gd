@@ -275,6 +275,8 @@ const ROWS_PER_LAYER: int = 3
 # ─── ENEMY AI ───
 const ENEMY_DECISION_INTERVAL: float = 2.0
 const ENEMY_AGGRESSION_INTERVAL: float = 10.0
+# The effective wave tick is this base interval scaled by the difficulty's
+# "wave" attack-tempo multiplier (see GameManager.DIFFICULTY_MODIFIERS).
 const ENEMY_ATTACK_WAVE_INTERVAL: float = 18.0
 # Smart-behavior tuning (gated by the difficulty "smarts" tier — see
 # GameManager.DIFFICULTY_MODIFIERS).

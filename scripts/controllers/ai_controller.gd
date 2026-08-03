@@ -14,7 +14,6 @@ var _economy_tick: float = 0.0
 var _mining_tick: float = 0.0
 var _mining_interval: float = 1.0
 var _attack_tick: float = 0.0
-var _attack_interval: float = _Constants.ENEMY_ATTACK_WAVE_INTERVAL
 var _aggression_tick: float = 0.0
 var _aggression_interval: float = _Constants.ENEMY_AGGRESSION_INTERVAL
 # Smart-behavior ticks (gated by the difficulty "smarts" tier).
@@ -46,7 +45,10 @@ func _process(delta: float) -> void:
 		_run_mining()
 
 	_attack_tick += delta
-	if _attack_tick >= _attack_interval:
+	# Wave tick scales with the difficulty attack tempo (higher difficulty
+	# checks for a launch more often).
+	var wave_interval: float = _Constants.ENEMY_ATTACK_WAVE_INTERVAL * GameManager.get_ai_wave_multiplier()
+	if _attack_tick >= wave_interval:
 		_attack_tick = 0.0
 		_run_attack_wave()
 
@@ -83,9 +85,11 @@ func _run_economy() -> void:
 
 	# Bank for the next miner upgrade: without a reserve the training drain
 	# keeps the wallet under 500/1500 forever and miners never advance past
-	# level 1. Miner training is exempt from the reserve — miners pay for
-	# themselves — but fighter upgrades, research, and fighter training may
-	# only spend what is on top of the banked amount.
+	# level 1. Fighter upgrades and research may only spend coin on top of the
+	# full reserve. Fighter *training* budgets against a partial bank (60%) —
+	# otherwise army production stalls completely for the whole time the AI
+	# saves up 1500 for miner level 3. Miner training is fully exempt (miners
+	# pay for themselves).
 	var reserve: int = 0
 	if _Constants.MINER_UPGRADE_COSTS.has(level + 1):
 		reserve = _Constants.MINER_UPGRADE_COSTS[level + 1]
@@ -97,7 +101,7 @@ func _run_economy() -> void:
 	coin = EconomyManager.get_coin(team)
 	for unit_id in ["swordsman", "archer", "wizard", "dragon"]:
 		var upgrade_cost: int = EconomyManager.get_fighter_upgrade_cost(team, unit_id)
-		if upgrade_cost > 0 and coin - reserve >= upgrade_cost + 400:
+		if upgrade_cost > 0 and coin - reserve >= upgrade_cost + 250:
 			EconomyManager.upgrade_fighter(team, unit_id)
 			coin -= upgrade_cost
 
@@ -108,7 +112,7 @@ func _run_economy() -> void:
 		var tech: String = _pick_research(building)
 		if tech != "":
 			var data: Dictionary = ResearchManager.get_next_level_data(team, tech)
-			if EconomyManager.get_coin(team) - reserve >= int(data.cost) + 400:
+			if EconomyManager.get_coin(team) - reserve >= int(data.cost) + 250:
 				ResearchManager.start_research(team, tech)
 	# The scan is free — fire it whenever the cooldown is up.
 	if ResearchManager.can_scan(team):
@@ -126,11 +130,11 @@ func _run_economy() -> void:
 	var queue_size: int = building.call("get_queue").size()
 	if queue_size < 3 and population < _Constants.MAX_UNITS:
 		coin = EconomyManager.get_coin(team)
-		var miner_target: int = 4 + level * 2
+		var miner_target: int = 5 + level * 2
 		if miners < miner_target and coin >= _Constants.COSTS["miner"]:
 			building.call("queue_unit", "miner")
 		else:
-			var pick: String = _pick_fighter_to_train(coin - reserve)
+			var pick: String = _pick_fighter_to_train(coin - int(reserve * 0.6))
 			if pick != "":
 				building.call("queue_unit", pick)
 
@@ -287,26 +291,30 @@ func _launch_wave_if_ready(threshold_override: int = -1) -> void:
 		unit.attack_building(target)
 
 
-## Minimum army size before a wave launches, by aggression level. A
-## nearly-dead enemy base triggers an all-in with whatever is on hand.
+## Minimum army size before a wave launches, by aggression level, scaled by
+## the difficulty attack tempo (higher difficulties march with smaller
+## armies). A nearly-dead enemy base triggers an all-in with whatever is on
+## hand.
 func _wave_threshold(target: Node2D) -> int:
 	var hp_ratio: float = float(target.get("_hp")) / maxf(1.0, float(target.get("max_hp")))
 	if hp_ratio < 0.25:
 		return 3
+	var base: int
 	match _aggression_level:
 		"push":
-			return 4
+			base = 4
 		"balanced":
-			return 7
+			base = 7
 		_:
-			return 12  # defend: only march with a real army
+			base = 12  # defend: only march with a real army
+	return maxi(3, int(round(base * GameManager.get_ai_wave_multiplier())))
 
 
 func _defend_building() -> void:
 	var building: Node2D = _get_building()
 	if building == null:
 		return
-	if _nearest_enemy_unit(building.global_position, 450) == null:
+	if _nearest_enemy_unit(building.global_position, 650) == null:
 		return
 	for unit in get_tree().get_nodes_in_group(team_name()):
 		if not unit.data.is_fighter:
@@ -324,7 +332,7 @@ func _defend_building() -> void:
 ## the tiebreak to still spread across multiple intruders.
 func _pick_defense_target(defender: Unit) -> Unit:
 	if GameManager.get_ai_smarts() < 1:
-		return _nearest_enemy_unit(defender.global_position, 500)
+		return _nearest_enemy_unit(defender.global_position, 650)
 	var best: Unit = null
 	var best_score: float = INF
 	var other_team_name: String = "player" if team == GameManager.Team.ENEMY else "enemy"
@@ -332,7 +340,7 @@ func _pick_defense_target(defender: Unit) -> Unit:
 		if unit._state == Unit.State.DEAD:
 			continue
 		var d: float = unit.global_position.distance_to(defender.global_position)
-		if d > 500.0:
+		if d > 650.0:
 			continue
 		var hp_fraction: float = float(unit.hp) / maxf(1.0, float(unit.data.max_hp))
 		var score: float = hp_fraction * 1000.0 + d
@@ -353,7 +361,7 @@ func _retreat_wounded() -> void:
 	var building: Node2D = _get_building()
 	if building == null:
 		return
-	if _nearest_enemy_unit(building.global_position, 450) != null:
+	if _nearest_enemy_unit(building.global_position, 650) != null:
 		return  # base under attack: hold the line, no retreats
 	for unit in get_tree().get_nodes_in_group(team_name()):
 		if not unit.data.is_fighter or unit._state == Unit.State.DEAD:
@@ -417,17 +425,18 @@ func _apply_aggression_behavior() -> void:
 			for unit in get_tree().get_nodes_in_group(team_name()):
 				if not unit.data.is_fighter or unit._state != Unit.State.IDLE or unit.is_underground:
 					continue
-				if unit.global_position.distance_to(building.global_position) > 450.0:
+				if unit.global_position.distance_to(building.global_position) > 650.0:
 					unit.garrison_home()
 
 
-## Smarts tier 2+: send up to 2 free fighters to kill enemy miners caught on
-## the surface (combat can't cross layers, so only deposit-trip miners are
-## valid targets). Raiding the economy forces the enemy to defend instead of
-## turtling safely underground. Never runs while defending, and never strips
-## the wave below critical mass. Raiders in ATTACK are ignored by the wave and
-## defense logic (both only command IDLE/MOVE units); when their target dies
-## they go IDLE and are re-swept naturally.
+## Smarts tier 2+: send a small raiding party (growing with army size) to
+## kill enemy miners caught on the surface (combat can't cross layers, so only
+## deposit-trip miners are valid targets). Raiding the economy forces the
+## enemy to defend instead of turtling safely underground. Never runs while
+## defending, and never strips the wave below critical mass. Raiders in
+## ATTACK are ignored by the wave and defense logic (both only command
+## IDLE/MOVE units); when their target dies they go IDLE and are re-swept
+## naturally.
 func _run_harassment() -> void:
 	if GameManager.get_ai_smarts() < 2:
 		return
@@ -460,7 +469,8 @@ func _run_harassment() -> void:
 	exposed_miners.sort_custom(func(a: Unit, b: Unit) -> bool:
 		return a.global_position.distance_squared_to(building.global_position) \
 			< b.global_position.distance_squared_to(building.global_position))
-	for i in range(mini(2, free_fighters.size())):
+	var raider_count: int = mini(2 + total / 15, free_fighters.size())
+	for i in range(raider_count):
 		(free_fighters[i] as Unit).attack_unit(exposed_miners.front())
 
 

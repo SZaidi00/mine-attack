@@ -75,9 +75,9 @@ func test_undamaged_sieger_keeps_attacking_building() -> void:
 func test_retaliation_chance_scales_with_difficulty() -> void:
 	var before: GameManager.Difficulty = GameManager.difficulty
 	GameManager.set_difficulty(GameManager.Difficulty.EASY)
-	assert_eq(GameManager.get_ai_retaliation_chance(), 0.25)
+	assert_eq(GameManager.get_ai_retaliation_chance(), 0.35)
 	GameManager.set_difficulty(GameManager.Difficulty.NIGHTMARE)
-	assert_eq(GameManager.get_ai_retaliation_chance(), 0.9)
+	assert_eq(GameManager.get_ai_retaliation_chance(), 1.0)
 	GameManager.set_difficulty(before)
 
 

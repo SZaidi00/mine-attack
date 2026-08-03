@@ -211,8 +211,8 @@ func test_counter_mix_default_against_anti_air() -> void:
 	assert_eq(mix, _ai._ARMY_MIX, "a balanced player army with anti-air gets the default mix")
 
 
-func test_counter_mix_ignored_below_nightmare() -> void:
-	GameManager.set_difficulty(GameManager.Difficulty.HARD)
+func test_counter_mix_ignored_below_tier_3() -> void:
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
 	for i in range(4):
 		_spawn_fighter(PLAYER, Vector2(-600 - i * 8, 16))
 	# _pick_fighter_to_train only counter-picks at tier 3; the mix helper is

@@ -2,8 +2,9 @@ extends GutTest
 
 # AI strategy: the economy tick must bank for miner upgrades (the old free
 # spending kept the wallet under 500 forever, so miners never passed level 1),
-# train a mixed army, and launch attacks as gathered waves instead of feeding
-# one fighter at a time.
+# while fighter training trickles on against a 60% partial bank so the army
+# never stalls, and attacks launch as gathered waves — smaller and more often
+# on higher difficulties — instead of feeding one fighter at a time.
 
 const PLAYER: int = 0
 const ENEMY: int = 1
@@ -37,6 +38,12 @@ func before_each() -> void:
 	ResearchManager.reset()
 
 
+func after_each() -> void:
+	# GameManager is an autoload: never leak a difficulty choice into the
+	# next test script.
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+
+
 func _spawn_unit(tres_path: String, team: int, pos: Vector2) -> Node2D:
 	var unit: Node2D = load("res://scenes/unit.tscn").instantiate()
 	unit.set("data", load(tres_path).duplicate(true))
@@ -60,15 +67,47 @@ func test_ai_banks_and_buys_miner_upgrade() -> void:
 	assert_eq(EconomyManager.get_miner_level(ENEMY), 2, "AI must buy the L2 miner upgrade as soon as it can afford it")
 
 
-func test_ai_does_not_spend_the_upgrade_bank_on_fighters() -> void:
-	# 400 coin: affordable fighters exist, but the L2 upgrade costs 500 — the
-	# AI must keep banking (miners are exempt: they pay for themselves).
-	EconomyManager.spend_coin(ENEMY, 100)
+func test_fighter_training_dips_into_partial_bank() -> void:
+	# Fill the miner quota so the queue decision falls through to fighters.
+	for i in range(7):
+		_spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(430 + i * 8, 16))
+	_drain_enemy_queue()
+	_set_enemy_coin(400)  # below the 500 L2 reserve, above the 300 partial bank
 	_ai._run_economy()
 	var queue: Array = _building_for(ENEMY).call("get_queue")
-	assert_eq(EconomyManager.get_miner_level(ENEMY), 1)
+	var has_fighter: bool = false
 	for entry in queue:
-		assert_eq(entry.id, "miner", "below the upgrade bank the AI may only train miners")
+		if entry.id != "miner":
+			has_fighter = true
+	assert_true(has_fighter, "a 100-coin fighter must fit a 400-coin wallet via the 60% partial bank")
+
+
+func test_fighter_training_holds_below_partial_bank() -> void:
+	for i in range(7):
+		_spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(430 + i * 8, 16))
+	_drain_enemy_queue()
+	_set_enemy_coin(200)  # below the 300 partial bank: banking takes priority
+	_ai._run_economy()
+	var queue: Array = _building_for(ENEMY).call("get_queue")
+	assert_true(queue.is_empty(), "below the partial bank (and at miner quota) nothing is queued")
+
+
+## Removes everything the enemy building has queued (e.g. from the AI's own
+## background ticks between tests) so queue assertions start clean.
+func _drain_enemy_queue() -> void:
+	var building: Node2D = _building_for(ENEMY)
+	while not building.call("get_queue").is_empty():
+		building.call("cancel_queue", 0)
+
+
+## Normalizes the enemy wallet to an exact amount (queue cancels refund coin,
+## so the wallet must be re-pinned after draining).
+func _set_enemy_coin(amount: int) -> void:
+	var coin: int = EconomyManager.get_coin(ENEMY)
+	if coin > amount:
+		EconomyManager.spend_coin(ENEMY, coin - amount)
+	elif coin < amount:
+		EconomyManager.add_coin(ENEMY, amount - coin)
 
 
 func test_ai_eventually_affords_upgrade_while_training_miners() -> void:
@@ -125,3 +164,18 @@ func test_wave_all_in_when_enemy_base_nearly_dead() -> void:
 	for f in fighters:
 		assert_eq(f.get("_target_building"), player_building, "a nearly-dead enemy base triggers an all-in")
 	player_building.set("_hp", player_building.get("max_hp"))
+
+
+func test_wave_threshold_scales_with_difficulty() -> void:
+	# Hard has wave tempo 0.85: the balanced threshold becomes round(7 * 0.85) = 6.
+	GameManager.set_difficulty(GameManager.Difficulty.HARD)
+	_ai._aggression_level = "balanced"
+	var fighters: Array = []
+	for i in range(5):
+		fighters.append(_spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(-440, 16)))
+	_ai._launch_wave_if_ready()
+	for f in fighters:
+		assert_null(f.get("_target_building"), "5 fighters must hold on Hard (threshold 6)")
+	var sixth: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(-440, 16))
+	_ai._launch_wave_if_ready()
+	assert_eq(sixth.get("_target_building"), _building_for(PLAYER), "6 fighters must launch on Hard")
