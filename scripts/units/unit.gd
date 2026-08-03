@@ -92,6 +92,10 @@ var _base_attack_cooldown: float = 0.0
 # reaches zero (see _process).
 var _regen_delay: float = 0.0
 var _regen_accum: float = 0.0
+# Rolling window of damage taken: [age_seconds, amount] entries, aged in
+# _process and pruned past 3s. Feeds get_incoming_dps(), which the AI's
+# predictive retreat and bait-and-switch spring both read.
+var _damage_log: Array = []
 # The spot a fighter returns to when idle on the surface (its "standing
 # point"). Set at spawn, updated by explicit move/stop orders; attack and
 # auto-attack engagements leave it alone, so units regroup after a fight
@@ -152,6 +156,12 @@ func _process(delta: float) -> void:
 				hp = mini(hp + whole, data.max_hp)
 				_spawn_heal_popup(whole)
 				queue_redraw()
+
+	# Age the incoming-damage window (game time, so it freezes with the match).
+	for i in range(_damage_log.size() - 1, -1, -1):
+		_damage_log[i][0] += delta
+		if _damage_log[i][0] > 3.0:
+			_damage_log.remove_at(i)
 
 	if _hit_flash_timer > 0:
 		_hit_flash_timer -= delta
@@ -463,6 +473,7 @@ func take_damage(amount: int, attacker: Node2D = null) -> void:
 	hp -= amount
 	_regen_delay = Constants.UNIT_REGEN_DELAY
 	_hit_flash_timer = 0.15
+	_damage_log.append([0.0, amount])
 	queue_redraw()
 	_spawn_damage_popup(amount)
 	if hp <= 0:
@@ -471,6 +482,20 @@ func take_damage(amount: int, attacker: Node2D = null) -> void:
 		_start_flee()
 	else:
 		_maybe_retaliate(attacker)
+
+
+## Damage per second taken over the rolling 3s window (0 when untouched).
+## The window span is measured from the oldest entry still in it, floored at
+## 0.5s so a single fresh hit doesn't spike to infinity.
+func get_incoming_dps() -> float:
+	if _damage_log.is_empty():
+		return 0.0
+	var total: float = 0.0
+	var span: float = 0.0
+	for entry in _damage_log:
+		total += entry[1]
+		span = maxf(span, entry[0])
+	return total / maxf(span, 0.5)
 
 
 ## Dragons only take damage from Archers and Wizards. All other units are
@@ -667,6 +692,26 @@ func _kite_away_from(threat_pos: Vector2, delta: float) -> void:
 		global_position = next_pos
 
 
+## Nearest enemy melee fighter (attack_range <= 35) within max_dist on the
+## same layer. Ranged units kite away from it even while shooting something
+## else, so melee never closes for free.
+func _nearest_melee_threat(max_dist: float) -> Unit:
+	var best: Unit = null
+	var best_d2: float = max_dist * max_dist
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit.team == team or unit._state == State.DEAD:
+			continue
+		if not unit.data.is_fighter or unit.data.attack_range > 35.0:
+			continue
+		if unit.is_underground != is_underground:
+			continue
+		var d2: float = combat_distance_squared_to(unit)
+		if d2 <= best_d2:
+			best_d2 = d2
+			best = unit
+	return best
+
+
 ## Cheap point walkability for kiting (no A*): the surface row is open ground;
 ## underground only EMPTY cells can be stood on.
 func _is_walkable_point(world_pos: Vector2) -> bool:
@@ -717,14 +762,26 @@ func _process_attack(delta: float) -> void:
 		return
 
 	_path.clear()
-	# Ranged standoff: if a unit target slips inside 40% of the attack range,
-	# step back to re-establish distance before the next shot. Melee units
-	# (attack_range <= 35) and building sieges are unaffected. Gap uses combat
+	# Ranged standoff: step back to re-establish distance before the next shot
+	# whenever a threat slips inside the kite fraction of the attack range —
+	# the current target, or any enemy melee unit closing in (so ranged units
+	# never let melee reach them while firing at something else). Melee units
+	# (attack_range <= 35) and building sieges are unaffected. Gaps use combat
 	# positions (air vs ground); kite steering still moves feet on the ground.
-	if data.attack_range > 35.0 and _target_unit != null:
-		var gap: float = sqrt(combat_distance_squared_to(_target_unit))
-		if gap < data.attack_range * 0.4:
-			_kite_away_from(path_pos, delta)
+	if data.attack_range > 35.0:
+		var kite_limit: float = data.attack_range * Constants.UNIT_KITE_RANGE_FRACTION
+		var threat_pos: Vector2 = Vector2.INF
+		var threat_d2: float = INF
+		if _target_unit != null:
+			var target_d2: float = combat_distance_squared_to(_target_unit)
+			if target_d2 < kite_limit * kite_limit:
+				threat_pos = path_pos
+				threat_d2 = target_d2
+		var melee: Unit = _nearest_melee_threat(kite_limit)
+		if melee != null and combat_distance_squared_to(melee) < threat_d2:
+			threat_pos = melee.global_position
+		if threat_pos != Vector2.INF:
+			_kite_away_from(threat_pos, delta)
 	if _attack_timer <= 0:
 		_attack_timer = data.attack_cooldown
 		var hit_damage: int = roundi(data.damage_per_hit)
@@ -1164,9 +1221,10 @@ func _find_and_mine() -> void:
 		return
 
 	# Nothing diggable remains in range: cash in any cargo, then wait near the
-	# shaft instead of thrashing up and down.
+	# shaft instead of thrashing up and down. AI miners re-scan on a tighter
+	# interval (perfect worker allocation — the AI never idles long).
 	_mine_exhausted = true
-	_exhausted_retry_timer = _EXHAUSTED_RETRY_SEC
+	_exhausted_retry_timer = Constants.ENEMY_MINER_RESCAN_INTERVAL if team == GameManager.Team.ENEMY else _EXHAUSTED_RETRY_SEC
 	if carried_coin > 0:
 		deposit_coin()
 	else:
@@ -1407,39 +1465,30 @@ func _return_to_rally_point() -> void:
 
 
 func _find_auto_attack_target():
-	# 1. Enemy fighters in attack range (closest first).
-	var best: Unit = null
-	var best_dist: float = data.attack_range * data.attack_range
-	for unit in get_tree().get_nodes_in_group("units"):
-		if unit.team == team or unit._state == State.DEAD:
-			continue
-		if not unit.data.is_fighter:
-			continue
-		if not can_damage_unit(unit):
-			continue
-		var d: float = combat_distance_squared_to(unit)
-		if d <= best_dist:
-			best_dist = d
-			best = unit
-	if best != null:
-		return best
-
-	# 2. Enemy fighters in sight range.
-	best = null
-	best_dist = data.sight_range * data.sight_range
-	for unit in get_tree().get_nodes_in_group("units"):
-		if unit.team == team or unit._state == State.DEAD:
-			continue
-		if not unit.data.is_fighter:
-			continue
-		if not can_damage_unit(unit):
-			continue
-		var d: float = combat_distance_squared_to(unit)
-		if d <= best_dist:
-			best_dist = d
-			best = unit
-	if best != null:
-		return best
+	# Enemy fighters: attack range first, then sight range. Closest wins —
+	# except fireball users (wizard/dragon), who pick the target whose position
+	# splashes the most enemies so fireballs aren't wasted on lone stragglers.
+	for range_limit in [data.attack_range, data.sight_range]:
+		if _uses_fireball() and data.aoe_radius > 0.0:
+			var splash: Unit = _pick_splash_target(range_limit)
+			if splash != null:
+				return splash
+		else:
+			var best: Unit = null
+			var best_dist: float = range_limit * range_limit
+			for unit in get_tree().get_nodes_in_group("units"):
+				if unit.team == team or unit._state == State.DEAD:
+					continue
+				if not unit.data.is_fighter:
+					continue
+				if not can_damage_unit(unit):
+					continue
+				var d: float = combat_distance_squared_to(unit)
+				if d <= best_dist:
+					best_dist = d
+					best = unit
+			if best != null:
+				return best
 
 	# 3. Enemy building in sight range.
 	var enemy_building: Node2D = _get_enemy_building()
@@ -1450,8 +1499,8 @@ func _find_auto_attack_target():
 
 	# 4. Enemy miners on our side of the wall (underground only).
 	if is_underground:
-		best = null
-		best_dist = data.sight_range * data.sight_range
+		var best: Unit = null
+		var best_dist: float = data.sight_range * data.sight_range
 		var team_dir: int = _team_dir()
 		for unit in get_tree().get_nodes_in_group("units"):
 			if unit.team == team or unit._state == State.DEAD:
@@ -1470,6 +1519,39 @@ func _find_auto_attack_target():
 		if best != null:
 			return best
 	return null
+
+
+## Splash-aware fighter pick for fireball users: the damageable enemy fighter
+## within max_dist whose position catches the most enemy units in the AoE
+## (counting the target itself), closest on ties.
+func _pick_splash_target(max_dist: float) -> Unit:
+	var best: Unit = null
+	var best_score: float = -INF
+	var best_d2: float = INF
+	var max_d2: float = max_dist * max_dist
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit.team == team or unit._state == State.DEAD:
+			continue
+		if not unit.data.is_fighter:
+			continue
+		if not can_damage_unit(unit):
+			continue
+		var d2: float = combat_distance_squared_to(unit)
+		if d2 > max_d2:
+			continue
+		var score: float = 1.0
+		for other in get_tree().get_nodes_in_group("units"):
+			if other == unit or other.team == team or other._state == State.DEAD:
+				continue
+			if other.is_underground != unit.is_underground:
+				continue
+			if other.global_position.distance_squared_to(unit.global_position) <= data.aoe_radius * data.aoe_radius:
+				score += 1.0
+		if score > best_score or (score == best_score and d2 < best_d2):
+			best_score = score
+			best_d2 = d2
+			best = unit
+	return best
 
 
 func _patrol_underground() -> void:

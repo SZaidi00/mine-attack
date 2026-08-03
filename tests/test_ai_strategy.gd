@@ -166,6 +166,10 @@ func test_wave_all_in_when_enemy_base_nearly_dead() -> void:
 	player_building.set("_hp", player_building.get("max_hp"))
 
 
+# Note: the wall-breach timing gate (_attempt_wall_breach, smarts tier 2+)
+# is covered indirectly through the _simulate_combat tests in
+# test_ai_micro.gd — staging "no accessible unmined tiles" on a fresh map is
+# impractical, so the gate itself has no direct integration test.
 func test_wave_threshold_scales_with_difficulty() -> void:
 	# Hard has wave tempo 0.85: the balanced threshold becomes round(7 * 0.85) = 6.
 	GameManager.set_difficulty(GameManager.Difficulty.HARD)

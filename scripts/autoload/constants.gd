@@ -283,6 +283,25 @@ const ENEMY_ATTACK_WAVE_INTERVAL: float = 18.0
 const ENEMY_HARASS_INTERVAL: float = 20.0  # seconds between miner-raid attempts
 const ENEMY_WOUNDED_HP_RATIO: float = 0.3  # fighters below this HP fraction retreat to heal
 const ENEMY_COUNTERATTACK_DROP: int = 3  # player fighter losses per sample that open a counter-attack window
+# Predictive retreat: also retreat when predicted time-to-death beats the trip
+# home by less than this slack (seconds).
+const ENEMY_RETREAT_PREDICT_BUFFER: float = 3.0
+# Bait-and-switch (tier 2+): seconds between bait attempts.
+const ENEMY_BAIT_INTERVAL: float = 45.0
+# Economic lookahead (tier 2+): a timing attack fires when the enemy's income
+# rate beats ours by this ratio and we have at least this many free fighters.
+const ENEMY_ECON_PRESSURE_RATIO: float = 1.2
+const ENEMY_TIMING_ATTACK_ARMY: int = 4
+# Combat predictor: seconds of abstract focus-fire exchange simulated per call.
+const ENEMY_COMBAT_SIM_DURATION: float = 2.0
+# AI-team miners re-scan for diggable cells this often while waiting at an
+# exhausted mine (player miners keep the shared 5s retry in unit.gd).
+const ENEMY_MINER_RESCAN_INTERVAL: float = 2.0
+
+# ─── UNIT MICRO ───
+# Ranged fighters kite (step back while firing) when an enemy melee threat
+# closes inside this fraction of their attack range.
+const UNIT_KITE_RANGE_FRACTION: float = 0.6
 
 # ─── AI DIFFICULTY ───
 # The DIFFICULTY_MODIFIERS table lives in game_manager.gd (keyed by

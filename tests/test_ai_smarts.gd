@@ -194,8 +194,10 @@ func test_no_counterattack_without_losses() -> void:
 
 func test_counter_mix_punishes_missing_anti_air() -> void:
 	GameManager.set_difficulty(GameManager.Difficulty.NIGHTMARE)
+	_ai._player_comp_memory.clear()
 	for i in range(4):
 		_spawn_fighter(PLAYER, Vector2(-600 - i * 8, 16))  # all melee, zero anti-air
+	_ai._sample_player_composition()  # feed the scout memory the mix reads
 	var mix: Dictionary = _ai._effective_army_mix()
 	assert_gt(mix["dragon"], _ai._ARMY_MIX["dragon"], "no player anti-air must spike the dragon share")
 	assert_lt(mix["swordsman"], _ai._ARMY_MIX["swordsman"], "a melee-heavy player army must shift the mix toward ranged")
@@ -203,10 +205,12 @@ func test_counter_mix_punishes_missing_anti_air() -> void:
 
 func test_counter_mix_default_against_anti_air() -> void:
 	GameManager.set_difficulty(GameManager.Difficulty.NIGHTMARE)
+	_ai._player_comp_memory.clear()
 	_spawn_fighter(PLAYER, Vector2(-600, 16))
 	_spawn_unit("res://scripts/resources/units/archer.tres", PLAYER, Vector2(-610, 16))
 	_spawn_unit("res://scripts/resources/units/archer.tres", PLAYER, Vector2(-620, 16))
 	_spawn_unit("res://scripts/resources/units/wizard.tres", PLAYER, Vector2(-630, 16))
+	_ai._sample_player_composition()
 	var mix: Dictionary = _ai._effective_army_mix()
 	assert_eq(mix, _ai._ARMY_MIX, "a balanced player army with anti-air gets the default mix")
 
