@@ -302,6 +302,11 @@ const ENEMY_MINER_RESCAN_INTERVAL: float = 2.0
 # Ranged fighters kite (step back while firing) when an enemy melee threat
 # closes inside this fraction of their attack range.
 const UNIT_KITE_RANGE_FRACTION: float = 0.6
+# Defend leash: a fighter holding its post (stop/garrison orders) may only
+# chase auto-acquired targets this far from the standing point before
+# dropping the target and walking home. Explicit player orders are never
+# leashed.
+const UNIT_DEFEND_LEASH_RANGE: float = 400.0
 
 # ─── AI DIFFICULTY ───
 # The DIFFICULTY_MODIFIERS table lives in game_manager.gd (keyed by

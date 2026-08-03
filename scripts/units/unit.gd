@@ -101,6 +101,14 @@ var _damage_log: Array = []
 # auto-attack engagements leave it alone, so units regroup after a fight
 # instead of spreading across the map.
 var _post_point: Vector2 = Vector2.ZERO
+# Defend leash: _hold_post is set by hold-style orders (stop / garrison) and
+# cleared by movement and attack orders. _auto_engaged marks a target the
+# idle handler picked on its own (not an explicit order). While both are
+# set, the chase is leashed to UNIT_DEFEND_LEASH_RANGE from the standing
+# point — a little chase is fine, then the unit drops the target and walks
+# home. Explicit player orders are never leashed.
+var _hold_post: bool = false
+var _auto_engaged: bool = false
 # Last applied flight altitude for HoverArea / z_index sync.
 var _flight_visual_altitude: float = -1.0
 
@@ -236,6 +244,7 @@ func move_to(world_pos: Vector2) -> void:
 		return
 	DebugLog.log_command("Unit %d" % get_instance_id(), "move_to", str(world_pos))
 	_post_point = world_pos
+	_hold_post = false
 	_set_state(State.MOVE, "move_to command")
 
 
@@ -259,6 +268,7 @@ func attack_unit(target) -> void:
 		return
 	DebugLog.log_command("Unit %d" % get_instance_id(), "attack_unit", "target=%d" % target.get_instance_id())
 	_target_unit = target
+	_hold_post = false
 	_set_state(State.ATTACK, "attack_unit command")
 
 
@@ -278,6 +288,7 @@ func attack_building(target: Node2D) -> void:
 		return
 	DebugLog.log_command("Unit %d" % get_instance_id(), "attack_building", "target=%d" % target.get_instance_id())
 	_target_building = target
+	_hold_post = false
 	_set_state(State.ATTACK, "attack_building command")
 
 
@@ -386,6 +397,7 @@ func stop() -> void:
 	DebugLog.log_command("Unit %d" % get_instance_id(), "stop")
 	_clear_target()
 	_post_point = global_position  # Defend/hold means: stay right here.
+	_hold_post = true
 	_set_state(State.IDLE, "stop command")
 	_path.clear()
 
@@ -420,6 +432,8 @@ func garrison_home() -> void:
 		exit_mine()
 	else:
 		move_to(_post_point)
+	# Set after move_to (which clears it): garrisoned fighters hold the base.
+	_hold_post = true
 
 
 ## Rally stance order (fighters only): move to the point while hunting every
@@ -436,6 +450,7 @@ func rally_to(world_pos: Vector2) -> void:
 		_spawn_reject_popup(world_pos)
 		return
 	_clear_target()
+	_hold_post = false  # rally hunts the whole surface — no leash
 	if is_underground:
 		# Climb out first; _clear_target inside climb_up_ladder would wipe the
 		# rally state, so it is set below, after the climb is under way.
@@ -750,6 +765,15 @@ func _process_attack(delta: float) -> void:
 		_set_state(State.IDLE, "target lost")
 		return
 
+	# Defend leash: an auto-engaged holder that chased too far from its
+	# standing point lets go and heads home. Explicit orders are never
+	# leashed (_auto_engaged is only set by the idle auto-attack scan).
+	if _auto_engaged and _hold_post and not is_underground and _post_point != Vector2.ZERO:
+		if global_position.distance_to(_post_point) > Constants.UNIT_DEFEND_LEASH_RANGE:
+			_clear_target()
+			_set_state(State.IDLE, "defend leash reached")
+			return
+
 	if get_combat_position().distance_to(range_pos) > data.attack_range:
 		# Re-path only when there is no path or the destination has moved
 		# significantly (moving unit targets), not every physics frame.
@@ -1037,6 +1061,7 @@ func _set_state(new_state: State, reason: String = "") -> void:
 func _clear_target() -> void:
 	_release_claim()
 	_rally_active = false
+	_auto_engaged = false
 	_target_unit = null
 	_target_building = null
 	_target_cell = Vector2i(-9999, -9999)
@@ -1394,10 +1419,17 @@ func _handle_idle_fighter() -> void:
 		return
 	var target = _find_auto_attack_target()
 	if target != null:
+		# Auto-engagement, not an explicit order: remember that (the defend
+		# leash cuts auto-chases short) and keep the hold-post flag that
+		# attack_unit/attack_building clears for explicit orders.
+		var hold: bool = _hold_post
 		if target is Unit:
 			attack_unit(target)
 		else:
 			attack_building(target)
+		if _state == State.ATTACK:
+			_hold_post = hold
+			_auto_engaged = true
 		return
 	if is_underground:
 		_patrol_underground()
@@ -1465,13 +1497,17 @@ func _return_to_rally_point() -> void:
 
 
 func _find_auto_attack_target():
+	# Defend leash: a holder only notices targets near its standing point, so
+	# a defend-mode unit can't be lured across the map one fight at a time.
+	var leashed: bool = _hold_post and not is_underground and _post_point != Vector2.ZERO
+	var leash_d2: float = Constants.UNIT_DEFEND_LEASH_RANGE * Constants.UNIT_DEFEND_LEASH_RANGE
 	# Enemy fighters: attack range first, then sight range. Closest wins —
 	# except fireball users (wizard/dragon), who pick the target whose position
 	# splashes the most enemies so fireballs aren't wasted on lone stragglers.
 	for range_limit in [data.attack_range, data.sight_range]:
 		if _uses_fireball() and data.aoe_radius > 0.0:
 			var splash: Unit = _pick_splash_target(range_limit)
-			if splash != null:
+			if splash != null and not (leashed and _post_point.distance_squared_to(splash.global_position) > leash_d2):
 				return splash
 		else:
 			var best: Unit = null
@@ -1483,6 +1519,8 @@ func _find_auto_attack_target():
 					continue
 				if not can_damage_unit(unit):
 					continue
+				if leashed and _post_point.distance_squared_to(unit.global_position) > leash_d2:
+					continue
 				var d: float = combat_distance_squared_to(unit)
 				if d <= best_dist:
 					best_dist = d
@@ -1493,6 +1531,8 @@ func _find_auto_attack_target():
 	# 3. Enemy building in sight range.
 	var enemy_building: Node2D = _get_enemy_building()
 	if enemy_building != null:
+		if leashed and _post_point.distance_squared_to(enemy_building.global_position) > leash_d2:
+			return null  # defending means defending: never auto-siege from a held post
 		var d: float = get_combat_position().distance_squared_to(enemy_building.global_position)
 		if d <= data.sight_range * data.sight_range:
 			return enemy_building
