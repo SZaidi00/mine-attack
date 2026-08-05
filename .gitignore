@@ -2,5 +2,11 @@
 .godot/
 /android/
 
+# macOS Finder metadata
+.DS_Store
+
+# Export outputs (regenerable via tools/export_all.sh)
+build/
+
 # Release archives produced by tools/export_all.sh
 /MineAttack-*.zip

@@ -30,7 +30,6 @@ Key configuration files: `project.godot` (project settings, autoloads, input map
 ```
 mine-attack/
 ├── project.godot / export_presets.cfg / icon.svg / README.md
-├── Frost_Mines_Complete_Implementation_Guide.md  # Design reference
 ├── scenes/                    # Godot scene files (.tscn)
 │   ├── main.tscn              # Root gameplay scene (loaded from the main menu)
 │   ├── building.tscn / mine_entry.tscn / projectile.tscn / unit.tscn
