@@ -23,6 +23,10 @@ func before_all() -> void:
 	_units = _main.get_node("Units")
 	_grid = _main.get_node("World/GridWorld")
 	_pc = _main.get_node("PlayerController")
+	# Warm-up: the first test after boot gets ~0.4s of node _process starvation
+	# in the headless harness, so let the scene settle before any test asserts
+	# on per-frame state (vision maps update in GridWorld._process).
+	await wait_seconds(0.6)
 
 
 func after_all() -> void:
@@ -38,6 +42,12 @@ func before_each() -> void:
 	GameManager.reset()
 	_grid.set_reveal_all(PLAYER, false)
 	_grid.set_reveal_all(ENEMY, false)
+	# Fog maps persist in the scene across tests; wipe them so one test's
+	# revealed cells can't leak into the next as stale "remembered" tiles
+	# (match_time resets to 0 each test, so old memories would never expire).
+	_grid._init_vision_maps()
+	_grid._unit_ghosts.clear()
+	_grid._prev_visible_enemies.clear()
 
 
 func after_each() -> void:
@@ -251,6 +261,29 @@ func test_underground_lantern_reveals_buried_ore() -> void:
 			if _grid.is_ore_revealed(Vector2i(x, y), PLAYER):
 				revealed += 1
 	assert_gt(revealed, 0, "a built mine lantern must permanently reveal buried ore in its radius")
+
+
+# ─── Layer-locked vision ───
+
+func test_underground_lantern_lights_only_underground() -> void:
+	_place_built_lantern("underground_lantern", Vector2i(-15, 3))
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-10, 3)), 2, "mine lantern must light its tunnel radius")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-10, 0)), 0, "mine lantern must NOT light the surface above")
+
+
+func test_surface_lantern_lights_only_surface() -> void:
+	_place_built_lantern("lantern", Vector2i(-20, 0))
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-19, 0)), 2, "surface lantern must light the surface row")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, 1)), 0, "surface lantern must NOT light the tunnels below")
+
+
+func test_miner_lights_only_current_layer() -> void:
+	_spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(0, 16))
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(2, 0)), 2, "surface miner must light the surface around it")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(0, 1)), 0, "surface miner must NOT light the underground below")
 
 
 # ─── Lanterns as combat targets ───

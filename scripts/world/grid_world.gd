@@ -40,6 +40,11 @@ const _SKY_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/su
 const _SURFACE_GROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_ground.png")
 const _UNDERGROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/underground_base.png")
 const _WALL_TEXTURE: Texture2D = preload("res://frost_mines_assets/props/wall_segment.png")
+# Fog of War decoration: drifting cloud puffs over fogged surface cells and
+# mist puffs in the fogged underground (the flat fog color underneath still
+# guarantees occlusion — these are the moving "cloud cover" on top).
+const _FOG_SURFACE_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/fog_surface.png")
+const _FOG_UNDERGROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/fog_underground.png")
 const _LAYER_TILES: Array[Texture2D] = [
 	preload("res://frost_mines_assets/tiles/layer_1_tile.png"),
 	preload("res://frost_mines_assets/tiles/layer_2_tile.png"),
@@ -85,6 +90,12 @@ var _prev_visible_enemies: Dictionary = {}
 # overlay is skipped). Used by the test suite to keep fog-agnostic behavior
 # tests readable; never set in gameplay.
 var _reveal_all: Dictionary = {}
+
+# Vision layer masks: whether a source lights the surface row, the
+# underground, or both (lanterns, miners and dragons are layer-locked).
+const VISION_LAYER_BOTH: int = 0
+const VISION_LAYER_SURFACE: int = 1
+const VISION_LAYER_UNDERGROUND: int = 2
 
 var _wall_hp: int = WALL_HP_TOTAL
 var _wall_max_hp: int = WALL_HP_TOTAL
@@ -608,7 +619,7 @@ func _update_vision(team: GameManager.Team) -> void:
 				vision[ix][iy] = false
 
 	for source in _get_vision_sources(team):
-		_reveal_circle(team, source[0], source[1])
+		_reveal_circle(team, source[0], source[1], source[2])
 
 	if team == GameManager.Team.PLAYER:
 		# Ghost tracking: an enemy that was visible last frame but is not now
@@ -634,8 +645,9 @@ func _update_vision(team: GameManager.Team) -> void:
 				_unit_ghosts.erase(id)
 
 
-## Every vision source for a team as [center_cell, radius_cells] pairs:
-## living units (per-type radii), the team's building, and built lanterns.
+## Every vision source for a team as [center_cell, radius_cells, layer_mask]
+## triples: living units (per-type radii), the team's building, and built
+## lanterns.
 func _get_vision_sources(team: GameManager.Team) -> Array:
 	var sources: Array = []
 	for unit in get_tree().get_nodes_in_group("units"):
@@ -643,17 +655,18 @@ func _get_vision_sources(team: GameManager.Team) -> Array:
 			continue
 		var radius: int = unit.get_vision_radius()
 		if radius > 0:
-			sources.append([world_to_grid(unit.global_position), radius])
+			sources.append([world_to_grid(unit.global_position), radius, unit.get_vision_layer()])
 	for b in get_tree().get_nodes_in_group("buildings"):
 		if b.get("team") == team:
-			sources.append([world_to_grid(b.global_position), _Constants.VISION_BUILDING])
+			sources.append([world_to_grid(b.global_position), _Constants.VISION_BUILDING, VISION_LAYER_BOTH])
 	for lantern in get_tree().get_nodes_in_group("lanterns"):
 		if lantern.team == team and lantern.is_built():
-			sources.append([world_to_grid(lantern.global_position), lantern.vision_radius])
+			var layer: int = VISION_LAYER_UNDERGROUND if lantern.is_underground_lantern else VISION_LAYER_SURFACE
+			sources.append([world_to_grid(lantern.global_position), lantern.vision_radius, layer])
 	return sources
 
 
-func _reveal_circle(team: GameManager.Team, center: Vector2i, radius: int) -> void:
+func _reveal_circle(team: GameManager.Team, center: Vector2i, radius: int, layer_mask: int = VISION_LAYER_BOTH) -> void:
 	var vision: Array = _vision_maps[team]
 	for dx in range(-radius, radius + 1):
 		for dy in range(-radius, radius + 1):
@@ -662,6 +675,12 @@ func _reveal_circle(team: GameManager.Team, center: Vector2i, radius: int) -> vo
 			var x: int = center.x + dx
 			var y: int = center.y + dy
 			if x < X_MIN or x > X_MAX or y < Y_MIN or y > Y_MAX:
+				continue
+			# Layer-locked sources (lanterns, miners, dragons) only light
+			# their own layer: the surface row, or everything below it.
+			if layer_mask == VISION_LAYER_SURFACE and y != Y_MIN:
+				continue
+			if layer_mask == VISION_LAYER_UNDERGROUND and y <= Y_MIN:
 				continue
 			vision[x - X_MIN][y - Y_MIN] = true
 
@@ -704,7 +723,10 @@ func is_remembered_by(team: GameManager.Team, world_pos: Vector2) -> bool:
 	var last_seen: float = _memory_maps[team][grid_pos.x - X_MIN][grid_pos.y - Y_MIN]
 	if last_seen < 0.0:
 		return false
-	return GameManager.match_time - last_seen < _Constants.FOG_MEMORY_DURATION
+	# Elapsed can go negative when match_time resets (Play Again, test
+	# harnesses) — a memory from "the future" is stale, not fresh.
+	var elapsed: float = GameManager.match_time - last_seen
+	return elapsed >= 0.0 and elapsed < _Constants.FOG_MEMORY_DURATION
 
 
 ## 0 = fog (never seen / memory expired), 1 = remembered, 2 = visible.
@@ -728,7 +750,9 @@ func _draw() -> void:
 
 ## Fog of War overlay from the player's perspective: revealed cells draw
 ## nothing, remembered cells are darkened, never-seen cells are pitch black.
-## Cells near a revealed cell get a softened edge (2-cell gradient).
+## Cells near a revealed cell get a softened edge (2-cell gradient). Full-fog
+## areas get drifting decoration on top: cloud puffs on the surface, mist
+## puffs underground.
 func _draw_fog() -> void:
 	var team: GameManager.Team = GameManager.Team.PLAYER
 	if _reveal_all.get(team, false):
@@ -741,11 +765,35 @@ func _draw_fog() -> void:
 			if vision[ix][iy]:
 				continue
 			var last_seen: float = _memory_maps[team][ix][iy]
-			var remembered: bool = last_seen >= 0.0 and now - last_seen < _Constants.FOG_MEMORY_DURATION
+			var elapsed: float = now - last_seen
+			var remembered: bool = last_seen >= 0.0 and elapsed >= 0.0 and elapsed < _Constants.FOG_MEMORY_DURATION
 			var alpha: float = _Constants.FOG_MEMORY_ALPHA if remembered else 1.0
 			alpha *= _fog_edge_factor(ix, iy)
 			var rect: Rect2 = Rect2((ix + X_MIN) * CELL_SIZE, (iy + Y_MIN) * CELL_SIZE, CELL_SIZE, CELL_SIZE)
 			draw_rect(rect, Color(fog_color, alpha), true)
+			if not remembered:
+				_draw_fog_puff(ix, iy, rect)
+
+
+## Drifting cloud/mist sprite for a full-fog cell. The puff wanders on a slow
+## per-cell phase so the fog bank reads as moving weather, not a static
+## texture grid. Underground puffs are sparser and fainter (cave mist).
+func _draw_fog_puff(ix: int, iy: int, rect: Rect2) -> void:
+	var cell: Vector2i = Vector2i(ix + X_MIN, iy + Y_MIN)
+	var phase: float = float(hash(cell) % 1000) / 1000.0 * TAU
+	var t: float = Time.get_ticks_msec() / 1000.0
+	if iy == 0:
+		# Surface cloud cover: wide, slow-drifting puffs hanging over the row.
+		var drift: Vector2 = Vector2(sin(t * 0.22 + phase) * 14.0, cos(t * 0.16 + phase * 1.7) * 6.0)
+		var size: float = CELL_SIZE * 2.6
+		var center: Vector2 = rect.get_center() + drift
+		draw_texture_rect(_FOG_SURFACE_TEXTURE, Rect2(center - Vector2(size, size) / 2.0, Vector2(size, size)), false, Color(0.6, 0.66, 0.78, 0.5))
+	elif hash(cell) % 3 == 0:
+		# Cave mist: only every third cell, subtler and slower.
+		var drift: Vector2 = Vector2(sin(t * 0.12 + phase) * 8.0, cos(t * 0.1 + phase) * 4.0)
+		var size: float = CELL_SIZE * 2.0
+		var center: Vector2 = rect.get_center() + drift
+		draw_texture_rect(_FOG_UNDERGROUND_TEXTURE, Rect2(center - Vector2(size, size) / 2.0, Vector2(size, size)), false, Color(0.5, 0.55, 0.65, 0.25))
 
 
 ## Soft fog edge: cells within 2 cells of live vision fade toward clear.

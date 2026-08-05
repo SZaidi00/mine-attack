@@ -789,7 +789,7 @@ func _process_attack(delta: float) -> void:
 	# standing point lets go and heads home. Explicit orders are never
 	# leashed (_auto_engaged is only set by the idle auto-attack scan).
 	if _auto_engaged and _hold_post and not is_underground and _post_point != Vector2.ZERO:
-		if global_position.distance_to(_post_point) > Constants.UNIT_DEFEND_LEASH_RANGE:
+		if global_position.distance_to(_post_point) > _defend_leash_range():
 			_clear_target()
 			_set_state(State.IDLE, "defend leash reached")
 			return
@@ -1402,6 +1402,16 @@ func get_vision_radius() -> int:
 	return 0
 
 
+## Which layer(s) this unit's lamp lights (Revamp Phase 1): miners and
+## dragons only reveal the layer they are on — vision no longer bleeds
+## through the surface ceiling or across the central wall into the enemy
+## mine. Other fighters light both layers.
+func get_vision_layer() -> int:
+	if data != null and (data.is_miner or data.flight_altitude > 0.0):
+		return GridWorld.VISION_LAYER_UNDERGROUND if is_underground else GridWorld.VISION_LAYER_SURFACE
+	return GridWorld.VISION_LAYER_BOTH
+
+
 ## Fog of War: true while this unit's team can currently see world_pos.
 func _team_can_see(world_pos: Vector2) -> bool:
 	return _grid.is_visible_to(team, world_pos)
@@ -1548,11 +1558,23 @@ func _return_to_rally_point() -> void:
 		_set_state(State.MOVE, "return to rally point")
 
 
+## Effective defend-leash radius: normally UNIT_DEFEND_LEASH_RANGE, but while
+## the team's own building is under attack it pulls in tight so defenders
+## finish the fight at the base instead of being lured away by retreating
+## attackers.
+func _defend_leash_range() -> float:
+	var building: Node2D = _friendly_building()
+	if building != null and building.call("is_under_attack"):
+		return Constants.UNIT_DEFEND_LEASH_UNDER_ATTACK
+	return Constants.UNIT_DEFEND_LEASH_RANGE
+
+
 func _find_auto_attack_target():
 	# Defend leash: a holder only notices targets near its standing point, so
 	# a defend-mode unit can't be lured across the map one fight at a time.
 	var leashed: bool = _hold_post and not is_underground and _post_point != Vector2.ZERO
-	var leash_d2: float = Constants.UNIT_DEFEND_LEASH_RANGE * Constants.UNIT_DEFEND_LEASH_RANGE
+	var leash: float = _defend_leash_range()
+	var leash_d2: float = leash * leash
 	# Enemy fighters: attack range first, then sight range. Closest wins —
 	# except fireball users (wizard/dragon), who pick the target whose position
 	# splashes the most enemies so fireballs aren't wasted on lone stragglers.

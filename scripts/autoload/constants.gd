@@ -90,12 +90,12 @@ const PLAYER_BUILDING_HP: float = 5000.0
 const ENEMY_BUILDING_HP: float = 5000.0
 
 # ─── FOG OF WAR (Revamp Phase 1) ───
-# Vision radii in grid cells. "Both layers" sources reveal surface and
-# underground cells alike (there is no layer occlusion). A tile left behind by
-# vision stays "remembered" for FOG_MEMORY_DURATION seconds of game time,
-# then fades back to full fog.
-const VISION_MINER_SURFACE: int = 6
-const VISION_MINER_UNDERGROUND: int = 4
+# Vision radii in grid cells. Miners and dragons only light the layer they are
+# on (a miner's lamp does not shine up the shaft); other fighters and
+# buildings light both. A tile left behind by vision stays "remembered" for
+# FOG_MEMORY_DURATION seconds of game time, then fades back to full fog.
+const VISION_MINER_SURFACE: int = 4
+const VISION_MINER_UNDERGROUND: int = 3
 const VISION_SWORDSMAN: int = 8
 const VISION_ARCHER: int = 12
 const VISION_WIZARD: int = 10
@@ -123,7 +123,7 @@ const LANTERN_MIN_DISTANCE: int = 3  # cells between surface lanterns
 # reveal buried ore in their radius for the owning team (like an Ore Sonar
 # scan that never expires).
 const UNDERGROUND_LANTERN_COST: int = 100
-const UNDERGROUND_LANTERN_VISION: int = 10
+const UNDERGROUND_LANTERN_VISION: int = 6
 const UNDERGROUND_LANTERN_HP: int = 200
 const UNDERGROUND_LANTERN_BUILD_TIME: float = 3.0
 const UNDERGROUND_LANTERN_MAX_COUNT: int = 5
@@ -349,6 +349,12 @@ const UNIT_KITE_RANGE_FRACTION: float = 0.6
 # dropping the target and walking home. Explicit player orders are never
 # leashed.
 const UNIT_DEFEND_LEASH_RANGE: float = 400.0
+# While the team's own building is under attack the leash pulls in tight:
+# defenders must finish the fight at the base instead of being lured away
+# one chase at a time.
+const UNIT_DEFEND_LEASH_UNDER_ATTACK: float = 150.0
+# How long after the last hit the building counts as "under attack".
+const BUILDING_UNDER_ATTACK_SEC: float = 4.0
 
 # ─── AI DIFFICULTY ───
 # The DIFFICULTY_MODIFIERS table lives in game_manager.gd (keyed by

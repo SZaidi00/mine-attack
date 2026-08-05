@@ -23,6 +23,11 @@ func setup_immune() -> void:
 
 
 func _process(delta: float) -> void:
+	# Fog of War: a popup at a position the player cannot see must not leak
+	# enemy combat (or healing) activity.
+	var grid: Node = get_node_or_null("/root/Main/World/GridWorld")
+	if grid != null:
+		visible = grid.is_visible_to(GameManager.Team.PLAYER, global_position)
 	position.y -= RISE_SPEED * delta
 	_timer -= delta
 	modulate.a = clampf(_timer / 0.3, 0.0, 1.0)

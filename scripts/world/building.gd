@@ -35,6 +35,8 @@ var _collapsing: bool = false
 var _collapse_t: float = 0.0
 # Fractional HP accumulator for the Self-Repair research regen.
 var _regen_accum: float = 0.0
+# match_time of the last hit taken (drives is_under_attack()).
+var _last_damage_time: float = -999.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -275,6 +277,7 @@ func take_damage(amount: int) -> void:
 	if _destroyed:
 		return
 	_hp -= amount
+	_last_damage_time = GameManager.match_time
 	hp_changed.emit(_hp, max_hp)
 	queue_redraw()
 	_spawn_damage_popup(amount)
@@ -291,6 +294,12 @@ func take_damage(amount: int) -> void:
 		_start_collapse()
 		var winner: GameManager.Team = GameManager.Team.PLAYER if team == GameManager.Team.ENEMY else GameManager.Team.ENEMY
 		GameManager.declare_winner(winner)
+
+
+## True for a few seconds after the building last took damage — defend-mode
+## units read this to pull their chase leash in tight and fight at the base.
+func is_under_attack() -> bool:
+	return GameManager.match_time - _last_damage_time < _Constants.BUILDING_UNDER_ATTACK_SEC
 
 
 ## One-time dust explosion over the footprint as the building starts to fall.

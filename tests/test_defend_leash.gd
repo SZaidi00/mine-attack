@@ -118,3 +118,40 @@ func test_garrison_sets_hold() -> void:
 	var fighter: Node2D = _spawn_fighter(PLAYER, Vector2(700, 16))
 	fighter.call("garrison_home")
 	assert_true(fighter.get("_hold_post"), "garrisoned fighters hold the base")
+
+
+# ─── Base under attack: the leash pulls in tight ───
+
+func _player_building() -> Node2D:
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.get("team") == PLAYER:
+			return b
+	return null
+
+
+func test_defenders_hold_tight_while_base_under_attack() -> void:
+	var fighter: Node2D = _spawn_fighter(PLAYER, Vector2(-800, 16))
+	fighter.call("stop")
+	_spawn_fighter(ENEMY, Vector2(-600, 16))  # 200px away: inside sight + normal leash, outside the siege leash
+	_player_building().take_damage(1)
+	fighter._handle_idle_fighter()
+	assert_null(fighter.get("_target_unit"), "no 200px chase while the base is under attack")
+	assert_eq(fighter._state, Unit.State.IDLE)
+
+
+func test_defenders_still_fight_close_threats_while_base_under_attack() -> void:
+	var fighter: Node2D = _spawn_fighter(PLAYER, Vector2(-800, 16))
+	fighter.call("stop")
+	var enemy: Node2D = _spawn_fighter(ENEMY, Vector2(-700, 16))  # 100px: inside the tight leash
+	_player_building().take_damage(1)
+	fighter._handle_idle_fighter()
+	assert_eq(fighter.get("_target_unit"), enemy, "close attackers must still be fought")
+
+
+func test_defenders_chase_normally_when_base_safe() -> void:
+	_player_building().set("_last_damage_time", -999.0)  # earlier tests hit the base on purpose
+	var fighter: Node2D = _spawn_fighter(PLAYER, Vector2(-800, 16))
+	fighter.call("stop")
+	_spawn_fighter(ENEMY, Vector2(-600, 16))  # same 200px, but the base is not under attack
+	fighter._handle_idle_fighter()
+	assert_eq(fighter._state, Unit.State.ATTACK, "200px chase is fine while the base is safe")
