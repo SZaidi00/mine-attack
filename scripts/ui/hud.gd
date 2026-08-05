@@ -61,6 +61,7 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 @onready var _rally_button: Button = $BottomBar/MarginContainer/HBoxContainer/RallyButton
 @onready var _kill_button: Button = $BottomBar/MarginContainer/HBoxContainer/KillButton
 @onready var _research_button: Button = $BottomBar/MarginContainer/HBoxContainer/ResearchButton
+@onready var _build_button: Button = $BottomBar/MarginContainer/HBoxContainer/BuildButton
 @onready var _research_panel: Control = $ResearchPanel
 @onready var _stance_buttons: Dictionary = {}
 @onready var _game_over_panel: PanelContainer = $GameOverPanel
@@ -102,13 +103,14 @@ func _ready() -> void:
 	_rally_button.pressed.connect(_stance.bind("rally"))
 	_kill_button.pressed.connect(_kill_selected)
 	_research_button.pressed.connect(toggle_research_panel)
+	_build_button.pressed.connect(_toggle_build_menu)
 	_surface_button.pressed.connect(_set_view.bind(false))
 	_underground_button.pressed.connect(_set_view.bind(true))
 	for speed: float in _speed_buttons:
 		_speed_buttons[speed].pressed.connect(_set_game_speed.bind(speed))
 	$GameOverPanel/MarginContainer/VBoxContainer/QuitButton.pressed.connect(_quit_to_menu)
 	$GameOverPanel/MarginContainer/VBoxContainer/PlayAgainButton.pressed.connect(_play_again)
-	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _kill_button, _research_button, _surface_button, _underground_button]:
+	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _kill_button, _research_button, _build_button, _surface_button, _underground_button]:
 		btn.pressed.connect(func(): AudioManager.play("click"))
 	for unit_id: String in _fighter_upgrade_buttons:
 		_fighter_upgrade_buttons[unit_id].pressed.connect(func(): AudioManager.play("click"))
@@ -128,6 +130,7 @@ func _ready() -> void:
 
 	GameManager.game_over.connect(_on_game_over)
 	_build_pause_menu()
+	_build_build_menu()
 	_on_economy_changed(GameManager.Team.PLAYER)
 	_sync_view_buttons()
 	_sync_speed_buttons()
@@ -143,10 +146,14 @@ func _process(_delta: float) -> void:
 		# the controller waits for the rally-point right-click.
 		if _rally_button.button_pressed != pc.is_rally_armed():
 			_rally_button.set_pressed_no_signal(pc.is_rally_armed())
+		if _build_button.button_pressed != pc.is_build_mode_active():
+			_build_button.set_pressed_no_signal(pc.is_build_mode_active())
 		_sync_stance_buttons(pc)
 	_update_upgrade_button()
 	_update_fighter_upgrade_buttons()
 	_update_unit_breakdown()
+	if _build_menu != null and _build_menu.visible:
+		_update_build_menu()
 	# Keep the pause menu in sync with the tree state (pause is toggled from
 	# PlayerController via Space/Esc) — except when the pause is owned by the
 	# research overlay's "Pause game" toggle, which has its own UI on top.
@@ -226,6 +233,74 @@ func _add_pause_button(parent: Control, text: String, callback: Callable) -> voi
 	btn.pressed.connect(func(): AudioManager.play("click"))
 	btn.pressed.connect(callback)
 	parent.add_child(btn)
+
+
+## Small popup above the bottom bar with the lantern build options (Revamp
+## Phase 1). Picking one hands placement mode to the PlayerController, which
+## shows the ghost and handles confirm/cancel clicks.
+func _build_build_menu() -> void:
+	_build_menu = PanelContainer.new()
+	_build_menu.name = "BuildMenu"
+	_build_menu.visible = false
+	_style_panel(_build_menu)
+	_build_menu.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_build_menu.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_build_menu.position = Vector2(280, -100)
+	var vbox: VBoxContainer = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 6)
+	_build_menu.add_child(vbox)
+	_build_lantern_button = _add_build_option(vbox, "lantern")
+	_build_mine_lantern_button = _add_build_option(vbox, "underground_lantern")
+	add_child(_build_menu)
+
+
+func _add_build_option(parent: Control, kind: String) -> Button:
+	var btn: Button = Button.new()
+	btn.custom_minimum_size = Vector2(220, 44)
+	btn.add_theme_font_size_override("font_size", 12)
+	btn.add_theme_color_override("font_color", Color("#e2e8f0"))
+	btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_BTN_NORMAL, _COL_BTN_BORDER))
+	btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_BTN_HOVER, _COL_BTN_HOVER_BORDER))
+	btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_TAB_ACTIVE, _COL_TAB_ACTIVE_BORDER))
+	btn.add_theme_stylebox_override("disabled", _make_flat_style(_COL_BTN_DISABLED))
+	btn.pressed.connect(func(): AudioManager.play("click"))
+	btn.pressed.connect(_on_build_option.bind(kind))
+	parent.add_child(btn)
+	return btn
+
+
+func _toggle_build_menu() -> void:
+	_build_menu.visible = not _build_menu.visible
+
+
+func _on_build_option(kind: String) -> void:
+	_build_menu.visible = false
+	var pc: PlayerController = _get_player_controller()
+	if pc:
+		pc.start_build_placement(kind)
+
+
+func _update_build_menu() -> void:
+	var team: GameManager.Team = GameManager.Team.PLAYER
+	var surface_count: int = 0
+	var underground_count: int = 0
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		if lantern.team != team:
+			continue
+		if lantern.is_underground_lantern:
+			underground_count += 1
+		else:
+			surface_count += 1
+	var surface_cost: int = Lantern.cost_for(false, 1)
+	_build_lantern_button.text = "Lantern — %dg (%d/%d)" % [surface_cost, surface_count, _Constants.LANTERN_MAX_COUNT]
+	_build_lantern_button.disabled = surface_count >= _Constants.LANTERN_MAX_COUNT \
+		or not EconomyManager.can_afford(team, surface_cost)
+	_build_lantern_button.tooltip_text = "Static surface light: %d-cell vision. Click, then left-click a surface cell on your half (right-click cancels). Place on an existing lantern to upgrade it (T2 %dg, T3 %dg)." % [_Constants.LANTERN_T1_VISION, _Constants.LANTERN_T2_COST, _Constants.LANTERN_T3_COST]
+	var ug_cost: int = Lantern.cost_for(true, 1)
+	_build_mine_lantern_button.text = "Mine Lantern — %dg (%d/%d)" % [ug_cost, underground_count, _Constants.UNDERGROUND_LANTERN_MAX_COUNT]
+	_build_mine_lantern_button.disabled = underground_count >= _Constants.UNDERGROUND_LANTERN_MAX_COUNT \
+		or not EconomyManager.can_afford(team, ug_cost)
+	_build_mine_lantern_button.tooltip_text = "Underground light: %d-cell vision, permanently reveals buried ore in its radius. Must be placed in a dug-out tunnel cell on your half." % _Constants.UNDERGROUND_LANTERN_VISION
 
 
 func _on_pause_restart() -> void:
@@ -318,7 +393,7 @@ func _style_upgrade_button() -> void:
 
 
 func _style_stance_buttons() -> void:
-	for btn in [_attack_button, _defend_button, _garrison_button, _rally_button, _kill_button]:
+	for btn in [_attack_button, _defend_button, _garrison_button, _rally_button, _kill_button, _build_button]:
 		btn.custom_minimum_size = Vector2(100, 70)
 		btn.add_theme_font_size_override("font_size", 12)
 		btn.add_theme_color_override("font_color", Color("#e2e8f0"))
@@ -567,6 +642,9 @@ func _get_enemy_building() -> Node2D:
 
 
 var _pause_panel: PanelContainer = null
+var _build_menu: PanelContainer = null
+var _build_lantern_button: Button = null
+var _build_mine_lantern_button: Button = null
 
 
 func _on_game_over(winner: GameManager.Team) -> void:

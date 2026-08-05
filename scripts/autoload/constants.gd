@@ -89,6 +89,48 @@ const FIGHTER_UPGRADES: Dictionary = {
 const PLAYER_BUILDING_HP: float = 5000.0
 const ENEMY_BUILDING_HP: float = 5000.0
 
+# ─── FOG OF WAR (Revamp Phase 1) ───
+# Vision radii in grid cells. "Both layers" sources reveal surface and
+# underground cells alike (there is no layer occlusion). A tile left behind by
+# vision stays "remembered" for FOG_MEMORY_DURATION seconds of game time,
+# then fades back to full fog.
+const VISION_MINER_SURFACE: int = 6
+const VISION_MINER_UNDERGROUND: int = 4
+const VISION_SWORDSMAN: int = 8
+const VISION_ARCHER: int = 12
+const VISION_WIZARD: int = 10
+const VISION_DRAGON: int = 14
+const VISION_BUILDING: int = 10
+const FOG_MEMORY_DURATION: float = 10.0
+const FOG_COLOR: Color = Color("#05070a")
+# Alpha of the fog overlay on remembered tiles (revealed tiles draw none).
+const FOG_MEMORY_ALPHA: float = 0.7
+
+# ─── LANTERNS (Revamp Phase 1) ───
+# Surface lanterns: static vision structures, built on the own half's surface
+# row and upgraded in place T1 → T2 → T3.
+const LANTERN_T1_COST: int = 200
+const LANTERN_T2_COST: int = 600
+const LANTERN_T3_COST: int = 1000
+const LANTERN_T1_VISION: int = 8
+const LANTERN_T2_VISION: int = 14
+const LANTERN_T3_VISION: int = 22
+const LANTERN_HP: int = 500
+const LANTERN_BUILD_TIME: float = 5.0
+const LANTERN_MAX_COUNT: int = 3
+const LANTERN_MIN_DISTANCE: int = 3  # cells between surface lanterns
+# Underground lanterns: placed in dug-out tunnel cells; they permanently
+# reveal buried ore in their radius for the owning team (like an Ore Sonar
+# scan that never expires).
+const UNDERGROUND_LANTERN_COST: int = 100
+const UNDERGROUND_LANTERN_VISION: int = 10
+const UNDERGROUND_LANTERN_HP: int = 200
+const UNDERGROUND_LANTERN_BUILD_TIME: float = 3.0
+const UNDERGROUND_LANTERN_MAX_COUNT: int = 5
+const UNDERGROUND_LANTERN_MIN_DISTANCE: int = 2  # cells between underground lanterns
+# Destroyed lanterns drop this share of their build cost as a coin pickup.
+const LANTERN_SALVAGE_RATIO: float = 0.5
+
 # ─── RESEARCH TREE ───
 # Timed techs bought with coin through the ResearchManager (one active
 # research per team, 100% refund on cancel). These coexist with the instant

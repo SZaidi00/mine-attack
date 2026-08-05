@@ -3,6 +3,8 @@ extends Node
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
 const _REJECT_POPUP: PackedScene = preload("res://scenes/effects/reject_popup.tscn")
+const _LANTERN_SCENE: PackedScene = preload("res://scenes/lantern.tscn")
+const _GHOST_RING: Texture2D = preload("res://frost_mines_assets/effects/selection_ring.png")
 
 enum ViewMode { SURFACE, UNDERGROUND }
 signal view_mode_changed(mode: ViewMode)
@@ -33,6 +35,11 @@ var _rally_armed: bool = false
 # Persistent army mode set by the Attack/Defend/Garrison buttons: newly
 # trained fighters automatically receive this order when they spawn.
 var _current_stance: String = "defend"
+# Lantern placement mode (Revamp Phase 1): "" when inactive, otherwise
+# "lantern" (surface) or "underground_lantern". A ghost sprite follows the
+# cursor — green where placement is valid, red where it is not.
+var _build_mode: String = ""
+var _build_ghost: Node2D = null
 
 
 func _ready() -> void:
@@ -172,6 +179,14 @@ func _validate_setup() -> void:
 
 
 func _process(delta: float) -> void:
+	# Lantern placement ghost: snap to the cell under the cursor and tint it
+	# by placement validity (green = valid, red = invalid).
+	if _build_mode != "" and _build_ghost != null:
+		var world: Vector2 = _screen_to_world(get_viewport().get_mouse_position())
+		var cell: Vector2i = _grid.world_to_grid(world)
+		_build_ghost.global_position = _grid.grid_to_world(cell)
+		var err: String = _lantern_placement_error(_build_mode, cell)
+		_build_ghost.modulate = Color(0.4, 1.0, 0.4, 0.55) if err == "" else Color(1.0, 0.35, 0.35, 0.55)
 	if camera == null:
 		return
 	var move: Vector2 = Vector2.ZERO
@@ -220,6 +235,19 @@ func _process(delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not GameManager.game_active:
+		return
+
+	# Lantern placement mode: left-click confirms (stays active on an invalid
+	# spot so the player can adjust), right-click or Esc cancels. Swallowed
+	# either way so no selection/command leaks through.
+	if _build_mode != "":
+		if event.is_action_pressed(_Constants.INPUT_SELECT):
+			var world: Vector2 = _screen_to_world(get_viewport().get_mouse_position())
+			if try_place_lantern(_build_mode, world):
+				_cancel_build_mode()
+		elif event.is_action_pressed(_Constants.INPUT_COMMAND) or event.is_action_pressed(_Constants.INPUT_PAUSE):
+			_cancel_build_mode()
+			DebugLog.log_command("PlayerController", "build", "placement cancelled")
 		return
 
 	# Rally placement mode: left-click places the point (standard command-card
@@ -406,6 +434,18 @@ func _issue_command(screen_pos: Vector2) -> void:
 			u.attack_building(enemy_building)
 		return
 
+	# 2b. Enemy lantern clicked -> attack with fighters (kills its vision).
+	var enemy_lantern: Node2D = _enemy_lantern_at(world_pos)
+	if enemy_lantern != null:
+		var fighters: Array = _filter_fighters(_selected_units)
+		if fighters.is_empty():
+			_reject_command("attack_lantern", "no fighters selected", world_pos)
+			return
+		DebugLog.log_command("PlayerController", "attack_lantern", "target=%d fighters=%d" % [enemy_lantern.get_instance_id(), fighters.size()])
+		for u in fighters:
+			u.attack_building(enemy_lantern)
+		return
+
 	# 3. Central wall clicked with miners selected -> breach.
 	var miners: Array = _filter_miners(_selected_units)
 	if _grid.is_central_wall(grid_pos) and not miners.is_empty():
@@ -473,8 +513,23 @@ func _unit_at(world_pos: Vector2) -> Unit:
 
 func _enemy_unit_at(world_pos: Vector2) -> Unit:
 	var unit: Unit = _unit_at(world_pos)
-	if unit != null and unit.team != GameManager.Team.PLAYER:
+	# Fog of War: hidden enemy units cannot be clicked (their ghost is a
+	# memory, not a target).
+	if unit != null and unit.team != GameManager.Team.PLAYER \
+			and _grid.is_visible_to(GameManager.Team.PLAYER, unit.global_position):
 		return unit
+	return null
+
+
+## Enemy lantern near the click point (Fog of War: only while visible).
+func _enemy_lantern_at(world_pos: Vector2) -> Node2D:
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		if lantern.team == GameManager.Team.PLAYER:
+			continue
+		if not _grid.is_visible_to(GameManager.Team.PLAYER, lantern.global_position):
+			continue
+		if lantern.global_position.distance_to(world_pos) < GridWorld.CELL_SIZE:
+			return lantern
 	return null
 
 
@@ -595,6 +650,7 @@ func set_stance(stance: String) -> void:
 	if stance in ["attack", "defend", "garrison"]:
 		# Choosing any stance cancels a pending rally-point placement.
 		_rally_armed = false
+		_cancel_build_mode()
 		_current_stance = stance
 	var fighters: Array = _filter_fighters(get_tree().get_nodes_in_group("player"))
 	match stance:
@@ -659,3 +715,138 @@ func kill_selected() -> void:
 
 func is_rally_armed() -> bool:
 	return _rally_armed
+
+
+# ---------- Lantern placement (Revamp Phase 1) ----------
+
+## Enters lantern placement mode: a ghost follows the cursor until left-click
+## confirms or right-click/Esc cancels. kind is "lantern" (surface) or
+## "underground_lantern".
+func start_build_placement(kind: String) -> void:
+	_cancel_build_mode()
+	_rally_armed = false
+	_build_mode = kind
+	_build_ghost = Node2D.new()
+	_build_ghost.name = "BuildGhost"
+	var texture: Texture2D
+	var vision: int
+	if kind == "underground_lantern":
+		texture = preload("res://frost_mines_assets/props/lantern_underground.png")
+		vision = _Constants.UNDERGROUND_LANTERN_VISION
+	else:
+		texture = preload("res://frost_mines_assets/props/lantern_t1.png")
+		vision = _Constants.LANTERN_T1_VISION
+	var sprite: Sprite2D = Sprite2D.new()
+	sprite.texture = texture
+	if kind != "underground_lantern":
+		# Surface lanterns stand on the ground line at the bottom of the row.
+		sprite.position = Vector2(0, 16.0 - texture.get_height() / 2.0)
+	_build_ghost.add_child(sprite)
+	# Faint ring showing the vision radius the lantern would provide.
+	var ring: Sprite2D = Sprite2D.new()
+	ring.texture = _GHOST_RING
+	var diameter: float = vision * GridWorld.CELL_SIZE * 2.0
+	ring.scale = Vector2.ONE * (diameter / _GHOST_RING.get_width())
+	ring.modulate = Color(1.0, 0.85, 0.4, 0.3)
+	_build_ghost.add_child(ring)
+	add_child(_build_ghost)
+	DebugLog.log_command("PlayerController", "build", "placement mode: " + kind)
+
+
+func _cancel_build_mode() -> void:
+	if _build_mode == "":
+		return
+	_build_mode = ""
+	if _build_ghost != null:
+		_build_ghost.queue_free()
+		_build_ghost = null
+
+
+func is_build_mode_active() -> bool:
+	return _build_mode != ""
+
+
+## Validates a lantern placement cell. Returns "" when valid, otherwise a
+## human-readable reason (also used to tint the placement ghost).
+func _lantern_placement_error(kind: String, cell: Vector2i) -> String:
+	var underground: bool = kind == "underground_lantern"
+	var team: GameManager.Team = GameManager.Team.PLAYER
+	var same_kind: Array = []
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		if lantern.team == team and lantern.is_underground_lantern == underground:
+			same_kind.append(lantern)
+	if underground:
+		if cell.y < 1:
+			return "must be placed underground"
+		if cell.x > -2:
+			return "own half of the mine only"
+		# Carved tunnel cells are erased from the grid; anything still present
+		# (dirt/ore/wall) is solid and cannot hold a lantern.
+		if _grid.get_cell(cell) != null:
+			return "needs a dug-out tunnel cell"
+		if same_kind.size() >= _Constants.UNDERGROUND_LANTERN_MAX_COUNT:
+			return "max underground lanterns reached"
+		for lantern in same_kind:
+			if Vector2(_grid.world_to_grid(lantern.global_position) - cell).length() < _Constants.UNDERGROUND_LANTERN_MIN_DISTANCE:
+				return "too close to another lantern"
+	else:
+		if cell.y != 0:
+			return "must be placed on the surface"
+		if cell.x > -2:
+			return "own half of the map only"
+		for lantern in same_kind:
+			if _grid.world_to_grid(lantern.global_position) == cell:
+				return "" if lantern.can_upgrade() else "lantern fully upgraded"
+		if same_kind.size() >= _Constants.LANTERN_MAX_COUNT:
+			return "max lanterns reached"
+		for lantern in same_kind:
+			if Vector2(_grid.world_to_grid(lantern.global_position) - cell).length() < _Constants.LANTERN_MIN_DISTANCE:
+				return "too close to another lantern"
+	return ""
+
+
+## Own surface lantern standing on the given cell (upgrade target), if any.
+func _surface_lantern_at_cell(cell: Vector2i) -> Node2D:
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		if lantern.team == GameManager.Team.PLAYER and not lantern.is_underground_lantern \
+				and _grid.world_to_grid(lantern.global_position) == cell:
+			return lantern
+	return null
+
+
+## Validates and executes a lantern placement (or in-place tier upgrade when
+## the cell already holds an own surface lantern). Spends the coin and spawns
+## the structure on success. Public so the HUD, tests, and (later) the AI can
+## share one code path.
+func try_place_lantern(kind: String, world_pos: Vector2) -> bool:
+	var cell: Vector2i = _grid.world_to_grid(world_pos)
+	var err: String = _lantern_placement_error(kind, cell)
+	if err != "":
+		_reject_command("build", err, world_pos)
+		return false
+	var team: GameManager.Team = GameManager.Team.PLAYER
+	# In-place upgrade: T1 → T2 → T3 at the same location.
+	if kind == "lantern":
+		var existing: Node2D = _surface_lantern_at_cell(cell)
+		if existing != null:
+			var upgrade_cost: int = Lantern.cost_for(false, existing.tier + 1)
+			if not EconomyManager.spend_coin(team, upgrade_cost):
+				_reject_command("build", "not enough coin (%d needed)" % upgrade_cost, world_pos)
+				return false
+			existing.total_cost += upgrade_cost
+			existing.upgrade()
+			DebugLog.log_command("PlayerController", "build", "lantern upgraded to T%d at %s" % [existing.tier, str(cell)])
+			return true
+	var underground: bool = kind == "underground_lantern"
+	var cost: int = Lantern.cost_for(underground, 1)
+	if not EconomyManager.spend_coin(team, cost):
+		_reject_command("build", "not enough coin (%d needed)" % cost, world_pos)
+		return false
+	var lantern: Lantern = _LANTERN_SCENE.instantiate()
+	lantern.team = team
+	lantern.is_underground_lantern = underground
+	lantern.total_cost = cost
+	lantern.global_position = _grid.grid_to_world(cell)
+	get_node("/root/Main/Structures").add_child(lantern)
+	DebugLog.log_command("PlayerController", "build", "%s at %s" % [kind, str(cell)])
+	return true

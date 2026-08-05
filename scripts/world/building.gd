@@ -138,6 +138,18 @@ func _process(delta: float) -> void:
 		return
 	if _destroyed:
 		return
+	# Fog of War (Revamp Phase 1): the enemy base is hidden until the player
+	# scouts it, then drawn dimmed while it is only remembered. Runs even with
+	# the match over so the end screen keeps the right fog state.
+	if team != GameManager.Team.PLAYER and _grid != null:
+		if _grid.is_visible_to(GameManager.Team.PLAYER, global_position):
+			visible = true
+			modulate = Color.WHITE
+		elif _grid.is_remembered_by(GameManager.Team.PLAYER, global_position):
+			visible = true
+			modulate = Color(0.3, 0.3, 0.33, 1.0)
+		else:
+			visible = false
 	if not GameManager.game_active:
 		return
 	# Self-Repair research: slow regeneration up to max HP.

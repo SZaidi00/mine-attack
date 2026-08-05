@@ -64,6 +64,28 @@ const WALL_HP_TOTAL: int = _Constants.WALL_HP
 var _cells: Dictionary = {}  # Vector2i -> Cell
 var _astar: AStarGrid2D = AStarGrid2D.new()
 
+# ─── Fog of War (Revamp Phase 1) ───
+# Per-team vision: _vision_maps[team][x - X_MIN][y - Y_MIN] is true while the
+# cell is inside any friendly vision source's radius; _memory_maps holds the
+# GameManager.match_time when the cell was last visible (-1 = never seen).
+# A remembered cell stays dimly visible for FOG_MEMORY_DURATION seconds, then
+# fades back to full fog. Only the PLAYER team's fog is rendered; both teams
+# get maps because combat and mining rules consult them symmetrically.
+var _vision_maps: Dictionary = {}
+var _memory_maps: Dictionary = {}
+# Frozen silhouettes of enemy units that left the player's vision: instance id
+# -> { pos, unit_name, expires }. Drawn with a "?" until the memory fades or
+# the cell is seen again (then the real unit is simply visible).
+var _unit_ghosts: Dictionary = {}
+# Enemy unit ids inside the player's vision as of the last vision update;
+# diffed frame-to-frame so a unit that slips into the fog leaves a ghost.
+var _prev_visible_enemies: Dictionary = {}
+# Debug/test hook: teams in this set see everything regardless of vision
+# sources (is_visible_to / is_remembered_by short-circuit true and the fog
+# overlay is skipped). Used by the test suite to keep fog-agnostic behavior
+# tests readable; never set in gameplay.
+var _reveal_all: Dictionary = {}
+
 var _wall_hp: int = WALL_HP_TOTAL
 var _wall_max_hp: int = WALL_HP_TOTAL
 var _central_wall_cells: Array[Vector2i] = []
@@ -88,9 +110,27 @@ func _ready() -> void:
 	_underground_bottom_color = _UNDERGROUND_TEXTURE.get_image().get_pixel(0, _UNDERGROUND_TEXTURE.get_height() - 1)
 	_generate_map()
 	_init_astar()
+	_init_vision_maps()
 	_connect_view_mode()
 	_spawn_ambient_particles()
 	queue_redraw()
+
+
+## Fog of War: both teams' maps start fully fogged (never seen).
+func _init_vision_maps() -> void:
+	for team in [GameManager.Team.PLAYER, GameManager.Team.ENEMY]:
+		var vision_cols: Array = []
+		var memory_cols: Array = []
+		for x in range(X_MIN, X_MAX + 1):
+			var vision_col: Array = []
+			var memory_col: Array = []
+			for y in range(Y_MIN, Y_MAX + 1):
+				vision_col.append(false)
+				memory_col.append(-1.0)
+			vision_cols.append(vision_col)
+			memory_cols.append(memory_col)
+		_vision_maps[team] = vision_cols
+		_memory_maps[team] = memory_cols
 
 
 ## Phase 5.1: ambient particle hooks — falling snow on the surface and slow
@@ -158,6 +198,14 @@ func _make_dot_texture() -> Texture2D:
 
 
 func _process(delta: float) -> void:
+	# Fog of War: recompute both teams' vision every frame (frozen once the
+	# match ends, like the units). Redraw every frame so the fog edge tracks
+	# moving units smoothly.
+	if GameManager.game_active:
+		_update_vision(GameManager.Team.PLAYER)
+		_update_vision(GameManager.Team.ENEMY)
+		_prune_unit_ghosts()
+		queue_redraw()
 	var expired: Array[Vector2i] = []
 	for pos in _cell_flash.keys():
 		_cell_flash[pos] -= delta
@@ -542,11 +590,190 @@ func is_ore_revealed(grid_pos: Vector2i, team: GameManager.Team) -> bool:
 	return cell != null and cell.type == CellType.ORE and cell.sonar_revealed.get(team, false)
 
 
+# ─── Fog of War (Revamp Phase 1) ───
+
+## Recomputes one team's vision from scratch: every currently visible cell is
+## demoted to memory (timestamped now), then all vision sources re-reveal
+## their circles. For the PLAYER team this also maintains the frozen enemy
+## silhouettes (a unit that just left vision leaves a "?" ghost behind).
+func _update_vision(team: GameManager.Team) -> void:
+	var vision: Array = _vision_maps[team]
+	var memory: Array = _memory_maps[team]
+	var now: float = GameManager.match_time
+
+	for ix in range(vision.size()):
+		for iy in range(vision[ix].size()):
+			if vision[ix][iy]:
+				memory[ix][iy] = now
+				vision[ix][iy] = false
+
+	for source in _get_vision_sources(team):
+		_reveal_circle(team, source[0], source[1])
+
+	if team == GameManager.Team.PLAYER:
+		# Ghost tracking: an enemy that was visible last frame but is not now
+		# leaves a frozen silhouette at its current position. Units that died
+		# in view are skipped — a corpse fades, it does not become a "?".
+		var now_visible: Dictionary = {}
+		for unit in get_tree().get_nodes_in_group("enemy"):
+			if unit._state == Unit.State.DEAD:
+				continue
+			var id: int = unit.get_instance_id()
+			if _is_cell_visible(team, world_to_grid(unit.global_position)):
+				now_visible[id] = true
+			elif _prev_visible_enemies.has(id):
+				_unit_ghosts[id] = {
+					"pos": unit.global_position,
+					"unit_name": unit.data.unit_name,
+					"expires": now + _Constants.FOG_MEMORY_DURATION,
+				}
+		_prev_visible_enemies = now_visible
+		# A ghost whose cell is visible again is redundant — the real unit shows.
+		for id in _unit_ghosts.keys():
+			if _is_cell_visible(team, world_to_grid(_unit_ghosts[id].pos)):
+				_unit_ghosts.erase(id)
+
+
+## Every vision source for a team as [center_cell, radius_cells] pairs:
+## living units (per-type radii), the team's building, and built lanterns.
+func _get_vision_sources(team: GameManager.Team) -> Array:
+	var sources: Array = []
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit.team != team or unit._state == Unit.State.DEAD:
+			continue
+		var radius: int = unit.get_vision_radius()
+		if radius > 0:
+			sources.append([world_to_grid(unit.global_position), radius])
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.get("team") == team:
+			sources.append([world_to_grid(b.global_position), _Constants.VISION_BUILDING])
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		if lantern.team == team and lantern.is_built():
+			sources.append([world_to_grid(lantern.global_position), lantern.vision_radius])
+	return sources
+
+
+func _reveal_circle(team: GameManager.Team, center: Vector2i, radius: int) -> void:
+	var vision: Array = _vision_maps[team]
+	for dx in range(-radius, radius + 1):
+		for dy in range(-radius, radius + 1):
+			if dx * dx + dy * dy > radius * radius:
+				continue
+			var x: int = center.x + dx
+			var y: int = center.y + dy
+			if x < X_MIN or x > X_MAX or y < Y_MIN or y > Y_MAX:
+				continue
+			vision[x - X_MIN][y - Y_MIN] = true
+
+
+func _prune_unit_ghosts() -> void:
+	var now: float = GameManager.match_time
+	for id in _unit_ghosts.keys():
+		if now >= _unit_ghosts[id].expires:
+			_unit_ghosts.erase(id)
+
+
+func _is_cell_visible(team: GameManager.Team, grid_pos: Vector2i) -> bool:
+	if grid_pos.x < X_MIN or grid_pos.x > X_MAX or grid_pos.y < Y_MIN or grid_pos.y > Y_MAX:
+		return false
+	if _reveal_all.get(team, false):
+		return true
+	return _vision_maps[team][grid_pos.x - X_MIN][grid_pos.y - Y_MIN]
+
+
+## Debug/test hook: let a team see the whole map (see _reveal_all).
+func set_reveal_all(team: GameManager.Team, enabled: bool) -> void:
+	_reveal_all[team] = enabled
+
+
+## True while the cell at world_pos is inside the team's live vision.
+func is_visible_to(team: GameManager.Team, world_pos: Vector2) -> bool:
+	return _is_cell_visible(team, world_to_grid(world_pos))
+
+
+## True while the team can see the cell OR still remembers it (seen within
+## FOG_MEMORY_DURATION seconds of game time).
+func is_remembered_by(team: GameManager.Team, world_pos: Vector2) -> bool:
+	var grid_pos: Vector2i = world_to_grid(world_pos)
+	if _is_cell_visible(team, grid_pos):
+		return true
+	if _reveal_all.get(team, false):
+		return true
+	if grid_pos.x < X_MIN or grid_pos.x > X_MAX or grid_pos.y < Y_MIN or grid_pos.y > Y_MAX:
+		return false
+	var last_seen: float = _memory_maps[team][grid_pos.x - X_MIN][grid_pos.y - Y_MIN]
+	if last_seen < 0.0:
+		return false
+	return GameManager.match_time - last_seen < _Constants.FOG_MEMORY_DURATION
+
+
+## 0 = fog (never seen / memory expired), 1 = remembered, 2 = visible.
+## Diagnostic helper for the debug overlay and the test suite.
+func fog_state_at(team: GameManager.Team, grid_pos: Vector2i) -> int:
+	if _is_cell_visible(team, grid_pos):
+		return 2
+	return 1 if is_remembered_by(team, grid_to_world(grid_pos)) else 0
+
+
 func _draw() -> void:
 	# Both layers are always drawn so the player can see surface activity and the
 	# underground mine at the same time.
 	_draw_surface()
 	_draw_underground()
+	# Fog of War is drawn last so it darkens the terrain; units handle their
+	# own fog visibility (enemy units hide, remembered ones leave a ghost).
+	_draw_fog()
+	_draw_unit_ghosts()
+
+
+## Fog of War overlay from the player's perspective: revealed cells draw
+## nothing, remembered cells are darkened, never-seen cells are pitch black.
+## Cells near a revealed cell get a softened edge (2-cell gradient).
+func _draw_fog() -> void:
+	var team: GameManager.Team = GameManager.Team.PLAYER
+	if _reveal_all.get(team, false):
+		return
+	var vision: Array = _vision_maps[team]
+	var now: float = GameManager.match_time
+	var fog_color: Color = _Constants.FOG_COLOR
+	for ix in range(vision.size()):
+		for iy in range(vision[ix].size()):
+			if vision[ix][iy]:
+				continue
+			var last_seen: float = _memory_maps[team][ix][iy]
+			var remembered: bool = last_seen >= 0.0 and now - last_seen < _Constants.FOG_MEMORY_DURATION
+			var alpha: float = _Constants.FOG_MEMORY_ALPHA if remembered else 1.0
+			alpha *= _fog_edge_factor(ix, iy)
+			var rect: Rect2 = Rect2((ix + X_MIN) * CELL_SIZE, (iy + Y_MIN) * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+			draw_rect(rect, Color(fog_color, alpha), true)
+
+
+## Soft fog edge: cells within 2 cells of live vision fade toward clear.
+func _fog_edge_factor(ix: int, iy: int) -> float:
+	var vision: Array = _vision_maps[GameManager.Team.PLAYER]
+	for r in range(1, 3):
+		for dx in range(-r, r + 1):
+			for dy in range(-r, r + 1):
+				if maxi(absi(dx), absi(dy)) != r:
+					continue
+				var nx: int = ix + dx
+				var ny: int = iy + dy
+				if nx < 0 or nx >= vision.size() or ny < 0 or ny >= vision[nx].size():
+					continue
+				if vision[nx][ny]:
+					return 0.45 if r == 1 else 0.75
+	return 1.0
+
+
+## Frozen silhouettes of enemy units that left the player's vision: a dark
+## body at the last known position with a "?" overhead until the memory fades.
+func _draw_unit_ghosts() -> void:
+	var font: Font = ThemeDB.fallback_font
+	for id in _unit_ghosts:
+		var pos: Vector2 = _unit_ghosts[id].pos
+		draw_circle(pos + Vector2(0, -9), 9.0, Color(0.16, 0.2, 0.28, 0.85))
+		draw_circle(pos + Vector2(0, -9), 9.0, Color(0.5, 0.58, 0.7, 0.5), false, 1.0)
+		draw_string(font, pos + Vector2(0, -22), "?", HORIZONTAL_ALIGNMENT_CENTER, 16, 14, Color(0.92, 0.94, 1.0, 0.9))
 
 
 func _draw_surface() -> void:

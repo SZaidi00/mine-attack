@@ -556,6 +556,14 @@ layout_mode = 2
 text = "Research\n(R)"
 tooltip_text = "Open the research tree (R): timed techs — fortify the base, sonar-scan for ore, and unit-specific upgrades"
 
+[node name="BuildButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 70)
+layout_mode = 2
+toggle_mode = true
+text = "Build"
+tooltip_text = "Build a lantern: surface lanterns light up your half of the map, mine lanterns reveal buried ore underground"
+
 [node name="QueuePanel" type="PanelContainer" parent="."]
 anchors_preset = 11
 anchor_left = 1.0

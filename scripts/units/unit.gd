@@ -147,6 +147,12 @@ func _process(delta: float) -> void:
 			queue_free()
 		return
 
+	# Fog of War: enemy units are only drawn while inside the player's vision.
+	# (Runs before the game_active freeze so the fog state stays correct on the
+	# game-over screen too.)
+	if team != GameManager.Team.PLAYER:
+		visible = _grid.is_visible_to(GameManager.Team.PLAYER, global_position)
+
 	# Match over: freeze all unit AI and movement in place.
 	if not GameManager.game_active:
 		return
@@ -593,6 +599,7 @@ func _maybe_retaliate(attacker: Node2D) -> void:
 func _pick_retaliation_target(attacker: Node2D) -> Unit:
 	if attacker is Unit and is_instance_valid(attacker) and attacker._state != State.DEAD \
 			and attacker.data.is_fighter and attacker.is_underground == is_underground \
+			and _team_can_see(attacker.global_position) \
 			and combat_distance_squared_to(attacker) <= (data.sight_range * 1.5) * (data.sight_range * 1.5):
 		return attacker
 	var best: Unit = null
@@ -601,6 +608,8 @@ func _pick_retaliation_target(attacker: Node2D) -> Unit:
 		if unit.team == team or unit._state == State.DEAD:
 			continue
 		if not unit.data.is_fighter or unit.is_underground != is_underground:
+			continue
+		if not _team_can_see(unit.global_position):
 			continue
 		var d: float = combat_distance_squared_to(unit)
 		if d <= best_dist:
@@ -720,6 +729,9 @@ func _nearest_melee_threat(max_dist: float) -> Unit:
 			continue
 		if unit.is_underground != is_underground:
 			continue
+		# Fog of War: unseen melee cannot be kited (it also cannot be fought).
+		if not _team_can_see(unit.global_position):
+			continue
 		var d2: float = combat_distance_squared_to(unit)
 		if d2 <= best_d2:
 			best_d2 = d2
@@ -754,7 +766,8 @@ func _process_attack(delta: float) -> void:
 		path_pos = _target_unit.global_position
 		range_pos = _target_unit.get_combat_position() if _target_unit.has_method("get_combat_position") else path_pos
 		target_alive = true
-	elif _target_building != null and is_instance_valid(_target_building) and _target_building.is_in_group("buildings"):
+	elif _target_building != null and is_instance_valid(_target_building) \
+			and (_target_building.is_in_group("buildings") or _target_building.is_in_group("lanterns")):
 		# Measure range to the closest point on the building's body rect, not
 		# its center, so melee units engage at the edge of the footprint.
 		var rect: Rect2 = _target_building.call("get_bounds_rect")
@@ -763,6 +776,13 @@ func _process_attack(delta: float) -> void:
 		target_alive = true
 	else:
 		_set_state(State.IDLE, "target lost")
+		return
+
+	# Fog of War: a unit target that slipped out of the team's vision breaks
+	# the lock — you cannot chase what you cannot see (Revamp Phase 1).
+	if _target_unit != null and target_alive and not _team_can_see(_target_unit.global_position):
+		_clear_target()
+		_set_state(State.IDLE, "target lost to fog")
 		return
 
 	# Defend leash: an auto-engaged holder that chased too far from its
@@ -1190,18 +1210,19 @@ func _find_and_mine() -> void:
 	var now_ms: int = Time.get_ticks_msec()
 
 	# Scan the whole own side (both sides once the wall is down) so no corner
-	# of the mine is starved. Miners don't know where buried ore is: every
-	# diggable face is equal until a tile proves itself — ore that already
-	# took mining damage (hp < max_hp) yielded gold, so it counts as
-	# discovered and is preferred over everything else.
+	# of the mine is starved. Fog of War blind dig (Revamp Phase 1): miners
+	# cannot see buried ore on their own — ore only counts as *discovered*
+	# once it already yielded gold (hp < max_hp) or an Ore Sonar scan /
+	# underground lantern revealed it (sonar_revealed). Discovered ore is
+	# preferred at any distance; everything else is a blind pick, taken at
+	# random from the nearest few diggable faces.
 	var wall_intact: bool = _grid.get_wall_hp() > 0
 	var x_lo: int = GridWorld.X_MIN if team_dir == -1 or not wall_intact else 2
 	var x_hi: int = GridWorld.X_MAX if team_dir == 1 or not wall_intact else -2
 
 	var best_gold: Vector2i = Vector2i(-9999, -9999)
 	var best_gold_dist: float = INF
-	var best_cell: Vector2i = Vector2i(-9999, -9999)
-	var best_cell_dist: float = INF
+	var blind_candidates: Array = []  # [ [dist, pos], ... ] nearest-first later
 
 	for x in range(x_lo, x_hi + 1):
 		for y in range(1, GridWorld.Y_MAX + 1):
@@ -1228,21 +1249,24 @@ func _find_and_mine() -> void:
 				continue
 			var d: float = center.distance_to(pos)
 			if cell.type == GridWorld.CellType.ORE and (cell.hp < cell.max_hp or cell.sonar_revealed.get(team, false)):
-				# Discovered gold: this tile already yielded coin or an Ore
-				# Sonar scan revealed it, so the miner knows it is worth
-				# coming back to.
+				# Discovered gold: this tile already yielded coin, an Ore
+				# Sonar scan revealed it, or an underground lantern lit it —
+				# so the miner knows it is worth coming back to.
 				if d < best_gold_dist:
 					best_gold_dist = d
 					best_gold = pos
-			elif d < best_cell_dist:
-				best_cell_dist = d
-				best_cell = pos
+			else:
+				blind_candidates.append([d, pos])
 
 	if best_gold != Vector2i(-9999, -9999):
 		mine_cell(best_gold)
 		return
-	if best_cell != Vector2i(-9999, -9999):
-		mine_cell(best_cell)
+	if not blind_candidates.is_empty():
+		# Blind dig: no discovered ore anywhere, so pick randomly among the
+		# nearest few diggable faces instead of beelining to the closest one.
+		blind_candidates.sort_custom(func(a, b): return a[0] < b[0])
+		var pick_from: Array = blind_candidates.slice(0, mini(6, blind_candidates.size()))
+		mine_cell(pick_from[randi() % pick_from.size()][1])
 		return
 
 	# Nothing diggable remains in range: cash in any cargo, then wait near the
@@ -1356,6 +1380,31 @@ func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
 
 func team_name() -> String:
 	return "player" if team == GameManager.Team.PLAYER else "enemy"
+
+
+## Fog of War vision radius in grid cells (Revamp Phase 1). Miners see less
+## underground than on the surface; dragons only get their big flight radius
+## above ground. Everything else uses its flat per-type radius on both layers.
+func get_vision_radius() -> int:
+	if data == null:
+		return 0
+	if data.is_miner:
+		return Constants.VISION_MINER_UNDERGROUND if is_underground else Constants.VISION_MINER_SURFACE
+	match data.unit_name.to_lower():
+		"swordsman":
+			return Constants.VISION_SWORDSMAN
+		"archer":
+			return Constants.VISION_ARCHER
+		"wizard":
+			return Constants.VISION_WIZARD
+		"dragon":
+			return Constants.VISION_DRAGON if not is_underground else Constants.VISION_MINER_UNDERGROUND
+	return 0
+
+
+## Fog of War: true while this unit's team can currently see world_pos.
+func _team_can_see(world_pos: Vector2) -> bool:
+	return _grid.is_visible_to(team, world_pos)
 
 
 func _team_dir() -> int:
@@ -1480,6 +1529,9 @@ func _find_rally_target() -> Unit:
 			continue
 		if not can_damage_unit(unit):
 			continue
+		# Fog of War: cannot hunt what the team cannot see.
+		if not _team_can_see(unit.global_position):
+			continue
 		var d: float = combat_distance_squared_to(unit)
 		if d <= best_dist:
 			best_dist = d
@@ -1519,6 +1571,9 @@ func _find_auto_attack_target():
 					continue
 				if not can_damage_unit(unit):
 					continue
+				# Fog of War: cannot auto-attack what the team cannot see.
+				if not _team_can_see(unit.global_position):
+					continue
 				if leashed and _post_point.distance_squared_to(unit.global_position) > leash_d2:
 					continue
 				var d: float = combat_distance_squared_to(unit)
@@ -1528,14 +1583,21 @@ func _find_auto_attack_target():
 			if best != null:
 				return best
 
-	# 3. Enemy building in sight range.
+	# 3. Enemy building in sight range (a static target counts if the team
+	# remembers it), and enemy lanterns (which must be currently visible).
 	var enemy_building: Node2D = _get_enemy_building()
-	if enemy_building != null:
+	if enemy_building != null and _grid.is_remembered_by(team, enemy_building.global_position):
 		if leashed and _post_point.distance_squared_to(enemy_building.global_position) > leash_d2:
 			return null  # defending means defending: never auto-siege from a held post
 		var d: float = get_combat_position().distance_squared_to(enemy_building.global_position)
 		if d <= data.sight_range * data.sight_range:
 			return enemy_building
+	var enemy_lantern: Node2D = _nearest_visible_enemy_lantern()
+	if enemy_lantern != null:
+		if not (leashed and _post_point.distance_squared_to(enemy_lantern.global_position) > leash_d2):
+			var d: float = get_combat_position().distance_squared_to(enemy_lantern.global_position)
+			if d <= data.sight_range * data.sight_range:
+				return enemy_lantern
 
 	# 4. Enemy miners on our side of the wall (underground only).
 	if is_underground:
@@ -1549,6 +1611,9 @@ func _find_auto_attack_target():
 				continue
 			if not can_damage_unit(unit):
 				continue
+			# Fog of War: cannot auto-attack what the team cannot see.
+			if not _team_can_see(unit.global_position):
+				continue
 			var grid_x: int = _grid.world_to_grid(unit.global_position).x
 			if grid_x * team_dir < 2:
 				continue
@@ -1559,6 +1624,23 @@ func _find_auto_attack_target():
 		if best != null:
 			return best
 	return null
+
+
+## Nearest built enemy lantern the team can currently see (Fog of War target
+## scan helper — lanterns are static but destructible vision sources).
+func _nearest_visible_enemy_lantern() -> Node2D:
+	var best: Node2D = null
+	var best_dist: float = INF
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		if lantern.team == team or not lantern.is_built():
+			continue
+		if not _team_can_see(lantern.global_position):
+			continue
+		var d: float = get_combat_position().distance_squared_to(lantern.global_position)
+		if d < best_dist:
+			best_dist = d
+			best = lantern
+	return best
 
 
 ## Splash-aware fighter pick for fireball users: the damageable enemy fighter
@@ -1575,6 +1657,9 @@ func _pick_splash_target(max_dist: float) -> Unit:
 		if not unit.data.is_fighter:
 			continue
 		if not can_damage_unit(unit):
+			continue
+		# Fog of War: cannot target what the team cannot see.
+		if not _team_can_see(unit.global_position):
 			continue
 		var d2: float = combat_distance_squared_to(unit)
 		if d2 > max_d2:

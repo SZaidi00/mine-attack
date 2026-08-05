@@ -19,6 +19,9 @@ func before_all() -> void:
 	get_tree().root.add_child(_main)
 	get_tree().current_scene = _main
 	_units = _main.get_node("Units")
+	# Fog-agnostic suite (rally mechanics): both teams see the whole map.
+	_main.get_node("World/GridWorld").set_reveal_all(PLAYER, true)
+	_main.get_node("World/GridWorld").set_reveal_all(ENEMY, true)
 
 
 func after_all() -> void:
