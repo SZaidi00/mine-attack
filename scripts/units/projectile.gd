@@ -12,6 +12,9 @@ const _BLAST_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/proj
 @export var is_dragon_flame: bool = false
 @export var team: GameManager.Team = GameManager.Team.PLAYER
 @export var aoe_radius: float = 40.0
+## Arcane Shot (Arcane archer): the arrow pierces through the first target
+## and also strikes the nearest enemy behind it.
+var pierce: bool = false
 
 var target_position: Vector2 = Vector2.ZERO
 var homing_target: Node2D = null
@@ -78,6 +81,12 @@ func _update_target_position() -> void:
 func _impact() -> void:
 	var hit_radius: float = aoe_radius if is_fireball else 8.0
 	var pos: Vector2 = global_position
+	var source_faction: FactionData = null
+	# is_instance_valid first: the firing unit may have died while the
+	# projectile was in flight, and `is` on a freed instance is an error.
+	if source != null and is_instance_valid(source) and source is Unit and source.data != null:
+		source_faction = FactionManager.get_faction(source.team)
+	var hit_units: Array = []
 	for unit in get_tree().get_nodes_in_group("units"):
 		if unit.get("team") == team:
 			continue
@@ -86,6 +95,35 @@ func _impact() -> void:
 			hit_pos = unit.get_combat_position()
 		if hit_pos.distance_to(pos) <= hit_radius:
 			unit.take_damage(damage, source)
+			hit_units.append(unit)
+			if source_faction != null:
+				# Mana Burn (Arcane dragon): flame dampens the victim's next attack.
+				if is_dragon_flame and source_faction.dragon_mana_burn:
+					unit.set("_next_attack_damage_mult", 0.8)
+				# Crush (Brute dragon): the hit stuns briefly.
+				if is_dragon_flame and source_faction.dragon_crush:
+					unit.call("apply_stun", 0.5)
+				# Heavy Bolt (Brute archer): the hit slows movement by 30%.
+				if not is_fireball and source_faction.archer_heavy_bolt \
+						and source.data.unit_name.to_lower() == "archer":
+					unit.call("apply_slow", 0.7, 2.0)
+	# Arcane Shot (Arcane archer): a piercing arrow continues through the first
+	# target and strikes the nearest enemy just behind it.
+	if pierce and not is_fireball and not hit_units.is_empty():
+		var best: Node2D = null
+		var best_d2: float = 64.0 * 64.0
+		for unit in get_tree().get_nodes_in_group("units"):
+			if unit in hit_units or unit.get("team") == team:
+				continue
+			var second_pos: Vector2 = unit.global_position
+			if unit.has_method("get_combat_position"):
+				second_pos = unit.get_combat_position()
+			var d2: float = second_pos.distance_squared_to(pos)
+			if d2 <= best_d2:
+				best_d2 = d2
+				best = unit
+		if best != null:
+			best.take_damage(damage, source)
 	if not is_fireball:
 		return
 	# Splash also damages buildings within the same area.

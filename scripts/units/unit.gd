@@ -111,6 +111,32 @@ var _hold_post: bool = false
 var _auto_engaged: bool = false
 # Last applied flight altitude for HoverArea / z_index sync.
 var _flight_visual_altitude: float = -1.0
+# Faction (Revamp Phase 2): cached once in _ready; null = neutral (no pick,
+# e.g. tests). Stat multipliers are folded into the per-tick recompute
+# functions; the rest is applied once by _apply_faction_bonuses().
+var _faction: FactionData = null
+# Rune Blade (Arcane): the first hit of each engagement deals bonus damage.
+var _has_hit_this_engagement: bool = false
+# Mana Burn (Arcane dragon): debuff multiplier consumed by this unit's next
+# damage-dealing hit.
+var _next_attack_damage_mult: float = 1.0
+# Miner Reveal (Arcane): personal ore-sonar cooldown.
+var _reveal_timer: float = 0.0
+# Swarm (Industrial): throttled proximity check around the captured base speed.
+var _swarm_timer: float = 0.0
+var _base_speed: float = 0.0
+var _swarm_active: bool = false
+# Heavy Bolt (Brute archer): movement-slow debuff.
+var _slow_mult: float = 1.0
+var _slow_timer: float = 0.0
+# Crush (Brute dragon): hard stun — no movement or attacks while it lasts.
+var _stun_timer: float = 0.0
+# Blink (wizard): defensive teleport, 15s cooldown (Arcane: 10s).
+var _blink_timer: float = 0.0
+# Arcane Shot (Arcane archer): piercing-arrow cooldown (8s).
+var _arcane_shot_timer: float = 0.0
+# Volley (Industrial archer): group-fire cooldown (12s).
+var _volley_timer: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -118,9 +144,11 @@ var _flight_visual_altitude: float = -1.0
 func _ready() -> void:
 	if data == null:
 		data = preload("res://scripts/resources/units/swordsman.tres")
+	_faction = FactionManager.get_faction(team)
 	if data.is_miner:
 		_apply_miner_upgrade()
 	_apply_research_bonuses()
+	_apply_faction_bonuses()
 	hp = data.max_hp
 	add_to_group("units")
 	_add_hover_area()
@@ -177,6 +205,16 @@ func _process(delta: float) -> void:
 		if _damage_log[i][0] > 3.0:
 			_damage_log.remove_at(i)
 
+	# Revamp Phase 2 debuffs: the Heavy Bolt slow expires back to full speed;
+	# the Crush stun freezes all actions (regen above still ticks).
+	if _slow_timer > 0.0:
+		_slow_timer -= delta
+		if _slow_timer <= 0.0:
+			_slow_mult = 1.0
+	if _stun_timer > 0.0:
+		_stun_timer -= delta
+		return
+
 	if _hit_flash_timer > 0:
 		_hit_flash_timer -= delta
 		if _hit_flash_timer <= 0:
@@ -195,6 +233,13 @@ func _process(delta: float) -> void:
 	_sync_flight_visuals()
 	if data.is_miner:
 		_apply_miner_upgrade()
+		# Miner Reveal (Arcane): a personal 4-cell ore scan every 30s while
+		# underground — same reveal mechanism as the Ore Sonar research.
+		if _faction != null and _faction.miner_reveal and is_underground:
+			_reveal_timer -= delta
+			if _reveal_timer <= 0.0:
+				_reveal_timer = 30.0
+				_grid.reveal_ore_in_radius(_grid.world_to_grid(global_position), 4, team)
 		if _mine_exhausted:
 			_exhausted_retry_timer -= delta
 			if _exhausted_retry_timer <= 0.0:
@@ -203,6 +248,22 @@ func _process(delta: float) -> void:
 			_handle_idle_miner()
 	elif data.is_fighter:
 		_apply_fighter_upgrade()
+		# Swarm (Industrial): swordsmen move faster in groups of 3+.
+		if _faction != null and _faction.swordsman_swarm and data.unit_name.to_lower() == "swordsman":
+			_swarm_timer -= delta
+			if _swarm_timer <= 0.0:
+				_swarm_timer = 0.25
+				_update_swarm()
+		match data.unit_name.to_lower():
+			"wizard":
+				# Blink: teleport away from a point-blank melee threat (15s
+				# cooldown, 10s for Arcane).
+				_blink_timer -= delta
+				if _blink_timer <= 0.0:
+					_try_blink()
+			"archer":
+				_arcane_shot_timer -= delta
+				_volley_timer -= delta
 		if _state == State.IDLE:
 			_handle_idle_fighter()
 		elif _rally_active and _state == State.MOVE:
@@ -497,7 +558,18 @@ func take_damage(amount: int, attacker: Node2D = null) -> void:
 	_damage_log.append([0.0, amount])
 	queue_redraw()
 	_spawn_damage_popup(amount)
+	# Fight Back (Brute): miners hit back when a fighter strikes them in melee.
+	if _faction != null and _faction.miner_fight_back and data.is_miner and attacker is Unit \
+			and is_instance_valid(attacker) and attacker._state != State.DEAD \
+			and attacker.data != null and attacker.data.is_fighter:
+		attacker.take_damage(5, self)
 	if hp <= 0:
+		# Supply Drop (Industrial): a dragon kill generates coin for its team.
+		if attacker is Unit and is_instance_valid(attacker) and attacker.data != null \
+				and attacker.data.unit_name.to_lower() == "dragon":
+			var attacker_faction: FactionData = FactionManager.get_faction(attacker.team)
+			if attacker_faction != null and attacker_faction.dragon_supply_drop:
+				EconomyManager.add_coin(attacker.team, 10)
 		_die()
 	elif data.is_miner:
 		_start_flee()
@@ -653,7 +725,7 @@ func _follow_path(delta: float) -> void:
 	# larger). Without the step-aware threshold, a large delta (lag spike, high
 	# time scale) plus the separation nudge can orbit the point forever without
 	# ever coming within 2px at the start of a frame.
-	var step: float = data.speed * delta
+	var step: float = data.speed * _slow_mult * delta
 	if is_underground and data.is_fighter:
 		step *= 0.6
 	var arrive: float = maxf(2.0, step)
@@ -708,7 +780,7 @@ func _kite_away_from(threat_pos: Vector2, delta: float) -> void:
 	var away: Vector2 = global_position - threat_pos
 	if away.length_squared() < 0.001:
 		away = Vector2.LEFT
-	var step: float = data.speed * delta
+	var step: float = data.speed * _slow_mult * delta
 	if is_underground and data.is_fighter:
 		step *= 0.6
 	var next_pos: Vector2 = global_position + away.normalized() * step
@@ -827,8 +899,20 @@ func _process_attack(delta: float) -> void:
 		if threat_pos != Vector2.INF:
 			_kite_away_from(threat_pos, delta)
 	if _attack_timer <= 0:
-		_attack_timer = data.attack_cooldown
-		var hit_damage: int = roundi(data.damage_per_hit)
+		var cooldown: float = data.attack_cooldown
+		# Berserk (Brute): a wounded swordsman attacks 40% faster.
+		if _faction != null and _faction.swordsman_berserk and data.unit_name.to_lower() == "swordsman" \
+				and hp * 10 < data.max_hp * 3:
+			cooldown /= 1.4
+		_attack_timer = cooldown
+		# Mana Burn debuff (Arcane dragon) dampens this hit, then wears off.
+		var hit_damage: int = roundi(data.damage_per_hit * _next_attack_damage_mult)
+		_next_attack_damage_mult = 1.0
+		# Rune Blade (Arcane): the first hit of each engagement deals +50%.
+		if _faction != null and _faction.swordsman_rune_blade and data.unit_name.to_lower() == "swordsman" \
+				and not _has_hit_this_engagement:
+			hit_damage = roundi(hit_damage * 1.5)
+		_has_hit_this_engagement = true
 		if data.attack_range <= 35.0:
 			# Melee
 			AudioManager.play("sword", global_position, -8.0)
@@ -839,17 +923,21 @@ func _process_attack(delta: float) -> void:
 		else:
 			# Ranged projectile: aim at the point the range was measured to
 			# (the enemy unit, or the closest point on the building's rect).
-			_spawn_projectile(range_pos)
+			_spawn_projectile(range_pos, hit_damage)
+			# Volley (Industrial archer): nearby archers join the shot.
+			if _faction != null and _faction.archer_volley and data.unit_name.to_lower() == "archer" \
+					and _volley_timer <= 0.0:
+				_trigger_volley(range_pos)
 
 
-func _spawn_projectile(target_pos: Vector2) -> void:
+func _spawn_projectile(target_pos: Vector2, hit_damage: int = -1) -> void:
 	var fireball: bool = _uses_fireball()
 	var spawn_pos: Vector2 = get_combat_position()
 	AudioManager.play("blast" if fireball else "bow", spawn_pos, -6.0)
 	var proj: Node2D = preload("res://scenes/projectile.tscn").instantiate()
 	proj.position = spawn_pos
 	proj.set("team", team)
-	proj.set("damage", roundi(data.damage_per_hit))
+	proj.set("damage", hit_damage if hit_damage >= 0 else roundi(data.damage_per_hit))
 	proj.set("is_fireball", fireball)
 	# Dragons breathe fire: same splash as a fireball, flame-breath visuals.
 	proj.set("is_dragon_flame", data.unit_name.to_lower() == "dragon")
@@ -857,6 +945,12 @@ func _spawn_projectile(target_pos: Vector2) -> void:
 	proj.set("aoe_radius", data.aoe_radius)
 	proj.set("target_position", target_pos)
 	proj.set("source", self)
+	# Arcane Shot (Arcane archer): every 8s an arrow pierces through the first
+	# target and strikes a second enemy behind it.
+	if _faction != null and _faction.archer_arcane_shot and data.unit_name.to_lower() == "archer" \
+			and not fireball and _arcane_shot_timer <= 0.0:
+		_arcane_shot_timer = 8.0
+		proj.set("pierce", true)
 	# Try to find the actual target node for homing.
 	if _target_unit != null and is_instance_valid(_target_unit):
 		proj.set("homing_target", _target_unit)
@@ -904,6 +998,9 @@ func _process_mine(delta: float) -> void:
 		var coin: int = _grid.damage_cell(_target_cell, dmg, data.miner_level)
 		AudioManager.play("pickaxe", global_position, -10.0)
 		if coin > 0:
+			# Efficiency (Industrial): ore yields bonus gold per swing.
+			if _faction != null and _faction.miner_ore_yield_mult != 1.0:
+				coin = roundi(coin * _faction.miner_ore_yield_mult)
 			carried_coin = min(data.carry_capacity, carried_coin + coin)
 			queue_redraw()
 
@@ -1078,10 +1175,88 @@ func _set_state(new_state: State, reason: String = "") -> void:
 	_state = new_state
 
 
+## Heavy Bolt (Brute archer): slow this unit's movement for a short duration.
+func apply_slow(mult: float, duration: float) -> void:
+	if _state == State.DEAD:
+		return
+	_slow_mult = mult
+	_slow_timer = duration
+
+
+## Crush (Brute dragon): brief hard stun — no movement or attacks.
+func apply_stun(duration: float) -> void:
+	if _state == State.DEAD:
+		return
+	_stun_timer = maxf(_stun_timer, duration)
+
+
+## Blink (wizard): when a melee enemy gets point-blank, teleport a few cells
+## directly away from it. Every wizard has it on a 15s cooldown; Arcane's
+## reduction shortens that to 10s. The target lock survives the teleport.
+func _try_blink() -> void:
+	var threat: Unit = _nearest_melee_threat(40.0)
+	if threat == null:
+		return
+	var away: Vector2 = global_position - threat.global_position
+	if away.length_squared() < 0.001:
+		away = Vector2.LEFT if team == GameManager.Team.PLAYER else Vector2.RIGHT
+	away = away.normalized()
+	for dist: float in [96.0, 64.0, 32.0]:
+		var dest: Vector2 = global_position + away * dist
+		if _is_walkable_point(dest):
+			global_position = dest
+			_path.clear()
+			_path_index = 0
+			_blink_timer = 15.0 - (_faction.wizard_blink_reduction if _faction != null else 0.0)
+			AudioManager.play("blast", global_position, -12.0)
+			return
+	# Nowhere to go — retry soon instead of burning the full cooldown.
+	_blink_timer = 1.0
+
+
+## Volley (Industrial): every friendly archer within 50px joins this shot,
+## firing at the same target area at once. Everyone involved shares the 12s
+## cooldown so volleys can't chain into each other.
+func _trigger_volley(target_pos: Vector2) -> void:
+	_volley_timer = 12.0
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit == self or unit.team != team or unit._state == State.DEAD:
+			continue
+		if unit.data == null or unit.data.unit_name.to_lower() != "archer":
+			continue
+		if unit.is_underground != is_underground:
+			continue
+		if global_position.distance_to(unit.global_position) > 50.0:
+			continue
+		unit._volley_timer = 12.0
+		unit._spawn_projectile(target_pos)
+
+
+## Swarm (Industrial): +15% speed while 3+ friendly swordsmen (this one
+## included) are within 6 cells. Restores the captured base speed when the
+## group breaks up.
+func _update_swarm() -> void:
+	var nearby: int = 1
+	var radius_sq: float = 192.0 * 192.0
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit == self or unit.team != team or unit._state == State.DEAD:
+			continue
+		if unit.data == null or unit.data.unit_name.to_lower() != "swordsman":
+			continue
+		if global_position.distance_squared_to(unit.global_position) <= radius_sq:
+			nearby += 1
+	var active: bool = nearby >= 3
+	if active != _swarm_active:
+		_swarm_active = active
+		data.speed = _base_speed * (1.15 if active else 1.0)
+
+
 func _clear_target() -> void:
 	_release_claim()
 	_rally_active = false
 	_auto_engaged = false
+	# Rune Blade (Arcane): a new engagement means the first-hit bonus re-arms.
+	_has_hit_this_engagement = false
 	_target_unit = null
 	_target_building = null
 	_target_cell = Vector2i(-9999, -9999)
@@ -1766,6 +1941,8 @@ func _sync_flight_visuals() -> void:
 ## Team-wide fighter upgrades (swordsman/archer/wizard): applies the
 ## authoritative per-level stats from Constants.FIGHTER_UPGRADES once per
 ## level change, healing the max_hp delta like miner upgrades do.
+## Faction multipliers (Revamp Phase 2) are folded in here so level-ups
+## recompute from the same modified values.
 func _apply_fighter_upgrade() -> void:
 	var unit_id: String = data.unit_name.to_lower()
 	if not Constants.FIGHTER_UPGRADES.has(unit_id):
@@ -1774,9 +1951,15 @@ func _apply_fighter_upgrade() -> void:
 	if level == _fighter_level_applied:
 		return
 	var stats: Dictionary = Constants.FIGHTER_UPGRADES[unit_id][level]
-	var hp_gain: int = stats.hp - data.max_hp
-	data.max_hp = stats.hp
-	data.damage_per_hit = stats.damage
+	var hp_mult: float = 1.0
+	var dmg_mult: float = 1.0
+	if _faction != null:
+		hp_mult = _faction.get(unit_id + "_hp_mult")
+		dmg_mult = _faction.get(unit_id + "_dmg_mult")
+	var new_max_hp: int = roundi(stats.hp * hp_mult)
+	var hp_gain: int = new_max_hp - data.max_hp
+	data.max_hp = new_max_hp
+	data.damage_per_hit = stats.damage * dmg_mult
 	hp += hp_gain
 	_fighter_level_applied = level
 	queue_redraw()
@@ -1795,11 +1978,12 @@ func _apply_miner_upgrade() -> void:
 		data.max_dig_layer = 7
 		data.carry_capacity += 10
 		data.max_hp += 15
-	# Authoritative per-level stats — no incremental compounding.
+	# Authoritative per-level stats — no incremental compounding. The faction
+	# mining-speed multiplier (Revamp Phase 2) rides on top.
 	data.speed = Constants.MINER_STATS[level].speed
 	var mining_stats: Dictionary = Constants.MINING_STATS[level]
 	data.mining_damage = mining_stats.damage
-	data.mining_swings_per_sec = mining_stats.swings
+	data.mining_swings_per_sec = mining_stats.swings * (_faction.miner_mining_mult if _faction != null else 1.0)
 	hp += 10
 	# New layers unlocked: stale no-path marks and the exhausted flag may now
 	# be wrong, so reset the seek state and let the miner re-scan.
@@ -1820,8 +2004,11 @@ func _apply_research_bonuses() -> void:
 		_base_attack_cooldown = data.attack_cooldown
 	if data.is_miner:
 		var level: int = clampi(data.miner_level, 1, 3)
+		# Faction carry bonus (Revamp Phase 2) composes with research here so
+		# the per-tick recompute never erases it.
+		var carry_bonus: int = _faction.miner_carry_bonus if _faction != null else 0
 		data.speed = Constants.MINER_STATS[level].speed + ResearchManager.get_stat_bonus(team, "miner_speed")
-		data.carry_capacity = Constants.MINER_STATS[level].carry + int(ResearchManager.get_stat_bonus(team, "miner_carry"))
+		data.carry_capacity = maxi(1, Constants.MINER_STATS[level].carry + int(ResearchManager.get_stat_bonus(team, "miner_carry")) + carry_bonus)
 	elif data.is_fighter:
 		match data.unit_name.to_lower():
 			"swordsman":
@@ -1831,9 +2018,39 @@ func _apply_research_bonuses() -> void:
 				data.attack_range = _base_attack_range + ResearchManager.get_stat_bonus(team, "archer_range")
 				data.attack_cooldown = _base_attack_cooldown * (1.0 - ResearchManager.get_stat_bonus(team, "archer_cdr"))
 			"wizard":
-				data.aoe_radius = _base_aoe_radius * (1.0 + ResearchManager.get_stat_bonus(team, "wizard_aoe_mult"))
+				var aoe_mult: float = 1.0 + ResearchManager.get_stat_bonus(team, "wizard_aoe_mult")
+				# Fortify (Brute): fireballs splash 30% wider.
+				if _faction != null and _faction.wizard_fortify:
+					aoe_mult += 0.3
+				data.aoe_radius = _base_aoe_radius * aoe_mult
 				var fighter_level: int = EconomyManager.get_fighter_level(team, "wizard")
-				data.damage_per_hit = Constants.FIGHTER_UPGRADES["wizard"][fighter_level].damage * (1.0 + ResearchManager.get_stat_bonus(team, "wizard_damage_mult"))
+				var wizard_dmg_mult: float = _faction.wizard_dmg_mult if _faction != null else 1.0
+				data.damage_per_hit = Constants.FIGHTER_UPGRADES["wizard"][fighter_level].damage * (1.0 + ResearchManager.get_stat_bonus(team, "wizard_damage_mult")) * wizard_dmg_mult
+
+
+## Revamp Phase 2: one-shot faction stat modifiers at spawn. Fields that are
+## re-derived every tick elsewhere (miner speed/carry, wizard damage/AoE) get
+## their faction terms inside those recompute functions instead, so the two
+## systems compose without compounding.
+func _apply_faction_bonuses() -> void:
+	if _faction != null:
+		if data.is_miner:
+			data.max_hp += _faction.miner_hp_bonus
+			data.mining_swings_per_sec *= _faction.miner_mining_mult
+		elif data.is_fighter:
+			match data.unit_name.to_lower():
+				"swordsman":
+					data.max_hp = roundi(data.max_hp * _faction.swordsman_hp_mult)
+					data.damage_per_hit *= _faction.swordsman_dmg_mult
+				"archer":
+					data.max_hp = roundi(data.max_hp * _faction.archer_hp_mult)
+					data.damage_per_hit *= _faction.archer_dmg_mult
+				"wizard":
+					data.max_hp = roundi(data.max_hp * _faction.wizard_hp_mult)
+				"dragon":
+					data.max_hp = roundi(data.max_hp * _faction.dragon_hp_mult)
+					data.damage_per_hit *= _faction.dragon_dmg_mult
+	_base_speed = data.speed
 
 
 func _draw_pickaxe(draw_body: bool = true) -> void:

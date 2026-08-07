@@ -37,6 +37,8 @@ var _collapse_t: float = 0.0
 var _regen_accum: float = 0.0
 # match_time of the last hit taken (drives is_under_attack()).
 var _last_damage_time: float = -999.0
+# Throttle for the faction-identification scout check (enemy building only).
+var _identify_accum: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -76,9 +78,10 @@ func _on_research_completed(completed_team: GameManager.Team, tech_id: String) -
 
 
 ## Each base starts with free miners so the economy runs from the first
-## second. They still count toward the population cap.
+## second. They still count toward the population cap. Factions can grant
+## bonus starting miners (Revamp Phase 2: Industrial +1).
 func _spawn_starting_miners() -> void:
-	for i in range(_Constants.STARTING_MINERS):
+	for i in range(FactionManager.get_starting_miners(team)):
 		_spawn_front("miner", _resources["miner"])
 
 
@@ -152,6 +155,13 @@ func _process(delta: float) -> void:
 			modulate = Color(0.3, 0.3, 0.33, 1.0)
 		else:
 			visible = false
+		# Revamp Phase 2: a player unit within 8 cells identifies the enemy's
+		# hidden faction (icon appears next to the HP bar and in the HUD).
+		if not FactionManager.is_faction_identified(team):
+			_identify_accum += delta
+			if _identify_accum >= 0.5:
+				_identify_accum = 0.0
+				_check_faction_identified()
 	if not GameManager.game_active:
 		return
 	# Self-Repair research: slow regeneration up to max HP.
@@ -189,16 +199,18 @@ func queue_unit(unit_id: String) -> bool:
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "unknown unit_id " + unit_id)
 		return false
 	var data: UnitData = _resources[unit_id]
-	if not EconomyManager.can_afford(team, data.cost):
+	# Faction-modified price (Revamp Phase 2); base price when factionless.
+	var cost: int = FactionManager.get_unit_cost(team, unit_id)
+	if not EconomyManager.can_afford(team, cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "cannot afford " + unit_id)
 		return false
 	# Population is not checked here: over-cap orders are accepted and the
 	# queue simply pauses at the cap (see _process) instead of rejecting or
 	# refunding the finished unit.
-	if not EconomyManager.spend_coin(team, data.cost):
+	if not EconomyManager.spend_coin(team, cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "spend failed " + unit_id)
 		return false
-	_queue.append({ "id": unit_id, "data": data, "remaining": data.train_time })
+	_queue.append({ "id": unit_id, "data": data, "cost": cost, "remaining": data.train_time })
 	DebugLog.log_command("Building %d" % get_instance_id(), "queue_unit", unit_id)
 	queue_changed.emit(_queue)
 	return true
@@ -207,7 +219,7 @@ func queue_unit(unit_id: String) -> bool:
 func _spawn_front(_unit_id: String, data: UnitData) -> void:
 	if not EconomyManager.can_add_population(team, data.population):
 		# Refund if cap reached.
-		EconomyManager.add_coin(team, data.cost)
+		EconomyManager.add_coin(team, FactionManager.get_unit_cost(team, _unit_id))
 		return
 	EconomyManager.add_population(team, data.population)
 	EconomyManager.train_unit(team)
@@ -356,11 +368,23 @@ func cancel_queue(index: int) -> bool:
 		DebugLog.log_reject("Building %d" % get_instance_id(), "cancel_queue", "invalid index %d" % index)
 		return false
 	var entry = _queue[index]
-	EconomyManager.add_coin(team, entry.data.cost)
+	var refund: int = entry.get("cost", entry.data.cost)
+	EconomyManager.add_coin(team, refund)
 	_queue.remove_at(index)
-	DebugLog.log_command("Building %d" % get_instance_id(), "cancel_queue", "%s refund=%d" % [entry.id, entry.data.cost])
+	DebugLog.log_command("Building %d" % get_instance_id(), "cancel_queue", "%s refund=%d" % [entry.id, refund])
 	queue_changed.emit(_queue)
 	return true
+
+
+## Revamp Phase 2: the enemy faction is hidden until any player unit gets
+## within IDENTIFY_RANGE_CELLS of this building (scouting).
+func _check_faction_identified() -> void:
+	var range_px: float = FactionManager.IDENTIFY_RANGE_CELLS * GridWorld.CELL_SIZE
+	for unit in get_tree().get_nodes_in_group("player"):
+		if unit is Node2D and global_position.distance_to(unit.global_position) <= range_px:
+			FactionManager.identify_faction(team)
+			queue_redraw()
+			return
 
 
 func _draw() -> void:
@@ -383,3 +407,10 @@ func _draw() -> void:
 		var fill_rect: Rect2 = Rect2(bar_pos, Vector2(bar_w * hp_pct, bar_h))
 		var src_rect: Rect2 = Rect2(0, 0, fill_texture.get_width() * hp_pct, fill_texture.get_height())
 		draw_texture_rect_region(fill_texture, fill_rect, src_rect)
+	# Revamp Phase 2: once scouted, the enemy's faction icon sits by the HP bar.
+	if FactionManager.is_faction_identified(team):
+		var faction: FactionData = FactionManager.get_faction(team)
+		if faction != null and faction.icon != null:
+			var icon_size := Vector2(24, 24)
+			var icon_pos := Vector2(bar_pos.x + bar_w + 6, bar_pos.y + bar_h / 2.0 - icon_size.y / 2.0)
+			draw_texture_rect(faction.icon, Rect2(icon_pos, icon_size), false)

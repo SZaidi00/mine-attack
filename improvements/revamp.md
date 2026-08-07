@@ -244,6 +244,8 @@ func is_remembered_by(team: GameManager.Team, world_pos: Vector2) -> bool:
 
 ## 3. Phase 2: Faction System
 
+> **Status: fully implemented.** `FactionData` + `scripts/resources/factions/{arcane,brute,industrial}.tres`, the `FactionManager` autoload (hidden enemy faction, scouting identification, faction-modified costs), the main-menu faction select, HUD/building faction icons, all stat/economic modifiers, and all abilities: Rune Blade, Berserk, Swarm, Fortify (splash), Blink, Arcane Shot (pierce), Heavy Bolt (slow), Volley, Fight Back, Miner Reveal, Mana Burn, Crush (stun), Supply Drop, Industrial miner Efficiency. The AI's faction is a random pick each match. Two deliberate interpretation calls: **Blink** is innate to all wizards at 15s (the guide's "reduced from 15s to 10s" implies a baseline) with Arcane shaving 5s, and **Crush** stuns on the dragon's breath hit (dragons never land, so "landing attack" was read as the dragon's attack). Wizard "Efficiency (0 mana)" is intentionally skipped — the game has no mana.
+
 ### 3.1 Overview
 
 Three asymmetric factions replace the symmetric teams. Each faction has unique unit stats, abilities, and economic modifiers. The faction is chosen in the main menu and is **hidden from the opponent** until scouted.

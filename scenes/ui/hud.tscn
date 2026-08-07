@@ -41,6 +41,13 @@ size_flags_vertical = 3
 layout_mode = 2
 theme_override_constants/separation = 16
 
+[node name="PlayerFactionIcon" type="TextureRect" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
 [node name="CoinLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -124,6 +131,13 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.133333, 0.772549, 0.368627, 1)
 text = "5000"
+
+[node name="EnemyFactionIcon" type="TextureRect" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
 
 [node name="EnemyHPLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup"]
 unique_name_in_owner = true

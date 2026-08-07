@@ -165,7 +165,7 @@ func _run_economy() -> void:
 	if queue_size < 3 and population < _Constants.MAX_UNITS:
 		coin = EconomyManager.get_coin(team)
 		var miner_target: int = 5 + level * 2
-		if miners < miner_target and coin >= _Constants.COSTS["miner"]:
+		if miners < miner_target and coin >= FactionManager.get_unit_cost(team, "miner"):
 			building.call("queue_unit", "miner")
 		else:
 			var pick: String = _pick_fighter_to_train(coin - int(reserve * 0.6))
@@ -191,7 +191,7 @@ func _pick_fighter_to_train(budget: int) -> String:
 	var best: String = ""
 	var best_deficit: float = 0.0
 	for unit_id in mix:
-		if _Constants.COSTS[unit_id] > budget:
+		if FactionManager.get_unit_cost(team, unit_id) > budget:
 			continue
 		# Score against a floor of a 10-unit army so the first picks already
 		# follow the mix instead of training one of each.

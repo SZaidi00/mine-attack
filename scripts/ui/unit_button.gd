@@ -70,7 +70,7 @@ func _update_display() -> void:
 		return
 	text = ""  # Use child labels only; name is implied by icon/position.
 	if _cost_label:
-		_cost_label.text = "%d" % _Constants.COSTS[unit_id]
+		_cost_label.text = "%d" % FactionManager.get_unit_cost(GameManager.Team.PLAYER, unit_id)
 	if _time_label:
 		_time_label.text = "%.1fs" % _Constants.TRAIN_TIMES[unit_id]
 
@@ -100,7 +100,8 @@ func _update_state() -> void:
 	var pop_maxed: bool = false
 
 	var player_coin: int = EconomyManager.get_coin(GameManager.Team.PLAYER)
-	can_afford = player_coin >= _Constants.COSTS.get(unit_id, 999999)
+	var cost: int = FactionManager.get_unit_cost(GameManager.Team.PLAYER, unit_id)
+	can_afford = player_coin >= cost
 
 	var building: Node2D = _get_player_building()
 	if building:
@@ -115,7 +116,7 @@ func _update_state() -> void:
 	if pop_maxed:
 		tooltip_text = "POPULATION MAX (%d/%d)" % [EconomyManager.get_population(GameManager.Team.PLAYER), _Constants.MAX_UNITS]
 	elif not can_afford:
-		tooltip_text = "Not enough coin (%d needed)" % _Constants.COSTS.get(unit_id, 0)
+		tooltip_text = "Not enough coin (%d needed)" % cost
 	else:
 		tooltip_text = "Train %s [%s]" % [unit_id.capitalize(), _UNIT_HOTKEYS.get(unit_id, "")]
 	_apply_style()

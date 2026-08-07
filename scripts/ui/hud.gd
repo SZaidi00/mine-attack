@@ -63,6 +63,8 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 @onready var _research_button: Button = $BottomBar/MarginContainer/HBoxContainer/ResearchButton
 @onready var _build_button: Button = $BottomBar/MarginContainer/HBoxContainer/BuildButton
 @onready var _research_panel: Control = $ResearchPanel
+@onready var _player_faction_icon: TextureRect = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/PlayerFactionIcon
+@onready var _enemy_faction_icon: TextureRect = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyFactionIcon
 @onready var _stance_buttons: Dictionary = {}
 @onready var _game_over_panel: PanelContainer = $GameOverPanel
 
@@ -129,6 +131,7 @@ func _ready() -> void:
 		enemy_building.hp_changed.connect(_on_building_hp_changed.bind(enemy_building))
 
 	GameManager.game_over.connect(_on_game_over)
+	_setup_faction_icons()
 	_build_pause_menu()
 	_build_build_menu()
 	_on_economy_changed(GameManager.Team.PLAYER)
@@ -303,9 +306,36 @@ func _update_build_menu() -> void:
 	_build_mine_lantern_button.tooltip_text = "Underground light: %d-cell vision, permanently reveals buried ore in its radius. Must be placed in a dug-out tunnel cell on your half." % _Constants.UNDERGROUND_LANTERN_VISION
 
 
+## Revamp Phase 2: faction icons in the top bar. The player's own faction is
+## always shown; the enemy's stays hidden until a scout identifies it.
+func _setup_faction_icons() -> void:
+	if _player_faction_icon:
+		var player_faction: FactionData = FactionManager.get_faction(GameManager.Team.PLAYER)
+		if player_faction != null and player_faction.icon != null:
+			_player_faction_icon.texture = player_faction.icon
+		else:
+			_player_faction_icon.visible = false
+	if _enemy_faction_icon:
+		_enemy_faction_icon.visible = false
+		if FactionManager.is_faction_identified(GameManager.Team.ENEMY):
+			_on_faction_identified(GameManager.Team.ENEMY)
+		elif not FactionManager.faction_identified.is_connected(_on_faction_identified):
+			FactionManager.faction_identified.connect(_on_faction_identified)
+
+
+func _on_faction_identified(team: GameManager.Team) -> void:
+	if team != GameManager.Team.ENEMY or _enemy_faction_icon == null:
+		return
+	var enemy_faction: FactionData = FactionManager.get_faction(GameManager.Team.ENEMY)
+	if enemy_faction != null and enemy_faction.icon != null:
+		_enemy_faction_icon.texture = enemy_faction.icon
+		_enemy_faction_icon.visible = true
+
+
 func _on_pause_restart() -> void:
 	get_tree().paused = false
 	GameManager.reset()
+	FactionManager.reset()
 	EconomyManager.reset()
 	ResearchManager.reset()
 	get_tree().reload_current_scene()
@@ -318,6 +348,7 @@ func _on_pause_restart() -> void:
 func _quit_to_menu() -> void:
 	get_tree().paused = false
 	GameManager.reset()
+	FactionManager.reset()
 	EconomyManager.reset()
 	ResearchManager.reset()
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
@@ -683,6 +714,7 @@ func _play_again() -> void:
 	# Autoloads survive scene reload, so reset global state before restarting.
 	get_tree().paused = false
 	GameManager.reset()
+	FactionManager.reset()
 	EconomyManager.reset()
 	ResearchManager.reset()
 	get_tree().reload_current_scene()
