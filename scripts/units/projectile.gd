@@ -15,6 +15,8 @@ const _BLAST_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/proj
 ## Arcane Shot (Arcane archer): the arrow pierces through the first target
 ## and also strikes the nearest enemy behind it.
 var pierce: bool = false
+## Color multiplier for the sprite (Arcane tower magic missiles).
+var tint: Color = Color.WHITE
 
 var target_position: Vector2 = Vector2.ZERO
 var homing_target: Node2D = null
@@ -41,6 +43,13 @@ func _process(delta: float) -> void:
 	# Match over: freeze mid-flight.
 	if not GameManager.game_active:
 		return
+	# Revamp Phase 3: walls block projectiles — an enemy wall segment in the
+	# flight path absorbs the shot.
+	for wall in get_tree().get_nodes_in_group("walls"):
+		if wall.team != team and wall.is_built() and wall.global_position.distance_to(global_position) <= 14.0:
+			wall.take_damage(damage)
+			queue_free()
+			return
 	_update_target_position()
 	var dir: Vector2 = target_position - global_position
 	var dist: float = dir.length()
@@ -139,10 +148,10 @@ func _draw() -> void:
 		_draw_dragon_flame()
 	elif is_fireball:
 		var blast_size: Vector2 = _BLAST_TEXTURE.get_size()
-		draw_texture(_BLAST_TEXTURE, -blast_size / 2.0)
+		draw_texture(_BLAST_TEXTURE, -blast_size / 2.0, tint)
 	else:
 		var arrow_size: Vector2 = _ARROW_TEXTURE.get_size()
-		draw_texture(_ARROW_TEXTURE, -arrow_size / 2.0)
+		draw_texture(_ARROW_TEXTURE, -arrow_size / 2.0, tint)
 
 
 ## Fire breath: a fading ember trail behind a layered, flickering flame head.

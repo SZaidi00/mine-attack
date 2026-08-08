@@ -37,6 +37,17 @@ extends Resource
 @export var starting_gold_bonus: int = 0
 @export var starting_miner_bonus: int = 0
 
+# Structure modifiers (Revamp Phase 3; values here mirror the neutral
+# Constants defaults, so a faction only overrides what it changes).
+@export var tower_cost: int = 300
+@export var tower_hp: int = 800
+@export var tower_damage: int = 12
+@export var tower_cooldown: float = 1.2
+## Industrial builds towers twice as fast (0.5).
+@export var tower_build_time_mult: float = 1.0
+@export var wall_cost: int = 50
+@export var wall_max_count: int = 2
+
 # Ability flags (see unit.gd — each gates one faction ability).
 @export var swordsman_rune_blade: bool = false
 @export var swordsman_berserk: bool = false

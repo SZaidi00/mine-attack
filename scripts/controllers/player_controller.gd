@@ -185,7 +185,7 @@ func _process(delta: float) -> void:
 		var world: Vector2 = _screen_to_world(get_viewport().get_mouse_position())
 		var cell: Vector2i = _grid.world_to_grid(world)
 		_build_ghost.global_position = _grid.grid_to_world(cell)
-		var err: String = _lantern_placement_error(_build_mode, cell)
+		var err: String = _placement_error(_build_mode, cell)
 		_build_ghost.modulate = Color(0.4, 1.0, 0.4, 0.55) if err == "" else Color(1.0, 0.35, 0.35, 0.55)
 	if camera == null:
 		return
@@ -243,7 +243,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _build_mode != "":
 		if event.is_action_pressed(_Constants.INPUT_SELECT):
 			var world: Vector2 = _screen_to_world(get_viewport().get_mouse_position())
-			if try_place_lantern(_build_mode, world):
+			if try_place_structure(_build_mode, world):
 				_cancel_build_mode()
 		elif event.is_action_pressed(_Constants.INPUT_COMMAND) or event.is_action_pressed(_Constants.INPUT_PAUSE):
 			_cancel_build_mode()
@@ -434,16 +434,16 @@ func _issue_command(screen_pos: Vector2) -> void:
 			u.attack_building(enemy_building)
 		return
 
-	# 2b. Enemy lantern clicked -> attack with fighters (kills its vision).
-	var enemy_lantern: Node2D = _enemy_lantern_at(world_pos)
-	if enemy_lantern != null:
+	# 2b. Enemy structure clicked (lantern/tower/wall) -> attack with fighters.
+	var enemy_structure: Node2D = _enemy_structure_at(world_pos)
+	if enemy_structure != null:
 		var fighters: Array = _filter_fighters(_selected_units)
 		if fighters.is_empty():
-			_reject_command("attack_lantern", "no fighters selected", world_pos)
+			_reject_command("attack_structure", "no fighters selected", world_pos)
 			return
-		DebugLog.log_command("PlayerController", "attack_lantern", "target=%d fighters=%d" % [enemy_lantern.get_instance_id(), fighters.size()])
+		DebugLog.log_command("PlayerController", "attack_structure", "target=%d fighters=%d" % [enemy_structure.get_instance_id(), fighters.size()])
 		for u in fighters:
-			u.attack_building(enemy_lantern)
+			u.attack_building(enemy_structure)
 		return
 
 	# 3. Central wall clicked with miners selected -> breach.
@@ -521,15 +521,16 @@ func _enemy_unit_at(world_pos: Vector2) -> Unit:
 	return null
 
 
-## Enemy lantern near the click point (Fog of War: only while visible).
-func _enemy_lantern_at(world_pos: Vector2) -> Node2D:
-	for lantern in get_tree().get_nodes_in_group("lanterns"):
-		if lantern.team == GameManager.Team.PLAYER:
-			continue
-		if not _grid.is_visible_to(GameManager.Team.PLAYER, lantern.global_position):
-			continue
-		if lantern.global_position.distance_to(world_pos) < GridWorld.CELL_SIZE:
-			return lantern
+## Enemy structure near the click point (Fog of War: only while visible).
+func _enemy_structure_at(world_pos: Vector2) -> Node2D:
+	for group: String in ["lanterns", "towers", "walls"]:
+		for structure in get_tree().get_nodes_in_group(group):
+			if structure.team == GameManager.Team.PLAYER:
+				continue
+			if not _grid.is_visible_to(GameManager.Team.PLAYER, structure.global_position):
+				continue
+			if structure.global_position.distance_to(world_pos) < GridWorld.CELL_SIZE:
+				return structure
 	return null
 
 
@@ -717,11 +718,14 @@ func is_rally_armed() -> bool:
 	return _rally_armed
 
 
-# ---------- Lantern placement (Revamp Phase 1) ----------
+# ---------- Structure placement (Revamp Phases 1 & 3) ----------
 
-## Enters lantern placement mode: a ghost follows the cursor until left-click
-## confirms or right-click/Esc cancels. kind is "lantern" (surface) or
-## "underground_lantern".
+const _TOWER_SCENE: PackedScene = preload("res://scenes/tower.tscn")
+const _WALL_SCENE: PackedScene = preload("res://scenes/wall_segment.tscn")
+
+## Enters placement mode: a ghost follows the cursor until left-click
+## confirms or right-click/Esc cancels. kind is "lantern" (surface),
+## "underground_lantern", "tower", or "wall".
 func start_build_placement(kind: String) -> void:
 	_cancel_build_mode()
 	_rally_armed = false
@@ -729,26 +733,32 @@ func start_build_placement(kind: String) -> void:
 	_build_ghost = Node2D.new()
 	_build_ghost.name = "BuildGhost"
 	var texture: Texture2D
-	var vision: int
-	if kind == "underground_lantern":
-		texture = preload("res://frost_mines_assets/props/lantern_underground.png")
-		vision = _Constants.UNDERGROUND_LANTERN_VISION
-	else:
-		texture = preload("res://frost_mines_assets/props/lantern_t1.png")
-		vision = _Constants.LANTERN_T1_VISION
+	var ring_radius_cells: int = 0
+	match kind:
+		"underground_lantern":
+			texture = preload("res://frost_mines_assets/props/lantern_underground.png")
+		"tower":
+			texture = preload("res://frost_mines_assets/props/tower_player.png")
+			ring_radius_cells = _Constants.TOWER_RANGE_CELLS
+		"wall":
+			texture = preload("res://frost_mines_assets/props/wall_player.png")
+		_:
+			texture = preload("res://frost_mines_assets/props/lantern_t1.png")
+			ring_radius_cells = _Constants.LANTERN_T1_VISION
 	var sprite: Sprite2D = Sprite2D.new()
 	sprite.texture = texture
-	if kind != "underground_lantern":
-		# Surface lanterns stand on the ground line at the bottom of the row.
+	if kind == "lantern" or kind == "tower":
+		# Surface structures stand on the ground line at the bottom of the row.
 		sprite.position = Vector2(0, 16.0 - texture.get_height() / 2.0)
 	_build_ghost.add_child(sprite)
-	# Faint ring showing the vision radius the lantern would provide.
-	var ring: Sprite2D = Sprite2D.new()
-	ring.texture = _GHOST_RING
-	var diameter: float = vision * GridWorld.CELL_SIZE * 2.0
-	ring.scale = Vector2.ONE * (diameter / _GHOST_RING.get_width())
-	ring.modulate = Color(1.0, 0.85, 0.4, 0.3)
-	_build_ghost.add_child(ring)
+	if ring_radius_cells > 0:
+		# Faint ring showing the vision/attack radius the structure provides.
+		var ring: Sprite2D = Sprite2D.new()
+		ring.texture = _GHOST_RING
+		var diameter: float = ring_radius_cells * GridWorld.CELL_SIZE * 2.0
+		ring.scale = Vector2.ONE * (diameter / _GHOST_RING.get_width())
+		ring.modulate = Color(1.0, 0.85, 0.4, 0.3)
+		_build_ghost.add_child(ring)
 	add_child(_build_ghost)
 	DebugLog.log_command("PlayerController", "build", "placement mode: " + kind)
 
@@ -764,6 +774,98 @@ func _cancel_build_mode() -> void:
 
 func is_build_mode_active() -> bool:
 	return _build_mode != ""
+
+
+## Validates a placement cell for any build kind. Returns "" when valid,
+## otherwise a human-readable reason (also used to tint the placement ghost).
+func _placement_error(kind: String, cell: Vector2i) -> String:
+	match kind:
+		"tower":
+			return _tower_placement_error(cell)
+		"wall":
+			return _wall_placement_error(cell)
+		_:
+			return _lantern_placement_error(kind, cell)
+
+
+## Any placed structure standing on the given cell (any team — occupancy is
+## physical).
+func _structure_at_cell(cell: Vector2i) -> Node2D:
+	for group: String in ["lanterns", "towers", "walls"]:
+		for structure in get_tree().get_nodes_in_group(group):
+			if _grid.world_to_grid(structure.global_position) == cell:
+				return structure
+	return null
+
+
+## Tower rules (Revamp Phase 3): own half's surface row, not within 2 cells of
+## a building or mine entry, max TOWER_MAX_COUNT per team.
+func _tower_placement_error(cell: Vector2i) -> String:
+	if cell.y != 0:
+		return "must be placed on the surface"
+	if cell.x > -2:
+		return "own half of the map only"
+	if _structure_at_cell(cell) != null:
+		return "cell is occupied"
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.get_footprint_cell_rect().grow(_Constants.TOWER_MIN_BUILDING_DISTANCE).has_point(cell):
+			return "too close to a building"
+	for entry in get_tree().get_nodes_in_group("mine_entries"):
+		var entry_cell: Vector2i = _grid.world_to_grid(entry.global_position)
+		if Vector2(entry_cell - cell).length() < _Constants.TOWER_MIN_BUILDING_DISTANCE:
+			return "too close to the mine entry"
+	var count: int = 0
+	for tower in get_tree().get_nodes_in_group("towers"):
+		if tower.team == GameManager.Team.PLAYER:
+			count += 1
+	if count >= _Constants.TOWER_MAX_COUNT:
+		return "max towers reached"
+	return ""
+
+
+## Wall rules (Revamp Phase 3): own half's surface row, unoccupied cell, at
+## most a couple of segments per team (faction-modified). The guide's chain
+## placement was dropped — with a 2-segment cap there is nothing to chain.
+func _wall_placement_error(cell: Vector2i) -> String:
+	if cell.y != 0:
+		return "must be placed on the surface"
+	if cell.x > -2:
+		return "own half of the map only"
+	if _structure_at_cell(cell) != null:
+		return "cell is occupied"
+	var team: GameManager.Team = GameManager.Team.PLAYER
+	var count: int = 0
+	for wall in get_tree().get_nodes_in_group("walls"):
+		if wall.team == team:
+			count += 1
+	if count >= FactionManager.get_wall_max_count(team):
+		return "max walls reached"
+	return ""
+
+
+## Validates and executes a tower/wall placement (lanterns route to
+## try_place_lantern). Spends the coin and spawns the structure on success.
+## Public so the HUD, tests, and (later) the AI can share one code path.
+func try_place_structure(kind: String, world_pos: Vector2) -> bool:
+	if kind == "lantern" or kind == "underground_lantern":
+		return try_place_lantern(kind, world_pos)
+	var cell: Vector2i = _grid.world_to_grid(world_pos)
+	var err: String = _placement_error(kind, cell)
+	if err != "":
+		_reject_command("build", err, world_pos)
+		return false
+	var team: GameManager.Team = GameManager.Team.PLAYER
+	var cost: int = FactionManager.get_tower_cost(team) if kind == "tower" else FactionManager.get_wall_cost(team)
+	if not EconomyManager.spend_coin(team, cost):
+		_reject_command("build", "not enough coin (%d needed)" % cost, world_pos)
+		return false
+	var structure: Node2D = (_TOWER_SCENE if kind == "tower" else _WALL_SCENE).instantiate()
+	structure.team = team
+	structure.total_cost = cost
+	structure.global_position = _grid.grid_to_world(cell)
+	get_node("/root/Main/Structures").add_child(structure)
+	DebugLog.log_command("PlayerController", "build", "%s at %s" % [kind, str(cell)])
+	return true
 
 
 ## Validates a lantern placement cell. Returns "" when valid, otherwise a

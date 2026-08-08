@@ -753,7 +753,12 @@ func _follow_path(delta: float) -> void:
 		var separation: Vector2 = _compute_separation()
 		if separation != Vector2.ZERO:
 			move += separation.normalized() * min(step * 0.6, separation.length())
-	global_position += move
+	# Revamp Phase 3: never step into a built wall's cell — A* routes around
+	# it, but a large step or the separation nudge could otherwise carry the
+	# unit straight through. A unit already inside the cell when the wall went
+	# up is always allowed to step out.
+	if not _is_wall_at(global_position + move) or _is_wall_at(global_position):
+		global_position += move
 
 
 ## Phase 3.4: push away from nearby friendly units to avoid stacking and
@@ -812,14 +817,27 @@ func _nearest_melee_threat(max_dist: float) -> Unit:
 
 
 ## Cheap point walkability for kiting (no A*): the surface row is open ground;
-## underground only EMPTY cells can be stood on.
+## underground only EMPTY cells can be stood on. Built wall segments block
+## their cell either way.
 func _is_walkable_point(world_pos: Vector2) -> bool:
+	if _is_wall_at(world_pos):
+		return false
 	if world_pos.y <= GridWorld.CELL_SIZE:
 		return world_pos.y >= 0.0 \
 			and world_pos.x >= GridWorld.X_MIN * GridWorld.CELL_SIZE \
 			and world_pos.x <= (GridWorld.X_MAX + 1) * GridWorld.CELL_SIZE
 	var cell: GridWorld.Cell = _grid.get_cell(_grid.world_to_grid(world_pos))
 	return cell != null and cell.type == GridWorld.CellType.EMPTY
+
+
+## True when a built (not under-construction) ENEMY wall segment occupies the
+## cell containing world_pos. Own walls never block their team (Phase 3).
+func _is_wall_at(world_pos: Vector2) -> bool:
+	var cell: Vector2i = _grid.world_to_grid(world_pos)
+	for wall in get_tree().get_nodes_in_group("walls"):
+		if wall.team != team and wall.is_built() and wall.get_cell() == cell:
+			return true
+	return false
 
 
 func _process_attack(delta: float) -> void:
@@ -839,7 +857,8 @@ func _process_attack(delta: float) -> void:
 		range_pos = _target_unit.get_combat_position() if _target_unit.has_method("get_combat_position") else path_pos
 		target_alive = true
 	elif _target_building != null and is_instance_valid(_target_building) \
-			and (_target_building.is_in_group("buildings") or _target_building.is_in_group("lanterns")):
+			and (_target_building.is_in_group("buildings") or _target_building.is_in_group("lanterns") \
+			or _target_building.is_in_group("towers") or _target_building.is_in_group("walls")):
 		# Measure range to the closest point on the building's body rect, not
 		# its center, so melee units engage at the edge of the footprint.
 		var rect: Rect2 = _target_building.call("get_bounds_rect")
@@ -1304,7 +1323,8 @@ func is_cell_blacklisted(grid_pos: Vector2i) -> bool:
 
 
 func _repath(target_world: Vector2) -> void:
-	_path = _grid.find_path(global_position, target_world)
+	# Team is passed so own walls never block their builder (Phase 3 seals).
+	_path = _grid.find_path(global_position, target_world, team)
 	_path_index = 0
 	# Skip the first point if it is the current cell or if moving to it would
 	# send us backward relative to the overall target direction (can happen when
@@ -1781,7 +1801,8 @@ func _find_auto_attack_target():
 				return best
 
 	# 3. Enemy building in sight range (a static target counts if the team
-	# remembers it), and enemy lanterns (which must be currently visible).
+	# remembers it), and enemy lanterns/towers (which must be currently
+	# visible). Walls are only attacked on explicit orders.
 	var enemy_building: Node2D = _get_enemy_building()
 	if enemy_building != null and _grid.is_remembered_by(team, enemy_building.global_position):
 		if leashed and _post_point.distance_squared_to(enemy_building.global_position) > leash_d2:
@@ -1789,12 +1810,12 @@ func _find_auto_attack_target():
 		var d: float = get_combat_position().distance_squared_to(enemy_building.global_position)
 		if d <= data.sight_range * data.sight_range:
 			return enemy_building
-	var enemy_lantern: Node2D = _nearest_visible_enemy_lantern()
-	if enemy_lantern != null:
-		if not (leashed and _post_point.distance_squared_to(enemy_lantern.global_position) > leash_d2):
-			var d: float = get_combat_position().distance_squared_to(enemy_lantern.global_position)
+	var enemy_structure: Node2D = _nearest_visible_enemy_structure()
+	if enemy_structure != null:
+		if not (leashed and _post_point.distance_squared_to(enemy_structure.global_position) > leash_d2):
+			var d: float = get_combat_position().distance_squared_to(enemy_structure.global_position)
 			if d <= data.sight_range * data.sight_range:
-				return enemy_lantern
+				return enemy_structure
 
 	# 4. Enemy miners on our side of the wall (underground only).
 	if is_underground:
@@ -1823,20 +1844,21 @@ func _find_auto_attack_target():
 	return null
 
 
-## Nearest built enemy lantern the team can currently see (Fog of War target
-## scan helper — lanterns are static but destructible vision sources).
-func _nearest_visible_enemy_lantern() -> Node2D:
+## Nearest built enemy lantern or tower the team can currently see (Fog of
+## War target scan helper — static but destructible defense/vision sources).
+func _nearest_visible_enemy_structure() -> Node2D:
 	var best: Node2D = null
 	var best_dist: float = INF
-	for lantern in get_tree().get_nodes_in_group("lanterns"):
-		if lantern.team == team or not lantern.is_built():
-			continue
-		if not _team_can_see(lantern.global_position):
-			continue
-		var d: float = get_combat_position().distance_squared_to(lantern.global_position)
-		if d < best_dist:
-			best_dist = d
-			best = lantern
+	for group: String in ["lanterns", "towers"]:
+		for structure in get_tree().get_nodes_in_group(group):
+			if structure.team == team or not structure.is_built():
+				continue
+			if not _team_can_see(structure.global_position):
+				continue
+			var d: float = get_combat_position().distance_squared_to(structure.global_position)
+			if d < best_dist:
+				best_dist = d
+				best = structure
 	return best
 
 

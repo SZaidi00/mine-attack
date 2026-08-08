@@ -60,6 +60,22 @@ func get_starting_miners(team: GameManager.Team) -> int:
 	return Constants.STARTING_MINERS + (faction.starting_miner_bonus if faction else 0)
 
 
+## Revamp Phase 3: faction-modified structure prices/limits.
+func get_tower_cost(team: GameManager.Team) -> int:
+	var faction := get_faction(team)
+	return faction.tower_cost if faction else Constants.TOWER_COST
+
+
+func get_wall_cost(team: GameManager.Team) -> int:
+	var faction := get_faction(team)
+	return faction.wall_cost if faction else Constants.PLACED_WALL_COST
+
+
+func get_wall_max_count(team: GameManager.Team) -> int:
+	var faction := get_faction(team)
+	return faction.wall_max_count if faction else Constants.PLACED_WALL_MAX_COUNT
+
+
 ## Hidden information: the opponent's faction is only revealed by scouting
 ## (a unit getting within IDENTIFY_RANGE_CELLS of the enemy building).
 func is_faction_identified(team: GameManager.Team) -> bool:

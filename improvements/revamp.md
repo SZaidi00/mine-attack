@@ -428,6 +428,8 @@ func apply_faction_stats(unit: Unit, team: GameManager.Team):
 
 ## 4. Phase 3: Placeable Structures
 
+> **Status: implemented**, following the project's existing Lantern pattern (per-structure classes `Tower`/`WallSegment` under `Main/Structures`) rather than the unified `Structure` base class sketched in §4.3. Towers: placement rules, faction variants (Arcane 350g/600 HP purple-tinted missiles, Brute 1200 HP/1.8s/18 dmg, Industrial 200g/2× build), fighter>miner>building priority, vision, salvage. Walls: A* movement block once built, projectile absorption, faction cost/max (Industrial 30g/3), salvage. Both are invulnerable under construction and attackable via right-click; towers are also auto-attacked like lanterns. **Deviations:** tower range/vision reduced from 18 cells to 8 attack / 10 vision (18 cells covered a third of the map); wall cap reduced from 10 (15 Industrial) to 2 (3 Industrial) and chain placement dropped — a 2D map this size has no room for long walls; walls seal their full column (surface + dug cells beneath, re-sealed as new cells are dug) instead of just the surface cell — otherwise A* routes enemies through tunnels below the surface row and walls never get attacked; the seal is team-aware (`find_path` lifts the owner's seals) so a wall never blocks its builder; miners cannot breach placed walls (mining is underground-only in this game — fighters destroy walls); walls are not auto-attack targets (explicit orders only); the AI does not place structures yet (deferred to the Phase 8 AI refactor).
+
 ### 4.1 Sentry Tower
 
 **Placement:**

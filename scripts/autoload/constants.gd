@@ -131,6 +131,30 @@ const UNDERGROUND_LANTERN_MIN_DISTANCE: int = 2  # cells between underground lan
 # Destroyed lanterns drop this share of their build cost as a coin pickup.
 const LANTERN_SALVAGE_RATIO: float = 0.5
 
+# ─── PLACEABLE STRUCTURES (Revamp Phase 3) ───
+# Sentry towers: static surface defenses that auto-attack the highest-priority
+# enemy in range (fighters > miners > buildings) and double as vision sources.
+# Factions override cost/HP/damage/cooldown/build speed (see FactionData).
+const TOWER_COST: int = 300
+const TOWER_HP: int = 800
+const TOWER_RANGE_CELLS: int = 8
+const TOWER_DAMAGE: int = 12
+const TOWER_COOLDOWN: float = 1.2
+const TOWER_BUILD_TIME: float = 8.0
+const TOWER_MAX_COUNT: int = 2
+const TOWER_VISION: int = 10  # surface only
+const TOWER_MIN_BUILDING_DISTANCE: int = 2  # cells from any building/mine entry
+# Placeable walls: single-cell surface barriers that block movement (A* solid
+# once built) and projectiles. Destroyed by fighter attacks. Factions override
+# cost and max count (Industrial: 30g, 3).
+# (PLACED_ prefix: WALL_HP/WALL_* already name the central wall's constants.)
+const PLACED_WALL_COST: int = 50
+const PLACED_WALL_HP: int = 400
+const PLACED_WALL_BUILD_TIME: float = 3.0
+const PLACED_WALL_MAX_COUNT: int = 2
+# Destroyed towers/walls drop this share of their build cost (as lanterns do).
+const STRUCTURE_SALVAGE_RATIO: float = 0.5
+
 # ─── RESEARCH TREE ───
 # Timed techs bought with coin through the ResearchManager (one active
 # research per team, 100% refund on cancel). These coexist with the instant

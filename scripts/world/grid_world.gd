@@ -431,7 +431,7 @@ func grid_to_world(grid_pos: Vector2i, centered: bool = true) -> Vector2:
 	return Vector2(grid_pos.x * CELL_SIZE, grid_pos.y * CELL_SIZE)
 
 
-func find_path(from_world: Vector2, to_world: Vector2) -> PackedVector2Array:
+func find_path(from_world: Vector2, to_world: Vector2, team: int = -1) -> PackedVector2Array:
 	# Units and targets can drift slightly above the surface row (spawn jitter,
 	# separation nudges, per-unit target offsets). Grid y = -1 is outside the
 	# A* region, so snap back to the surface row instead of failing the path.
@@ -441,6 +441,22 @@ func find_path(from_world: Vector2, to_world: Vector2) -> PackedVector2Array:
 	var end: Vector2i = world_to_grid(to_world)
 	if not _astar.is_in_boundsv(start) or not _astar.is_in_boundsv(end):
 		return PackedVector2Array()
+	# Revamp Phase 3: a placeable wall never blocks its owning team. A*
+	# solidity is global, so the owner's seals are lifted for the duration of
+	# the query and restored afterwards.
+	var lifted: Array = []
+	if team >= 0:
+		for pos in _wall_sealed_cells:
+			if _wall_sealed_cells[pos] == team:
+				_astar.set_point_solid(pos, false)
+				lifted.append(pos)
+	var world_path: PackedVector2Array = _compute_path(start, end)
+	for pos in lifted:
+		_astar.set_point_solid(pos, true)
+	return world_path
+
+
+func _compute_path(start: Vector2i, end: Vector2i) -> PackedVector2Array:
 	# Units and targets can sit on solid cells (a target cell that is an undug
 	# tile, a unit pushed onto a blocked cell). Redirect to the nearest walkable
 	# cell instead of failing the whole command.
@@ -456,6 +472,27 @@ func find_path(from_world: Vector2, to_world: Vector2) -> PackedVector2Array:
 	for p in grid_path:
 		world_path.append(p)
 	return world_path
+
+
+## Revamp Phase 3: cells sealed by placeable walls (the column beneath each
+## segment), mapped to the owning team. A* stays solid for everyone; find_path
+## lifts the seals for the owning team so a wall never blocks its builder.
+var _wall_sealed_cells: Dictionary = {}  # Vector2i -> GameManager.Team
+
+
+func seal_wall_cell(pos: Vector2i, team: GameManager.Team) -> void:
+	if not _astar.is_in_boundsv(pos):
+		return
+	_wall_sealed_cells[pos] = team
+	_astar.set_point_solid(pos, true)
+
+
+func unseal_wall_cell(pos: Vector2i) -> void:
+	if not _wall_sealed_cells.has(pos):
+		return
+	_wall_sealed_cells.erase(pos)
+	if _astar.is_in_boundsv(pos):
+		_astar.set_point_solid(pos, false)
 
 
 func damage_cell(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
@@ -646,8 +683,8 @@ func _update_vision(team: GameManager.Team) -> void:
 
 
 ## Every vision source for a team as [center_cell, radius_cells, layer_mask]
-## triples: living units (per-type radii), the team's building, and built
-## lanterns.
+## triples: living units (per-type radii), the team's building, built
+## lanterns, and built towers.
 func _get_vision_sources(team: GameManager.Team) -> Array:
 	var sources: Array = []
 	for unit in get_tree().get_nodes_in_group("units"):
@@ -663,6 +700,10 @@ func _get_vision_sources(team: GameManager.Team) -> Array:
 		if lantern.team == team and lantern.is_built():
 			var layer: int = VISION_LAYER_UNDERGROUND if lantern.is_underground_lantern else VISION_LAYER_SURFACE
 			sources.append([world_to_grid(lantern.global_position), lantern.vision_radius, layer])
+	# Revamp Phase 3: built sentry towers are surface-only vision sources.
+	for tower in get_tree().get_nodes_in_group("towers"):
+		if tower.team == team and tower.is_built():
+			sources.append([world_to_grid(tower.global_position), tower.vision_radius, VISION_LAYER_SURFACE])
 	return sources
 
 

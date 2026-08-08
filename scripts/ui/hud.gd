@@ -254,6 +254,8 @@ func _build_build_menu() -> void:
 	_build_menu.add_child(vbox)
 	_build_lantern_button = _add_build_option(vbox, "lantern")
 	_build_mine_lantern_button = _add_build_option(vbox, "underground_lantern")
+	_build_tower_button = _add_build_option(vbox, "tower")
+	_build_wall_button = _add_build_option(vbox, "wall")
 	add_child(_build_menu)
 
 
@@ -304,6 +306,25 @@ func _update_build_menu() -> void:
 	_build_mine_lantern_button.disabled = underground_count >= _Constants.UNDERGROUND_LANTERN_MAX_COUNT \
 		or not EconomyManager.can_afford(team, ug_cost)
 	_build_mine_lantern_button.tooltip_text = "Underground light: %d-cell vision, permanently reveals buried ore in its radius. Must be placed in a dug-out tunnel cell on your half." % _Constants.UNDERGROUND_LANTERN_VISION
+	var tower_count: int = 0
+	for tower in get_tree().get_nodes_in_group("towers"):
+		if tower.team == team:
+			tower_count += 1
+	var tower_cost: int = FactionManager.get_tower_cost(team)
+	_build_tower_button.text = "Sentry Tower — %dg (%d/%d)" % [tower_cost, tower_count, _Constants.TOWER_MAX_COUNT]
+	_build_tower_button.disabled = tower_count >= _Constants.TOWER_MAX_COUNT \
+		or not EconomyManager.can_afford(team, tower_cost)
+	_build_tower_button.tooltip_text = "Static defense: shoots enemies within %d cells (fighters first), doubles as a %d-cell vision source. Surface only, on your half, away from buildings and the mine entry." % [_Constants.TOWER_RANGE_CELLS, _Constants.TOWER_VISION]
+	var wall_count: int = 0
+	for wall in get_tree().get_nodes_in_group("walls"):
+		if wall.team == team:
+			wall_count += 1
+	var wall_cost: int = FactionManager.get_wall_cost(team)
+	var wall_max: int = FactionManager.get_wall_max_count(team)
+	_build_wall_button.text = "Wall — %dg (%d/%d)" % [wall_cost, wall_count, wall_max]
+	_build_wall_button.disabled = wall_count >= wall_max \
+		or not EconomyManager.can_afford(team, wall_cost)
+	_build_wall_button.tooltip_text = "A barrier segment that blocks movement and projectiles (%d HP). Surface only, on your half." % _Constants.PLACED_WALL_HP
 
 
 ## Revamp Phase 2: faction icons in the top bar. The player's own faction is
@@ -676,6 +697,8 @@ var _pause_panel: PanelContainer = null
 var _build_menu: PanelContainer = null
 var _build_lantern_button: Button = null
 var _build_mine_lantern_button: Button = null
+var _build_tower_button: Button = null
+var _build_wall_button: Button = null
 
 
 func _on_game_over(winner: GameManager.Team) -> void:

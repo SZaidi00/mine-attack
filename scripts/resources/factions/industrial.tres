@@ -26,6 +26,10 @@ cost_overrides = {
 }
 starting_gold_bonus = 200
 starting_miner_bonus = 1
+tower_cost = 200
+tower_build_time_mult = 0.5
+wall_cost = 30
+wall_max_count = 3
 swordsman_swarm = true
 archer_volley = true
 dragon_supply_drop = true
