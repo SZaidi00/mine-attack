@@ -1,21 +1,11 @@
 extends CanvasLayer
+class_name HUD
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
-# Flat UI palette: solid dark panels and buttons with a faint border — no
-# gradient textures, so the bars stay readable over any background.
-const _COL_PANEL_BG: Color = Color(0.047, 0.066, 0.106, 0.94)
-const _COL_PANEL_BORDER: Color = Color(1, 1, 1, 0.08)
-const _COL_BTN_NORMAL: Color = Color("#1a2434")
-const _COL_BTN_HOVER: Color = Color("#253650")
-const _COL_BTN_PRESSED: Color = Color("#111927")
-const _COL_BTN_DISABLED: Color = Color("#151c29")
-const _COL_BTN_BORDER: Color = Color(1, 1, 1, 0.07)
-const _COL_BTN_HOVER_BORDER: Color = Color("#4a86c8")
-const _COL_TAB_ACTIVE: Color = Color("#1f3a5c")
-const _COL_TAB_ACTIVE_BORDER: Color = Color("#4a86c8")
-const _COL_UPGRADE_BG: Color = Color("#272210")
-const _COL_UPGRADE_BORDER: Color = Color("#8a6d1f")
+const HUDStyling = preload("res://scripts/ui/hud_styling.gd")
+const HUDMenus = preload("res://scripts/ui/hud_menus.gd")
+const HUDUpdates = preload("res://scripts/ui/hud_updates.gd")
 
 const _ICON_COIN: Texture2D = preload("res://frost_mines_assets/icons/icon_coin.png")
 const _ICON_MINER: Texture2D = preload("res://frost_mines_assets/icons/icon_miner.png")
@@ -68,25 +58,35 @@ const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_att
 @onready var _stance_buttons: Dictionary = {}
 @onready var _game_over_panel: PanelContainer = $GameOverPanel
 
+var _styling: HUDStyling
+var _menus: HUDMenus
+var _updates: HUDUpdates
+
+
+func _init() -> void:
+	_styling = HUDStyling.new(self)
+	_menus = HUDMenus.new(self)
+	_updates = HUDUpdates.new(self)
+
 
 func _ready() -> void:
 	# The HUD must keep processing while the tree is paused so the pause menu
 	# stays visible and clickable (the classic pause-menu-pauses-itself bug).
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_ignore_mouse_recursive($TopBar)
-	_ignore_mouse_recursive($BottomBar)
-	_ignore_mouse_recursive(_game_over_panel)
+	_styling._ignore_mouse_recursive($TopBar)
+	_styling._ignore_mouse_recursive($BottomBar)
+	_styling._ignore_mouse_recursive(_game_over_panel)
 	# QueuePanel keeps default mouse handling: its ScrollContainer needs wheel
 	# input and its runtime cancel buttons need clicks.
-	_style_panel($TopBar)
-	_style_panel($BottomBar)
-	_style_panel($QueuePanel)
-	_style_panel(_game_over_panel)
-	_style_tab_buttons()
-	_style_speed_buttons()
-	_style_upgrade_button()
-	_style_fighter_upgrade_buttons()
-	_style_stance_buttons()
+	_styling._style_panel($TopBar)
+	_styling._style_panel($BottomBar)
+	_styling._style_panel($QueuePanel)
+	_styling._style_panel(_game_over_panel)
+	_styling._style_tab_buttons()
+	_styling._style_speed_buttons()
+	_styling._style_upgrade_button()
+	_styling._style_fighter_upgrade_buttons()
+	_styling._style_stance_buttons()
 	_stance_buttons = {
 		"attack": _attack_button,
 		"defend": _defend_button,
@@ -105,7 +105,7 @@ func _ready() -> void:
 	_rally_button.pressed.connect(_stance.bind("rally"))
 	_kill_button.pressed.connect(_kill_selected)
 	_research_button.pressed.connect(toggle_research_panel)
-	_build_button.pressed.connect(_toggle_build_menu)
+	_build_button.pressed.connect(_menus._toggle_build_menu)
 	_surface_button.pressed.connect(_set_view.bind(false))
 	_underground_button.pressed.connect(_set_view.bind(true))
 	for speed: float in _speed_buttons:
@@ -131,226 +131,38 @@ func _ready() -> void:
 		enemy_building.hp_changed.connect(_on_building_hp_changed.bind(enemy_building))
 
 	GameManager.game_over.connect(_on_game_over)
-	_setup_faction_icons()
-	_build_pause_menu()
-	_build_build_menu()
+	_updates._setup_faction_icons()
+	_menus._build_pause_menu()
+	_menus._build_build_menu()
 	_on_economy_changed(GameManager.Team.PLAYER)
-	_sync_view_buttons()
-	_sync_speed_buttons()
-	_initialize_hp_labels()
+	_updates._sync_view_buttons()
+	_updates._sync_speed_buttons()
+	_updates._initialize_hp_labels()
 
 
 func _process(_delta: float) -> void:
 	var pc: PlayerController = _get_player_controller()
 	if pc:
-		_update_selection_label(pc)
-		_sync_view_buttons()
+		_updates._update_selection_label(pc)
+		_updates._sync_view_buttons()
 		# The Rally button is a momentary arm: it stays "pressed" only while
 		# the controller waits for the rally-point right-click.
 		if _rally_button.button_pressed != pc.is_rally_armed():
 			_rally_button.set_pressed_no_signal(pc.is_rally_armed())
 		if _build_button.button_pressed != pc.is_build_mode_active():
 			_build_button.set_pressed_no_signal(pc.is_build_mode_active())
-		_sync_stance_buttons(pc)
-	_update_upgrade_button()
-	_update_fighter_upgrade_buttons()
-	_update_unit_breakdown()
+		_updates._sync_stance_buttons(pc)
+	_updates._update_upgrade_button()
+	_updates._update_fighter_upgrade_buttons()
+	_updates._update_unit_breakdown()
 	if _build_menu != null and _build_menu.visible:
-		_update_build_menu()
+		_menus._update_build_menu()
 	# Keep the pause menu in sync with the tree state (pause is toggled from
 	# PlayerController via Space/Esc) — except when the pause is owned by the
 	# research overlay's "Pause game" toggle, which has its own UI on top.
 	var pause_menu_wanted: bool = get_tree().paused and not _research_panel.owns_pause()
 	if _pause_panel != null and _pause_panel.visible != pause_menu_wanted:
 		_pause_panel.visible = pause_menu_wanted
-
-
-## Full-screen dim pause menu: resume / restart / quit + difficulty and
-## resolution selectors (both functional — they apply immediately).
-func _build_pause_menu() -> void:
-	_pause_panel = PanelContainer.new()
-	_pause_panel.name = "PauseMenu"
-	_pause_panel.process_mode = Node.PROCESS_MODE_ALWAYS
-	_pause_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_pause_panel.visible = false
-	var dim: StyleBoxFlat = StyleBoxFlat.new()
-	dim.bg_color = Color(0.02, 0.03, 0.06, 0.75)
-	_pause_panel.add_theme_stylebox_override("panel", dim)
-
-	var center: CenterContainer = CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_pause_panel.add_child(center)
-	var vbox: VBoxContainer = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10)
-	center.add_child(vbox)
-
-	var title: Label = Label.new()
-	title.text = "PAUSED"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 28)
-	vbox.add_child(title)
-
-	_add_pause_button(vbox, "Resume", func(): get_tree().paused = false)
-	_add_pause_button(vbox, "Restart", _on_pause_restart)
-	_add_pause_button(vbox, "Quit to Menu", _quit_to_menu)
-
-	var diff_row: HBoxContainer = HBoxContainer.new()
-	var diff_label: Label = Label.new()
-	diff_label.text = "Difficulty:"
-	diff_row.add_child(diff_label)
-	var diff_option: OptionButton = OptionButton.new()
-	diff_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for diff_name in GameManager.Difficulty.keys():
-		diff_option.add_item(diff_name.capitalize())
-	diff_option.selected = GameManager.difficulty
-	diff_option.item_selected.connect(func(index: int): GameManager.set_difficulty(index))
-	diff_row.add_child(diff_option)
-	vbox.add_child(diff_row)
-
-	if SettingsManager.is_supported():
-		var res_row: HBoxContainer = HBoxContainer.new()
-		var res_label: Label = Label.new()
-		res_label.text = "Resolution:"
-		res_row.add_child(res_label)
-		var res_option: OptionButton = OptionButton.new()
-		res_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var available: Array[Vector2i] = SettingsManager.get_available_resolutions()
-		var current_res: Vector2i = SettingsManager.get_resolution()
-		if current_res not in available:
-			available.append(current_res)  # Show the actual size (e.g. manually resized window).
-		for res in available:
-			res_option.add_item("%d × %d" % [res.x, res.y])
-			if res == current_res:
-				res_option.selected = res_option.item_count - 1
-		res_option.item_selected.connect(func(index: int): SettingsManager.set_resolution(available[index]))
-		res_row.add_child(res_option)
-		vbox.add_child(res_row)
-
-	add_child(_pause_panel)
-
-
-func _add_pause_button(parent: Control, text: String, callback: Callable) -> void:
-	var btn: Button = Button.new()
-	btn.text = text
-	btn.custom_minimum_size = Vector2(180, 36)
-	btn.pressed.connect(func(): AudioManager.play("click"))
-	btn.pressed.connect(callback)
-	parent.add_child(btn)
-
-
-## Small popup above the bottom bar with the lantern build options (Revamp
-## Phase 1). Picking one hands placement mode to the PlayerController, which
-## shows the ghost and handles confirm/cancel clicks.
-func _build_build_menu() -> void:
-	_build_menu = PanelContainer.new()
-	_build_menu.name = "BuildMenu"
-	_build_menu.visible = false
-	_style_panel(_build_menu)
-	_build_menu.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_build_menu.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_build_menu.position = Vector2(280, -100)
-	var vbox: VBoxContainer = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	_build_menu.add_child(vbox)
-	_build_lantern_button = _add_build_option(vbox, "lantern")
-	_build_mine_lantern_button = _add_build_option(vbox, "underground_lantern")
-	_build_tower_button = _add_build_option(vbox, "tower")
-	_build_wall_button = _add_build_option(vbox, "wall")
-	add_child(_build_menu)
-
-
-func _add_build_option(parent: Control, kind: String) -> Button:
-	var btn: Button = Button.new()
-	btn.custom_minimum_size = Vector2(220, 44)
-	btn.add_theme_font_size_override("font_size", 12)
-	btn.add_theme_color_override("font_color", Color("#e2e8f0"))
-	btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_BTN_NORMAL, _COL_BTN_BORDER))
-	btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_BTN_HOVER, _COL_BTN_HOVER_BORDER))
-	btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_TAB_ACTIVE, _COL_TAB_ACTIVE_BORDER))
-	btn.add_theme_stylebox_override("disabled", _make_flat_style(_COL_BTN_DISABLED))
-	btn.pressed.connect(func(): AudioManager.play("click"))
-	btn.pressed.connect(_on_build_option.bind(kind))
-	parent.add_child(btn)
-	return btn
-
-
-func _toggle_build_menu() -> void:
-	_build_menu.visible = not _build_menu.visible
-
-
-func _on_build_option(kind: String) -> void:
-	_build_menu.visible = false
-	var pc: PlayerController = _get_player_controller()
-	if pc:
-		pc.start_build_placement(kind)
-
-
-func _update_build_menu() -> void:
-	var team: GameManager.Team = GameManager.Team.PLAYER
-	var surface_count: int = 0
-	var underground_count: int = 0
-	for lantern in get_tree().get_nodes_in_group("lanterns"):
-		if lantern.team != team:
-			continue
-		if lantern.is_underground_lantern:
-			underground_count += 1
-		else:
-			surface_count += 1
-	var surface_cost: int = Lantern.cost_for(false, 1)
-	_build_lantern_button.text = "Lantern — %dg (%d/%d)" % [surface_cost, surface_count, _Constants.LANTERN_MAX_COUNT]
-	_build_lantern_button.disabled = surface_count >= _Constants.LANTERN_MAX_COUNT \
-		or not EconomyManager.can_afford(team, surface_cost)
-	_build_lantern_button.tooltip_text = "Static surface light: %d-cell vision. Click, then left-click a surface cell on your half (right-click cancels). Place on an existing lantern to upgrade it (T2 %dg, T3 %dg)." % [_Constants.LANTERN_T1_VISION, _Constants.LANTERN_T2_COST, _Constants.LANTERN_T3_COST]
-	var ug_cost: int = Lantern.cost_for(true, 1)
-	_build_mine_lantern_button.text = "Mine Lantern — %dg (%d/%d)" % [ug_cost, underground_count, _Constants.UNDERGROUND_LANTERN_MAX_COUNT]
-	_build_mine_lantern_button.disabled = underground_count >= _Constants.UNDERGROUND_LANTERN_MAX_COUNT \
-		or not EconomyManager.can_afford(team, ug_cost)
-	_build_mine_lantern_button.tooltip_text = "Underground light: %d-cell vision, permanently reveals buried ore in its radius. Must be placed in a dug-out tunnel cell on your half." % _Constants.UNDERGROUND_LANTERN_VISION
-	var tower_count: int = 0
-	for tower in get_tree().get_nodes_in_group("towers"):
-		if tower.team == team:
-			tower_count += 1
-	var tower_cost: int = FactionManager.get_tower_cost(team)
-	_build_tower_button.text = "Sentry Tower — %dg (%d/%d)" % [tower_cost, tower_count, _Constants.TOWER_MAX_COUNT]
-	_build_tower_button.disabled = tower_count >= _Constants.TOWER_MAX_COUNT \
-		or not EconomyManager.can_afford(team, tower_cost)
-	_build_tower_button.tooltip_text = "Static defense: shoots enemies within %d cells (fighters first), doubles as a %d-cell vision source. Surface only, on your half, away from buildings and the mine entry." % [_Constants.TOWER_RANGE_CELLS, _Constants.TOWER_VISION]
-	var wall_count: int = 0
-	for wall in get_tree().get_nodes_in_group("walls"):
-		if wall.team == team:
-			wall_count += 1
-	var wall_cost: int = FactionManager.get_wall_cost(team)
-	var wall_max: int = FactionManager.get_wall_max_count(team)
-	_build_wall_button.text = "Wall — %dg (%d/%d)" % [wall_cost, wall_count, wall_max]
-	_build_wall_button.disabled = wall_count >= wall_max \
-		or not EconomyManager.can_afford(team, wall_cost)
-	_build_wall_button.tooltip_text = "A barrier segment that blocks movement and projectiles (%d HP). Surface only, on your half." % _Constants.PLACED_WALL_HP
-
-
-## Revamp Phase 2: faction icons in the top bar. The player's own faction is
-## always shown; the enemy's stays hidden until a scout identifies it.
-func _setup_faction_icons() -> void:
-	if _player_faction_icon:
-		var player_faction: FactionData = FactionManager.get_faction(GameManager.Team.PLAYER)
-		if player_faction != null and player_faction.icon != null:
-			_player_faction_icon.texture = player_faction.icon
-		else:
-			_player_faction_icon.visible = false
-	if _enemy_faction_icon:
-		_enemy_faction_icon.visible = false
-		if FactionManager.is_faction_identified(GameManager.Team.ENEMY):
-			_on_faction_identified(GameManager.Team.ENEMY)
-		elif not FactionManager.faction_identified.is_connected(_on_faction_identified):
-			FactionManager.faction_identified.connect(_on_faction_identified)
-
-
-func _on_faction_identified(team: GameManager.Team) -> void:
-	if team != GameManager.Team.ENEMY or _enemy_faction_icon == null:
-		return
-	var enemy_faction: FactionData = FactionManager.get_faction(GameManager.Team.ENEMY)
-	if enemy_faction != null and enemy_faction.icon != null:
-		_enemy_faction_icon.texture = enemy_faction.icon
-		_enemy_faction_icon.visible = true
 
 
 func _on_pause_restart() -> void:
@@ -375,98 +187,9 @@ func _quit_to_menu() -> void:
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 
-func _ignore_mouse_recursive(node: Node) -> void:
-	if node is Control:
-		# Keep buttons interactive; ignore everything else.
-		if not (node is Button):
-			node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for child in node.get_children():
-		_ignore_mouse_recursive(child)
-
-
-func _style_panel(panel: PanelContainer) -> void:
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = _COL_PANEL_BG
-	style.border_color = _COL_PANEL_BORDER
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(10)
-	style.shadow_color = Color(0, 0, 0, 0.35)
-	style.shadow_size = 6
-	style.shadow_offset = Vector2(0, 2)
-	panel.add_theme_stylebox_override("panel", style)
-
-
-func _style_tab_buttons() -> void:
-	for btn in [_surface_button, _underground_button]:
-		btn.custom_minimum_size = Vector2(90, 28)
-		btn.add_theme_font_size_override("font_size", 11)
-		btn.add_theme_color_override("font_color", Color("#e2e8f0"))
-		btn.add_theme_color_override("font_pressed_color", Color("#ffffff"))
-		btn.add_theme_color_override("font_hover_color", Color("#ffffff"))
-		btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_BTN_NORMAL))
-		btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_TAB_ACTIVE, _COL_TAB_ACTIVE_BORDER))
-		btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_BTN_HOVER, _COL_BTN_HOVER_BORDER))
-
-
-func _style_speed_buttons() -> void:
-	for speed: float in _speed_buttons:
-		var btn: Button = _speed_buttons[speed]
-		btn.custom_minimum_size = Vector2(40, 28)
-		btn.add_theme_font_size_override("font_size", 11)
-		btn.add_theme_color_override("font_color", Color("#e2e8f0"))
-		btn.add_theme_color_override("font_pressed_color", Color("#ffffff"))
-		btn.add_theme_color_override("font_hover_color", Color("#ffffff"))
-		btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_BTN_NORMAL))
-		btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_TAB_ACTIVE, _COL_TAB_ACTIVE_BORDER))
-		btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_BTN_HOVER, _COL_BTN_HOVER_BORDER))
-
-
 func _set_game_speed(speed: float) -> void:
 	GameManager.set_game_speed(speed)
-	_sync_speed_buttons()
-
-
-func _sync_speed_buttons() -> void:
-	for speed: float in _speed_buttons:
-		var btn: Button = _speed_buttons[speed]
-		if btn.button_pressed != (GameManager.game_speed == speed):
-			btn.set_pressed_no_signal(GameManager.game_speed == speed)
-
-
-func _style_upgrade_button() -> void:
-	_upgrade_button.custom_minimum_size = Vector2(120, 70)
-	_upgrade_button.add_theme_font_size_override("font_size", 12)
-	_upgrade_button.add_theme_color_override("font_color", Color("#fbbf24"))
-	_upgrade_button.add_theme_color_override("font_disabled_color", Color("#94a3b8"))
-	_upgrade_button.add_theme_stylebox_override("normal", _make_flat_style(_COL_UPGRADE_BG, _COL_UPGRADE_BORDER))
-	_upgrade_button.add_theme_stylebox_override("hover", _make_flat_style(_COL_UPGRADE_BG.lightened(0.12), Color("#fbbf24")))
-	_upgrade_button.add_theme_stylebox_override("pressed", _make_flat_style(_COL_UPGRADE_BG.darkened(0.4), _COL_UPGRADE_BORDER))
-	_upgrade_button.add_theme_stylebox_override("disabled", _make_flat_style(_COL_BTN_DISABLED))
-
-
-func _style_stance_buttons() -> void:
-	for btn in [_attack_button, _defend_button, _garrison_button, _rally_button, _kill_button, _build_button]:
-		btn.custom_minimum_size = Vector2(100, 70)
-		btn.add_theme_font_size_override("font_size", 12)
-		btn.add_theme_color_override("font_color", Color("#e2e8f0"))
-		btn.add_theme_color_override("font_pressed_color", Color("#ffffff"))
-		btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_BTN_NORMAL, _COL_BTN_BORDER))
-		btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_BTN_HOVER, _COL_BTN_HOVER_BORDER))
-		btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_TAB_ACTIVE, _COL_TAB_ACTIVE_BORDER))
-
-
-func _make_flat_style(bg: Color, border: Color = Color(0, 0, 0, 0), radius: int = 8, content_margin: int = 6) -> StyleBoxFlat:
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = bg
-	if border.a > 0.0:
-		style.border_color = border
-		style.set_border_width_all(1)
-	style.set_corner_radius_all(radius)
-	style.content_margin_left = content_margin
-	style.content_margin_top = content_margin
-	style.content_margin_right = content_margin
-	style.content_margin_bottom = content_margin
-	return style
+	_updates._sync_speed_buttons()
 
 
 func _add_stat_icons() -> void:
@@ -507,19 +230,6 @@ func _add_unit_breakdown_icons() -> void:
 		label.tooltip_text = "%s count" % unit_name
 
 
-func _update_unit_breakdown() -> void:
-	var counts: Dictionary = { "Miner": 0, "Swordsman": 0, "Archer": 0, "Wizard": 0, "Dragon": 0 }
-	for unit in get_tree().get_nodes_in_group("player"):
-		var data = unit.get("data")
-		if data == null:
-			continue
-		var unit_name: String = data.unit_name
-		if counts.has(unit_name):
-			counts[unit_name] += 1
-	for unit_name: String in _unit_count_labels:
-		_unit_count_labels[unit_name].text = "%d" % counts[unit_name]
-
-
 func _add_attack_button_icon() -> void:
 	var icon: TextureRect = TextureRect.new()
 	icon.name = "AttackIcon"
@@ -532,49 +242,6 @@ func _add_attack_button_icon() -> void:
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_attack_button.add_child(icon)
 	_attack_button.move_child(icon, 0)
-
-
-func _style_fighter_upgrade_buttons() -> void:
-	for unit_id: String in _fighter_upgrade_buttons:
-		var btn: Button = _fighter_upgrade_buttons[unit_id]
-		btn.custom_minimum_size = Vector2(110, 70)
-		btn.add_theme_font_size_override("font_size", 11)
-		btn.add_theme_color_override("font_color", Color("#fbbf24"))
-		btn.add_theme_color_override("font_disabled_color", Color("#94a3b8"))
-		btn.add_theme_stylebox_override("normal", _make_flat_style(_COL_UPGRADE_BG, _COL_UPGRADE_BORDER))
-		btn.add_theme_stylebox_override("hover", _make_flat_style(_COL_UPGRADE_BG.lightened(0.12), Color("#fbbf24")))
-		btn.add_theme_stylebox_override("pressed", _make_flat_style(_COL_UPGRADE_BG.darkened(0.4), _COL_UPGRADE_BORDER))
-		btn.add_theme_stylebox_override("disabled", _make_flat_style(_COL_BTN_DISABLED))
-
-
-func _update_upgrade_button() -> void:
-	var level: int = EconomyManager.get_miner_level(GameManager.Team.PLAYER)
-	var cost: int = EconomyManager.get_miner_upgrade_cost(GameManager.Team.PLAYER)
-	if cost < 0:
-		_upgrade_button.text = "Upgrade Miner\nMax Level"
-		_upgrade_button.disabled = true
-		_upgrade_button.tooltip_text = "Miners are fully upgraded"
-	else:
-		_upgrade_button.text = "Upgrade Miner\nLv %d → %d | %d" % [level, level + 1, cost]
-		var affordable: bool = EconomyManager.can_afford(GameManager.Team.PLAYER, cost)
-		_upgrade_button.disabled = not affordable
-		_upgrade_button.tooltip_text = "" if affordable else "Not enough coin (%d needed)" % cost
-
-
-func _update_fighter_upgrade_buttons() -> void:
-	for unit_id: String in _fighter_upgrade_buttons:
-		var btn: Button = _fighter_upgrade_buttons[unit_id]
-		var level: int = EconomyManager.get_fighter_level(GameManager.Team.PLAYER, unit_id)
-		var cost: int = EconomyManager.get_fighter_upgrade_cost(GameManager.Team.PLAYER, unit_id)
-		if cost < 0:
-			btn.text = "%s\nMax Level" % unit_id.capitalize()
-			btn.disabled = true
-			btn.tooltip_text = "%s is fully upgraded" % unit_id.capitalize()
-		else:
-			btn.text = "%s\nLv %d → %d | %d" % [unit_id.capitalize(), level, level + 1, cost]
-			var affordable: bool = EconomyManager.can_afford(GameManager.Team.PLAYER, cost)
-			btn.disabled = not affordable
-			btn.tooltip_text = "" if affordable else "Not enough coin (%d needed)" % cost
 
 
 func _upgrade_fighter(unit_id: String) -> void:
@@ -610,41 +277,7 @@ func _set_view(underground: bool) -> void:
 	var pc: PlayerController = _get_player_controller()
 	if pc:
 		pc.set_view(underground)
-	_sync_view_buttons()
-
-
-## Selection readout in the top bar: a count for groups, and the unit's name
-## plus live HP when exactly one unit is selected (click a unit to inspect it).
-func _update_selection_label(pc: PlayerController) -> void:
-	var selected: Array = pc.get_selected_units().filter(func(u): return is_instance_valid(u))
-	if selected.size() == 1:
-		var unit = selected[0]
-		var data = unit.get("data")
-		if data != null:
-			_selection_label.text = "%s — HP %d/%d" % [data.unit_name, unit.get("hp"), data.max_hp]
-			if data.is_miner:
-				_selection_label.text += " — Gold %d/%d" % [unit.get("carried_coin"), data.carry_capacity]
-			return
-	_selection_label.text = "Selected: %d" % selected.size()
-
-
-## The Attack/Defend/Garrison buttons are toggles reflecting the persistent
-## stance mode: the active mode stays highlighted (radio-style).
-func _sync_stance_buttons(pc: PlayerController) -> void:
-	var stance: String = pc.get_stance()
-	for stance_name: String in _stance_buttons:
-		var btn: Button = _stance_buttons[stance_name]
-		if btn.button_pressed != (stance == stance_name):
-			btn.set_pressed_no_signal(stance == stance_name)
-
-
-func _sync_view_buttons() -> void:
-	var pc: PlayerController = _get_player_controller()
-	var underground: bool = pc.is_underground_view() if pc else false
-	if _surface_button.button_pressed != (not underground):
-		_surface_button.set_pressed_no_signal(not underground)
-	if _underground_button.button_pressed != underground:
-		_underground_button.set_pressed_no_signal(underground)
+	_updates._sync_view_buttons()
 
 
 func _on_economy_changed(team: GameManager.Team) -> void:
@@ -662,15 +295,6 @@ func _on_building_hp_changed(current: int, _maximum: int, building: Node2D) -> v
 		_player_hp_label.text = "%d" % current
 	else:
 		_enemy_hp_label.text = "%d" % current
-
-
-func _initialize_hp_labels() -> void:
-	var player_building: Node2D = _get_player_building()
-	if player_building:
-		_player_hp_label.text = "%d" % player_building.get("_hp")
-	var enemy_building: Node2D = _get_enemy_building()
-	if enemy_building:
-		_enemy_hp_label.text = "%d" % enemy_building.get("_hp")
 
 
 func _get_player_controller() -> PlayerController:

@@ -596,6 +596,8 @@ enum CellType {
 - If it contains ore: yields 100–200 gold (random)
 - Visual: Glowing red-orange rock with ember particles
 
+> **Current code location:** `GridWorld` logic has been split into helper modules under `scripts/world/`. Map generation and cell management live in `grid_world.gd`, `grid_map_generation.gd`, and `grid_mining.gd`; drawing/effects live in `grid_drawing.gd`. Any new dynamic-terrain code should hook into those modules rather than expanding `grid_world.gd` directly.
+
 **Implementation in `GridWorld`:**
 
 ```gdscript
@@ -819,6 +821,8 @@ func _apply_snowstorm_damage(delta: float):
 
 ### 6.3 Weather Implementation
 
+> **Current status:** A standalone `weather_manager.gd` does **not** exist yet. Ambient snow/dust particles are spawned by `scripts/world/grid_ambience.gd` from `GridWorld._ready()`. The weather-event system below is the intended design; when implemented it should live in a new `scripts/autoload/weather_manager.gd` autoload.
+
 ```gdscript
 # scripts/autoload/weather_manager.gd
 extends Node
@@ -950,7 +954,7 @@ If you chose **B1 or B2**:
 ### 7.3 Implementation
 
 ```gdscript
-# In ResearchManager
+# scripts/autoload/research_manager.gd
 var _tech_branches: Dictionary = {}  # team -> { "tier1": "deep_delve", "tier2": "ore_sonar", ... }
 var _locked_branches: Dictionary = {}  # team -> ["surface_war", "reinforced_pack", ...]
 
@@ -1046,6 +1050,8 @@ See the visual mockup for full sprite specifications. Summary:
 ---
 
 ## 9. Phase 8: AI Controller Refactor
+
+> **Current status:** `AIBeliefSystem` is **not yet implemented**. The current AI reads the scene tree directly (with fog-of-war gating mostly in `unit.gd` / `unit_vision_targeting.gd`) and its smart behaviors live in `scripts/controllers/ai_controller.gd` plus `scripts/controllers/ai_smart_behaviors.gd`. The design below describes the intended future autoload.
 
 ### 9.1 AIBeliefSystem
 
