@@ -15,6 +15,7 @@ const _ICON_WIZARD: Texture2D = preload("res://frost_mines_assets/icons/icon_wiz
 const _ICON_DRAGON: Texture2D = preload("res://frost_mines_assets/icons/icon_dragon.png")
 const _ICON_HP: Texture2D = preload("res://frost_mines_assets/icons/icon_hp.png")
 const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_attack.png")
+const _ICON_LAVA: Texture2D = preload("res://frost_mines_assets/icons/icon_lava.png")
 
 @onready var _coin_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/CoinLabel
 @onready var _miner_level_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/MinerLevelLabel
@@ -134,6 +135,7 @@ func _ready() -> void:
 	_updates._setup_faction_icons()
 	_menus._build_pause_menu()
 	_menus._build_build_menu()
+	_build_lava_banner()
 	_on_economy_changed(GameManager.Team.PLAYER)
 	_updates._sync_view_buttons()
 	_updates._sync_speed_buttons()
@@ -155,6 +157,7 @@ func _process(_delta: float) -> void:
 	_updates._update_upgrade_button()
 	_updates._update_fighter_upgrade_buttons()
 	_updates._update_unit_breakdown()
+	_update_lava_banner()
 	if _build_menu != null and _build_menu.visible:
 		_menus._update_build_menu()
 	# Keep the pause menu in sync with the tree state (pause is toggled from
@@ -323,6 +326,66 @@ var _build_lantern_button: Button = null
 var _build_mine_lantern_button: Button = null
 var _build_tower_button: Button = null
 var _build_wall_button: Button = null
+
+# Lava warning banner (Revamp Phase 4): flashing countdown above the bottom
+# bar while a lava rise is imminent. Driven entirely by GridWorld signals and
+# its live countdown, so it stays correct through pauses and speed changes.
+var _lava_banner: HBoxContainer = null
+var _lava_banner_label: Label = null
+
+
+func _build_lava_banner() -> void:
+	_lava_banner = HBoxContainer.new()
+	_lava_banner.name = "LavaWarningBanner"
+	_lava_banner.alignment = BoxContainer.ALIGNMENT_CENTER
+	_lava_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lava_banner.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_lava_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_lava_banner.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_lava_banner.position.y = -150.0
+	var icon: TextureRect = TextureRect.new()
+	icon.texture = _ICON_LAVA
+	icon.custom_minimum_size = Vector2(26, 26)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_FIT_HEIGHT
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lava_banner.add_child(icon)
+	_lava_banner_label = Label.new()
+	_lava_banner_label.add_theme_color_override("font_color", Color(1.0, 0.5, 0.15))
+	_lava_banner_label.add_theme_font_size_override("font_size", 28)
+	_lava_banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lava_banner.add_child(_lava_banner_label)
+	_lava_banner.visible = false
+	add_child(_lava_banner)
+	var grid: GridWorld = get_node_or_null("/root/Main/World/GridWorld")
+	if grid != null:
+		grid.lava_warning_started.connect(_on_lava_warning_started)
+		grid.lava_risen.connect(_on_lava_risen)
+
+
+func _on_lava_warning_started(_seconds: float) -> void:
+	_lava_banner.visible = true
+
+
+func _on_lava_risen(_layers: int) -> void:
+	_lava_banner.visible = false
+
+
+func _update_lava_banner() -> void:
+	if _lava_banner == null or not _lava_banner.visible:
+		return
+	var grid: GridWorld = get_node_or_null("/root/Main/World/GridWorld")
+	if grid == null:
+		_lava_banner.visible = false
+		return
+	var remaining: float = grid.get_lava_warning_remaining()
+	if remaining <= 0.0 or not GameManager.game_active:
+		_lava_banner.visible = false
+		return
+	_lava_banner_label.text = "LAVA RISING IN %ds" % ceili(remaining)
+	# Flashing orange pulse.
+	var pulse: float = 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0)
+	_lava_banner.modulate = Color(1.0, 1.0, 1.0, pulse)
 
 
 func _on_game_over(winner: GameManager.Team) -> void:

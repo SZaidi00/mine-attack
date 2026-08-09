@@ -5,8 +5,16 @@ signal cell_destroyed(grid_pos: Vector2i)
 signal wall_hp_changed(current: int, maximum: int)
 # Emitted by the Ore Sonar scan with the newly revealed ore cells (VFX hook).
 signal cells_revealed(cells: Array)
+# Revamp Phase 4 dynamic-terrain events (HUD banners, VFX hooks).
+signal lava_warning_started(seconds: float)
+signal lava_risen(layers: int)
+signal lava_receded()
+signal cave_in_occurred(center: Vector2i)
 
-enum CellType { EMPTY, SURFACE_GROUND, DIRT, ORE, WALL }
+# Revamp Phase 4: LAVA is indestructible/impassable while the flood is up;
+# MAGMA_ROCK is the diggable rock it leaves behind; FRESH_ORE is high-value
+# ore spawned by the recede; SOLID_ROCK is temporary cave-in rubble.
+enum CellType { EMPTY, SURFACE_GROUND, DIRT, ORE, WALL, LAVA, MAGMA_ROCK, FRESH_ORE, SOLID_ROCK }
 
 class Cell:
 	var type: CellType = CellType.EMPTY
@@ -40,6 +48,9 @@ const _SKY_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/su
 const _SURFACE_GROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_ground.png")
 const _UNDERGROUND_TEXTURE: Texture2D = preload("res://frost_mines_assets/backgrounds/underground_base.png")
 const _WALL_TEXTURE: Texture2D = preload("res://frost_mines_assets/props/wall_segment.png")
+# Revamp Phase 4 terrain left behind by lava events.
+const _MAGMA_ROCK_TEXTURE: Texture2D = preload("res://frost_mines_assets/tiles/magma_rock.png")
+const _FRESH_ORE_TEXTURE: Texture2D = preload("res://frost_mines_assets/tiles/fresh_ore.png")
 # Fog of War decoration: drifting cloud puffs over fogged surface cells and
 # mist puffs in the fogged underground (the flat fog color underneath still
 # guarantees occlusion — these are the moving "cloud cover" on top).
@@ -73,6 +84,7 @@ const GridFogOfWar = preload("res://scripts/world/grid_fog_of_war.gd")
 const GridDrawing = preload("res://scripts/world/grid_drawing.gd")
 const GridMining = preload("res://scripts/world/grid_mining.gd")
 const GridAmbience = preload("res://scripts/world/grid_ambience.gd")
+const GridEvents = preload("res://scripts/world/grid_events.gd")
 
 var _cells: Dictionary = {}  # Vector2i -> Cell
 var _astar: AStarGrid2D = AStarGrid2D.new()
@@ -135,6 +147,7 @@ var _fog: GridFogOfWar
 var _draw_helper: GridDrawing
 var _mining: GridMining
 var _ambience: GridAmbience
+var _events: GridEvents
 
 
 func _init() -> void:
@@ -144,6 +157,7 @@ func _init() -> void:
 	_draw_helper = GridDrawing.new(self)
 	_mining = GridMining.new(self)
 	_ambience = GridAmbience.new(self)
+	_events = GridEvents.new(self)
 
 
 func _ready() -> void:
@@ -154,6 +168,7 @@ func _ready() -> void:
 	_fog._init_vision_maps()
 	_connect_view_mode()
 	_ambience._spawn_ambient_particles()
+	_events.schedule_initial()
 	queue_redraw()
 
 
@@ -165,6 +180,7 @@ func _process(delta: float) -> void:
 		_fog._update_vision(GameManager.Team.PLAYER)
 		_fog._update_vision(GameManager.Team.ENEMY)
 		_fog._prune_unit_ghosts()
+		_events._process_events(delta)
 		queue_redraw()
 	var expired: Array[Vector2i] = []
 	for pos in _cell_flash.keys():
@@ -343,3 +359,47 @@ func _get_vision_sources(team: GameManager.Team) -> Array:
 
 func _init_vision_maps() -> void:
 	_fog._init_vision_maps()
+
+
+# ─── Dynamic terrain & events (Revamp Phase 4) ───
+
+## Test/debug hook: random lava/cave-in/ore-respawn scheduling on or off.
+## Forced triggers below work either way.
+func set_dynamic_events_enabled(enabled: bool) -> void:
+	_events.events_enabled = enabled
+
+
+func is_lava_warning() -> bool:
+	return _events.is_lava_warning()
+
+
+func is_lava_active() -> bool:
+	return _events.is_lava_active()
+
+
+func get_lava_warning_remaining() -> float:
+	return _events.get_lava_warning_remaining()
+
+
+func is_cave_in_rock(grid_pos: Vector2i) -> bool:
+	return _events.is_cave_in_rock(grid_pos)
+
+
+func force_lava_warning(layers: int = -1) -> void:
+	_events._start_lava_warning(layers)
+
+
+func force_lava_rise(layers: int = 1) -> void:
+	_events._rise_lava(layers)
+
+
+func force_lava_recede() -> void:
+	_events._recede_lava()
+
+
+func force_cave_in(center: Vector2i) -> void:
+	_events._trigger_cave_in(center)
+
+
+func force_ore_respawn() -> int:
+	return _events.respawn_ore(true)

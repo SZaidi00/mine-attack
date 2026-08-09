@@ -107,7 +107,7 @@ func _find_and_mine() -> void:
 			var c: GridWorld.Cell = unit._grid.get_cell(pos)
 			if c == null:
 				continue
-			if c.type != GridWorld.CellType.DIRT and c.type != GridWorld.CellType.ORE:
+			if not GridMining._is_diggable_type(c.type):
 				continue
 			# Level gate enforced at seek time so miners never path to tiles
 			# they can never dig.
@@ -125,10 +125,12 @@ func _find_and_mine() -> void:
 			if not _has_empty_neighbor(pos):
 				continue
 			var d: float = center.distance_to(pos)
-			if c.type == GridWorld.CellType.ORE and (c.hp < c.max_hp or c.sonar_revealed.get(unit.team, false)):
+			var is_gold: bool = c.type == GridWorld.CellType.ORE or c.type == GridWorld.CellType.FRESH_ORE
+			if is_gold and (c.hp < c.max_hp or c.sonar_revealed.get(unit.team, false)) and not GridMining.is_depleted(c):
 				# Discovered gold: this tile already yielded coin, an Ore
 				# Sonar scan revealed it, or an underground lantern lit it —
-				# so the miner knows it is worth coming back to.
+				# so the miner knows it is worth coming back to. Depleted
+				# veins (Revamp Phase 4) fall back to blind picks.
 				if d < best_gold_dist:
 					best_gold_dist = d
 					best_gold = pos

@@ -119,6 +119,11 @@ func _on_building_shake_destroyed(_team: GameManager.Team) -> void:
 	_shake_strength = maxf(_shake_strength, 20.0)
 
 
+## External shake trigger (Revamp Phase 4: lava warning/rise, cave-ins).
+func add_shake(strength: float) -> void:
+	_shake_strength = maxf(_shake_strength, strength)
+
+
 func _player_mine_entry() -> Node2D:
 	for entry in get_tree().get_nodes_in_group("mine_entries"):
 		if entry.get("team") == GameManager.Team.PLAYER:

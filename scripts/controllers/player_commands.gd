@@ -80,7 +80,7 @@ func _issue_command(screen_pos: Vector2) -> void:
 
 	# 4. Diggable cell clicked with miners selected -> mine it.
 	var cell: GridWorld.Cell = pc._grid.get_cell(grid_pos)
-	var diggable: bool = cell != null and (cell.type == GridWorld.CellType.DIRT or cell.type == GridWorld.CellType.ORE)
+	var diggable: bool = cell != null and GridMining._is_diggable_type(cell.type)
 	if diggable and not miners.is_empty():
 		DebugLog.log_command("PlayerController", "mine_cell", "cell=%s miners=%d" % [str(grid_pos), miners.size()])
 		for u in miners:

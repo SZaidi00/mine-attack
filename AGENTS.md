@@ -34,7 +34,7 @@ mine-attack/
 └── improvements/      # revamp.md + new sprites
 ```
 
-**Implemented revamp phases:** Phase 1 (Fog of War & lanterns), Phase 2 (factions), Phase 3 (towers & walls). Later phases (dynamic terrain, weather, tech-tree overhaul, AI belief system) are **not** implemented.
+**Implemented revamp phases:** Phase 1 (Fog of War & lanterns), Phase 2 (factions), Phase 3 (towers & walls), Phase 4 (dynamic terrain: lava rising, cave-ins, ore depletion). Later phases (weather, tech-tree overhaul, AI belief system) are **not** implemented.
 
 ## Runtime architecture
 
@@ -56,7 +56,7 @@ Autoloads (load order): `Constants`, `GameManager`, `FactionManager`, `EconomyMa
 
 Global singletons.
 
-- `constants.gd` — balance numbers, costs, train times, upgrade tables, vision/fog constants, input action `StringName`s. Source of truth for all numeric balance.
+- `constants.gd` — balance numbers, costs, train times, upgrade tables, vision/fog constants, dynamic-terrain event tuning (`LAVA_*`/`CAVEIN_*`/`MAGMA_*`/`ORE_*`), input action `StringName`s. Source of truth for all numeric balance.
 - `game_manager.gd` — `Team`/`Difficulty` enums, team colors, difficulty modifiers, game speed, match timer, win/loss.
 - `faction_manager.gd` — faction picks, hidden-faction identification, faction-modified costs and starting bonuses.
 - `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined.
@@ -86,8 +86,9 @@ The controllers are split into thin main classes plus `RefCounted` helper module
   - `grid_pathfinding.gd` — `find_path`, walkability helpers, wall cell sealing.
   - `grid_fog_of_war.gd` — vision maps, memory, ghost silhouettes, fog rendering.
   - `grid_drawing.gd` — surface/underground terrain drawing, effects, wall HP bar.
-  - `grid_mining.gd` — cell damage, mining, ore reveal.
+  - `grid_mining.gd` — cell damage, mining, ore reveal, ore depletion trickle.
   - `grid_ambience.gd` — snow/dust particles.
+  - `grid_events.gd` — Revamp Phase 4 dynamic terrain: lava rising (warning → flood bottom 1–2 layers → recede into magma rock/fresh ore), cave-ins (3×3 SOLID_ROCK for 10s, 50 damage + push), ore vein respawn. Game-time timers frozen on pause/game-over; random scheduling can be disabled via `GridWorld.set_dynamic_events_enabled(false)` (tests force events instead).
 - `building.gd` — training queue, deposits, building HP/destruction.
 - `mine_entry.gd` — ladder teleport positions.
 - `lantern.gd` / `tower.gd` / `wall_segment.gd` — placeable structures.
@@ -107,7 +108,7 @@ The controllers are split into thin main classes plus `RefCounted` helper module
 
 ### `scripts/ui/`
 
-- `hud.gd` — node references, signal wiring, game-over flow; delegates to helpers.
+- `hud.gd` — node references, signal wiring, game-over flow, lava warning banner (Phase 4); delegates to helpers.
   - `hud_styling.gd` — StyleBoxFlat helpers and panel/button styling.
   - `hud_menus.gd` — pause menu and build popup.
   - `hud_updates.gd` — label/button synchronization, faction icons, selection readout.

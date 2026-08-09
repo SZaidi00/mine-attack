@@ -34,7 +34,11 @@ func _find_best_ore(unit: Unit) -> Vector2i:
 		for y in range(0, 15):
 			var pos: Vector2i = center + Vector2i(x, y)
 			var cell: GridWorld.Cell = ai._grid.get_cell(pos)
-			if cell == null or cell.type != GridWorld.CellType.ORE:
+			if cell == null or (cell.type != GridWorld.CellType.ORE and cell.type != GridWorld.CellType.FRESH_ORE):
+				continue
+			# Depleted veins (Revamp Phase 4) trickle at a tenth rate — the AI
+			# leaves them to the miner's blind auto-seek.
+			if GridMining.is_depleted(cell):
 				continue
 			# Miners don't know where buried ore is: the AI may only route to
 			# ore that already proved itself (damaged = yielded gold) or that

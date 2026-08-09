@@ -275,7 +275,7 @@ func _process(delta: float) -> void:
 				# cooldown, 10s for Arcane).
 				_blink_timer -= delta
 				if _blink_timer <= 0.0:
-					_abilities._try_blink()
+					_abilities.try_blink()
 			"archer":
 				_arcane_shot_timer -= delta
 				_volley_timer -= delta
@@ -372,6 +372,12 @@ func rally_to(world_pos: Vector2) -> void:
 
 func take_damage(amount: int, attacker: Node2D = null) -> void:
 	_combat.take_damage(amount, attacker)
+
+
+## Revamp Phase 4: lava deaths are instant and drop no cargo — the coin melts.
+func die_in_lava() -> void:
+	carried_coin = 0
+	_die()
 
 
 func get_incoming_dps() -> float:

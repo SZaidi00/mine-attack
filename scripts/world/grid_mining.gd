@@ -35,6 +35,10 @@ func damage_cell(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
 		return 0
 	if cell.type == GridWorld.CellType.SURFACE_GROUND:
 		return 0
+	# Lava and cave-in rubble are indestructible (their level-99 gate would
+	# catch this anyway, but keep the rule explicit).
+	if cell.type == GridWorld.CellType.LAVA or cell.type == GridWorld.CellType.SOLID_ROCK:
+		return 0
 	if miner_level < cell.miner_level_required:
 		return 0
 
@@ -43,10 +47,14 @@ func damage_cell(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
 
 	# Ore trickles gold on every swing: each hit extracts a share proportional
 	# to the damage dealt, and destruction pays out whatever is left, so the
-	# tile always yields exactly coin_value in total.
+	# tile always yields exactly coin_value in total. Revamp Phase 4: once a
+	# vein is depleted (80% yielded) the per-swing share drops to 10% — the
+	# destruction payout still pays the remainder, so totals stay exact.
 	var coin: int = 0
-	if cell.type == GridWorld.CellType.ORE and cell.coin_remaining > 0:
+	if (cell.type == GridWorld.CellType.ORE or cell.type == GridWorld.CellType.FRESH_ORE) and cell.coin_remaining > 0:
 		var share: int = max(1, roundi(float(cell.coin_value) * float(damage) / float(cell.max_hp)))
+		if is_depleted(cell):
+			share = max(1, roundi(float(share) * grid._Constants.ORE_DEPLETED_YIELD_MULT))
 		coin = mini(cell.coin_remaining, share)
 		cell.coin_remaining -= coin
 
@@ -94,13 +102,22 @@ func _damage_wall(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
 	return 0
 
 
+## Revamp Phase 4: a vein is depleted once it has yielded ORE_DEPLETION_RATIO
+## of its gold — per-swing trickle drops to a tenth and the nugget draws dull,
+## so miners migrate to fresher tiles.
+static func is_depleted(cell: GridWorld.Cell) -> bool:
+	if cell == null or cell.coin_value <= 0:
+		return false
+	return cell.coin_remaining <= roundi(float(cell.coin_value) * (1.0 - Constants.ORE_DEPLETION_RATIO))
+
+
 func count_accessible_unmined_tiles(side: int, miner_level: int) -> int:
 	var max_layer: int = grid._Constants.MINER_STATS[miner_level].max_layer
 	var team_dir: int = -1 if side == GameManager.Team.PLAYER else 1
 	var count: int = 0
 	for pos in grid._cells.keys():
 		var cell: GridWorld.Cell = grid._cells[pos]
-		if cell.type != GridWorld.CellType.DIRT and cell.type != GridWorld.CellType.ORE:
+		if not _is_diggable_type(cell.type):
 			continue
 		if cell.layer > max_layer:
 			continue
@@ -110,9 +127,15 @@ func count_accessible_unmined_tiles(side: int, miner_level: int) -> int:
 	return count
 
 
-## Ore Sonar: marks every buried ORE cell within `radius_cells` of `center`
-## as revealed for `team`, so that team's miners treat it as discovered gold.
-## Returns the number of newly revealed cells.
+## Diggable underground tile types (Revamp Phase 4 adds magma rock / fresh ore).
+static func _is_diggable_type(t: GridWorld.CellType) -> bool:
+	return t == GridWorld.CellType.DIRT or t == GridWorld.CellType.ORE \
+		or t == GridWorld.CellType.MAGMA_ROCK or t == GridWorld.CellType.FRESH_ORE
+
+
+## Ore Sonar: marks every buried ORE/FRESH_ORE cell within `radius_cells` of
+## `center` as revealed for `team`, so that team's miners treat it as
+## discovered gold. Returns the number of newly revealed cells.
 func reveal_ore_in_radius(center: Vector2i, radius_cells: int, team: GameManager.Team) -> int:
 	var revealed: Array = []
 	for x in range(center.x - radius_cells, center.x + radius_cells + 1):
@@ -121,7 +144,7 @@ func reveal_ore_in_radius(center: Vector2i, radius_cells: int, team: GameManager
 			if Vector2(pos - center).length() > radius_cells:
 				continue
 			var cell: GridWorld.Cell = grid._cells.get(pos)
-			if cell == null or cell.type != GridWorld.CellType.ORE:
+			if cell == null or (cell.type != GridWorld.CellType.ORE and cell.type != GridWorld.CellType.FRESH_ORE):
 				continue
 			if cell.sonar_revealed.get(team, false):
 				continue
@@ -135,4 +158,6 @@ func reveal_ore_in_radius(center: Vector2i, radius_cells: int, team: GameManager
 
 func is_ore_revealed(grid_pos: Vector2i, team: GameManager.Team) -> bool:
 	var cell: GridWorld.Cell = grid._cells.get(grid_pos)
-	return cell != null and cell.type == GridWorld.CellType.ORE and cell.sonar_revealed.get(team, false)
+	if cell == null or (cell.type != GridWorld.CellType.ORE and cell.type != GridWorld.CellType.FRESH_ORE):
+		return false
+	return cell.sonar_revealed.get(team, false)

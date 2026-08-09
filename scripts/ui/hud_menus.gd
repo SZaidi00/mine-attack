@@ -111,7 +111,7 @@ func _add_build_option(parent: Control, kind: String) -> Button:
 	btn.add_theme_stylebox_override("pressed", hud._styling._make_flat_style(hud._styling._COL_TAB_ACTIVE, hud._styling._COL_TAB_ACTIVE_BORDER))
 	btn.add_theme_stylebox_override("disabled", hud._styling._make_flat_style(hud._styling._COL_BTN_DISABLED))
 	btn.pressed.connect(func(): AudioManager.play("click"))
-	btn.pressed.connect(hud._on_build_option.bind(kind))
+	btn.pressed.connect(_on_build_option.bind(kind))
 	parent.add_child(btn)
 	return btn
 

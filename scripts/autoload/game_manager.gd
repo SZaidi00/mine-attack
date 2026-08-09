@@ -84,7 +84,7 @@ func reset() -> void:
 ## slow-mo and reset() restore it), but only applied live outside the slow-mo.
 func set_game_speed(speed: float) -> void:
 	game_speed = speed
-	DebugLog.log_command("GameManager", "set_game_speed", "%gx" % speed)
+	DebugLog.log_command("GameManager", "set_game_speed", "%.2fx" % speed)
 	if game_active and _slowmo_end_msec < 0:
 		Engine.time_scale = speed
 

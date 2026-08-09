@@ -155,6 +155,50 @@ const PLACED_WALL_MAX_COUNT: int = 2
 # Destroyed towers/walls drop this share of their build cost (as lanterns do).
 const STRUCTURE_SALVAGE_RATIO: float = 0.5
 
+# ─── DYNAMIC TERRAIN & EVENTS (Revamp Phase 4) ───
+# Lava rising: every LAVA_MIN/MAX_INTERVAL seconds of match time (random,
+# uniform) a warning sounds, then the bottom 1–2 layers flood with lava.
+# Units caught in the zone die instantly (no cargo drop), underground
+# lanterns are destroyed, and every non-wall cell becomes indestructible
+# LAVA. After LAVA_DURATION the lava recedes into diggable MAGMA_ROCK
+# (0 gold), with MAGMA_ORE_CHANCE per cell of high-value FRESH_ORE instead.
+const LAVA_MIN_INTERVAL: float = 90.0
+const LAVA_MAX_INTERVAL: float = 120.0
+const LAVA_WARNING_TIME: float = 5.0
+# Extended warning when the team has the Weather Alert research (Phase 5/6
+# tech — the lookup degrades to the base time while it doesn't exist).
+const LAVA_WARNING_TIME_RESEARCH: float = 15.0
+const LAVA_DURATION: float = 20.0
+const LAVA_LAYERS_MIN: int = 1
+const LAVA_LAYERS_MAX: int = 2
+const MAGMA_ROCK_HP: int = 150
+const MAGMA_ORE_CHANCE: float = 0.4
+const MAGMA_ORE_MIN: int = 100
+const MAGMA_ORE_MAX: int = 200
+# While lava is up, units standing in a lava cell are re-checked this often
+# (in-flight paths can carry stragglers into the zone after the rise).
+const LAVA_SWEEP_INTERVAL: float = 0.5
+# Cave-ins: sudden 3×3 collapses underground. Diggable tiles become
+# indestructible SOLID_ROCK for CAVEIN_ROCK_DURATION seconds, units in the
+# area take CAVEIN_DAMAGE and are pushed to the nearest walkable cell, and
+# underground lanterns in the area are destroyed.
+const CAVEIN_MIN_INTERVAL: float = 45.0
+const CAVEIN_MAX_INTERVAL: float = 75.0
+const CAVEIN_AREA_SIZE: int = 3  # 3x3
+const CAVEIN_DAMAGE: int = 50
+const CAVEIN_ROCK_DURATION: float = 10.0
+# Ore depletion: once an ore tile has yielded ORE_DEPLETION_RATIO of its
+# gold, per-swing trickle drops to ORE_DEPLETED_YIELD_MULT of normal (the
+# destruction payout still pays the remainder, so totals stay exact).
+const ORE_DEPLETION_RATIO: float = 0.8
+const ORE_DEPLETED_YIELD_MULT: float = 0.1
+# Vein respawn: if the total ore count falls below ORE_RESPAWN_THRESHOLD,
+# up to ORE_RESPAWN_COUNT fresh veins appear in layers 3+ every interval.
+const ORE_RESPAWN_INTERVAL: float = 60.0
+const ORE_RESPAWN_THRESHOLD: int = 40
+const ORE_RESPAWN_COUNT: int = 8
+const ORE_RESPAWN_MIN_LAYER: int = 3
+
 # ─── RESEARCH TREE ───
 # Timed techs bought with coin through the ResearchManager (one active
 # research per team, 100% refund on cancel). These coexist with the instant

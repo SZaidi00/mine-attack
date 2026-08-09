@@ -89,6 +89,8 @@ func _build_streams() -> void:
 	_streams["click"] = _tone(1400.0, 1000.0, 0.04, 0.3, "sine")
 	_streams["alarm"] = _tone(620.0, 620.0, 0.18, 0.3, "square")
 	_streams["sonar"] = _sonar_ping()
+	# Revamp Phase 4: low rolling rumble for lava warnings and the rise.
+	_streams["rumble"] = _rumble(1.6)
 	# Ambience (looping).
 	_streams["wind"] = _wind_loop(4.0)
 	_streams["drips"] = _drip_loop(5.0)
@@ -135,6 +137,19 @@ func _noise(duration: float, volume: float) -> AudioStreamWAV:
 		var t: float = float(i) / frames
 		var env: float = (1.0 - t) * (1.0 - t)
 		_write_sample(bytes, i, (randf() * 2.0 - 1.0) * env * volume)
+	return _make_stream(frames, bytes)
+
+
+## Lava rumble (Revamp Phase 4): heavily smoothed brown noise, fading in and
+## out so the one-shot doesn't click at either end.
+func _rumble(duration: float) -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * duration)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	var smoothed: float = 0.0
+	for i in range(frames):
+		smoothed = lerpf(smoothed, randf() * 2.0 - 1.0, 0.01)
+		var env: float = minf(1.0, minf(i, frames - i) / (_MIX_RATE * 0.3))
+		_write_sample(bytes, i, smoothed * 0.9 * env)
 	return _make_stream(frames, bytes)
 
 
