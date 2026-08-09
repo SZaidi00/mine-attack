@@ -199,6 +199,24 @@ const ORE_RESPAWN_THRESHOLD: int = 40
 const ORE_RESPAWN_COUNT: int = 8
 const ORE_RESPAWN_MIN_LAYER: int = 3
 
+# ─── WEATHER (Revamp Phase 5) ───
+# Snowstorms: every SNOWSTORM_MIN/MAX_INTERVAL seconds of match time (random,
+# uniform, independent of the lava timer) a warning sounds, then a storm
+# sweeps the surface for SNOWSTORM_DURATION seconds. While it rages: all unit
+# and lantern vision radii are halved, surface units move at
+# SNOWSTORM_SPEED_MULT, and any surface unit outside a friendly lantern's
+# radius takes SNOWSTORM_DAMAGE_PER_SEC (buildings are immune). The Weather
+# Alert research extends the warning like the lava one — without saying which
+# event is coming.
+const SNOWSTORM_MIN_INTERVAL: float = 60.0
+const SNOWSTORM_MAX_INTERVAL: float = 90.0
+const SNOWSTORM_DURATION: float = 15.0
+const SNOWSTORM_WARNING_TIME: float = 5.0
+const SNOWSTORM_WARNING_TIME_RESEARCH: float = 15.0
+const SNOWSTORM_VISION_MULT: float = 0.5
+const SNOWSTORM_SPEED_MULT: float = 0.9
+const SNOWSTORM_DAMAGE_PER_SEC: float = 2.0
+
 # ─── RESEARCH TREE ───
 # Timed techs bought with coin through the ResearchManager (one active
 # research per team, 100% refund on cancel). These coexist with the instant
@@ -327,6 +345,18 @@ const RESEARCH_TECHS: Dictionary = {
 		"requires": { "inferno": 1 },
 		"levels": {
 			1: { "cost": 900, "time": 25.0, "wizard_damage_mult": 0.25, "desc": "Wizards +25% damage" },
+		},
+	},
+	# ── Tier 3 capstone (Revamp Phase 5) ──
+	# Meteorological Array: luxury early-warning system. Extends both the
+	# snowstorm and the lava warning from 5s to 15s without revealing which
+	# event is coming. Read through get_level(), not get_stat_bonus().
+	"weather_alert": {
+		"name": "Meteorological Array",
+		"unit": "",
+		"tree_pos": Vector2i(2, 1),
+		"levels": {
+			1: { "cost": 2500, "time": 60.0, "desc": "Weather & lava warnings arrive 15s early (event type stays hidden)" },
 		},
 	},
 }

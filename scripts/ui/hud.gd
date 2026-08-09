@@ -16,6 +16,7 @@ const _ICON_DRAGON: Texture2D = preload("res://frost_mines_assets/icons/icon_dra
 const _ICON_HP: Texture2D = preload("res://frost_mines_assets/icons/icon_hp.png")
 const _ICON_ATTACK: Texture2D = preload("res://frost_mines_assets/icons/icon_attack.png")
 const _ICON_LAVA: Texture2D = preload("res://frost_mines_assets/icons/icon_lava.png")
+const _ICON_SNOWSTORM: Texture2D = preload("res://frost_mines_assets/icons/icon_snowstorm.png")
 
 @onready var _coin_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/CoinLabel
 @onready var _miner_level_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/MinerLevelLabel
@@ -74,6 +75,10 @@ func _ready() -> void:
 	# The HUD must keep processing while the tree is paused so the pause menu
 	# stays visible and clickable (the classic pause-menu-pauses-itself bug).
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# A fresh Main scene means a fresh match: GameManager.match_time has been
+	# accumulating since boot (through the menu), so the weather schedule must
+	# restart here rather than trust any clock that survived the menu.
+	WeatherManager.reset()
 	_styling._ignore_mouse_recursive($TopBar)
 	_styling._ignore_mouse_recursive($BottomBar)
 	_styling._ignore_mouse_recursive(_game_over_panel)
@@ -136,6 +141,7 @@ func _ready() -> void:
 	_menus._build_pause_menu()
 	_menus._build_build_menu()
 	_build_lava_banner()
+	_build_weather_banner()
 	_on_economy_changed(GameManager.Team.PLAYER)
 	_updates._sync_view_buttons()
 	_updates._sync_speed_buttons()
@@ -158,6 +164,7 @@ func _process(_delta: float) -> void:
 	_updates._update_fighter_upgrade_buttons()
 	_updates._update_unit_breakdown()
 	_update_lava_banner()
+	_update_weather_banner()
 	if _build_menu != null and _build_menu.visible:
 		_menus._update_build_menu()
 	# Keep the pause menu in sync with the tree state (pause is toggled from
@@ -174,6 +181,7 @@ func _on_pause_restart() -> void:
 	FactionManager.reset()
 	EconomyManager.reset()
 	ResearchManager.reset()
+	WeatherManager.reset()
 	get_tree().reload_current_scene()
 
 
@@ -187,6 +195,7 @@ func _quit_to_menu() -> void:
 	FactionManager.reset()
 	EconomyManager.reset()
 	ResearchManager.reset()
+	WeatherManager.reset()
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 
@@ -333,6 +342,14 @@ var _build_wall_button: Button = null
 var _lava_banner: HBoxContainer = null
 var _lava_banner_label: Label = null
 
+# Weather banner + storm vignette (Revamp Phase 5): flashing countdown at the
+# top center while a snowstorm is imminent, and a dark-blue edge vignette
+# while the storm rages. Driven by WeatherManager signals and its live
+# countdown, same as the lava banner.
+var _weather_banner: HBoxContainer = null
+var _weather_banner_label: Label = null
+var _storm_vignette: TextureRect = null
+
 
 func _build_lava_banner() -> void:
 	_lava_banner = HBoxContainer.new()
@@ -388,6 +405,90 @@ func _update_lava_banner() -> void:
 	_lava_banner.modulate = Color(1.0, 1.0, 1.0, pulse)
 
 
+func _build_weather_banner() -> void:
+	_weather_banner = HBoxContainer.new()
+	_weather_banner.name = "WeatherWarningBanner"
+	_weather_banner.alignment = BoxContainer.ALIGNMENT_CENTER
+	_weather_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_weather_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_weather_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_weather_banner.grow_vertical = Control.GROW_DIRECTION_END
+	_weather_banner.position.y = 120.0
+	var icon: TextureRect = TextureRect.new()
+	icon.texture = _ICON_SNOWSTORM
+	icon.custom_minimum_size = Vector2(26, 26)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_FIT_HEIGHT
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_weather_banner.add_child(icon)
+	_weather_banner_label = Label.new()
+	_weather_banner_label.add_theme_color_override("font_color", Color(0.65, 0.8, 1.0))
+	_weather_banner_label.add_theme_font_size_override("font_size", 28)
+	_weather_banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_weather_banner.add_child(_weather_banner_label)
+	_weather_banner.visible = false
+	add_child(_weather_banner)
+
+	# Storm vignette: dark-blue edges closing in while the snowstorm rages.
+	_storm_vignette = TextureRect.new()
+	_storm_vignette.name = "StormVignette"
+	_storm_vignette.texture = _make_vignette_texture()
+	_storm_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_storm_vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	_storm_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_storm_vignette.visible = false
+	add_child(_storm_vignette)
+
+	WeatherManager.weather_warning_started.connect(_on_weather_warning_started)
+	WeatherManager.snowstorm_started.connect(_on_snowstorm_started)
+	WeatherManager.snowstorm_ended.connect(_on_snowstorm_ended)
+
+
+## Radial gradient: transparent center fading to dark blue at the edges.
+func _make_vignette_texture() -> Texture2D:
+	var size: int = 256
+	var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var center: float = (size - 1) / 2.0
+	for x in range(size):
+		for y in range(size):
+			var d: float = Vector2(x - center, y - center).length() / center
+			var alpha: float = clampf((d - 0.45) / 0.55, 0.0, 1.0) ** 1.6 * 0.55
+			img.set_pixel(x, y, Color(0.08, 0.16, 0.42, alpha))
+	return ImageTexture.create_from_image(img)
+
+
+func _on_weather_warning_started(_seconds: float) -> void:
+	_weather_banner.visible = true
+
+
+func _on_snowstorm_started() -> void:
+	_weather_banner.visible = false
+	_storm_vignette.visible = true
+
+
+func _on_snowstorm_ended() -> void:
+	_storm_vignette.visible = false
+
+
+func _update_weather_banner() -> void:
+	if _weather_banner == null:
+		return
+	if _weather_banner.visible:
+		var remaining: float = WeatherManager.get_snowstorm_warning_remaining()
+		if remaining <= 0.0 or not GameManager.game_active:
+			_weather_banner.visible = false
+		else:
+			_weather_banner_label.text = "SNOWSTORM IN %ds" % ceili(remaining)
+			# Flashing icy pulse.
+			var pulse: float = 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0)
+			_weather_banner.modulate = Color(1.0, 1.0, 1.0, pulse)
+	# The vignette follows the live storm state (covers scene reloads and
+	# game-over freezes where signals alone would leave it stuck).
+	var storm_on: bool = WeatherManager.is_snowstorm_active() and GameManager.game_active
+	if _storm_vignette != null and _storm_vignette.visible != storm_on:
+		_storm_vignette.visible = storm_on
+
+
 func _on_game_over(winner: GameManager.Team) -> void:
 	# Let the slow-mo collapse play out before the panel fades in (real-time
 	# delay, independent of the 0.3 time scale).
@@ -427,4 +528,5 @@ func _play_again() -> void:
 	FactionManager.reset()
 	EconomyManager.reset()
 	ResearchManager.reset()
+	WeatherManager.reset()
 	get_tree().reload_current_scene()

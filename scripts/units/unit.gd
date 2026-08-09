@@ -120,6 +120,9 @@ var _slow_mult: float = 1.0
 var _slow_timer: float = 0.0
 # Crush (Brute dragon): hard stun — no movement or attacks while it lasts.
 var _stun_timer: float = 0.0
+# Snowstorm exposure (Revamp Phase 5): set by WeatherManager while this unit
+# is on the surface outside a friendly lantern's radius — blue frost overlay.
+var _frosted: bool = false
 # Blink (wizard): defensive teleport, 15s cooldown (Arcane: 10s).
 var _blink_timer: float = 0.0
 # Arcane Shot (Arcane archer): piercing-arrow cooldown (8s).
@@ -370,8 +373,8 @@ func rally_to(world_pos: Vector2) -> void:
 
 # ---------- Public combat / status wrappers ----------
 
-func take_damage(amount: int, attacker: Node2D = null) -> void:
-	_combat.take_damage(amount, attacker)
+func take_damage(amount: int, attacker: Node2D = null, environmental: bool = false) -> void:
+	_combat.take_damage(amount, attacker, environmental)
 
 
 ## Revamp Phase 4: lava deaths are instant and drop no cargo — the coin melts.

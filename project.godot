@@ -25,6 +25,7 @@ ResearchManager="*res://scripts/autoload/research_manager.gd"
 DebugLog="*res://scripts/autoload/debug_log.gd"
 AudioManager="*res://scripts/autoload/audio_manager.gd"
 SettingsManager="*res://scripts/autoload/settings_manager.gd"
+WeatherManager="*res://scripts/autoload/weather_manager.gd"
 
 [display]
 

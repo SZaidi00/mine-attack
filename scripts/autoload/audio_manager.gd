@@ -91,6 +91,10 @@ func _build_streams() -> void:
 	_streams["sonar"] = _sonar_ping()
 	# Revamp Phase 4: low rolling rumble for lava warnings and the rise.
 	_streams["rumble"] = _rumble(1.6)
+	# Revamp Phase 5: howling storm wind (looped while a snowstorm rages) and
+	# a sharp ice crack one-shot.
+	_streams["storm_wind"] = _storm_wind_loop(5.0)
+	_streams["ice_crack"] = _ice_crack()
 	# Ambience (looping).
 	_streams["wind"] = _wind_loop(4.0)
 	_streams["drips"] = _drip_loop(5.0)
@@ -182,6 +186,45 @@ func _coin_chime() -> AudioStreamWAV:
 			phase += note[0] / _MIX_RATE
 			_write_sample(bytes, offset + i, sin(phase * TAU) * (1.0 - t) * 0.4)
 		offset += note_frames
+	return _make_stream(frames, bytes)
+
+
+## Storm wind (Revamp Phase 5): louder, faster-filtered noise with a slow
+## howling swell, looped while a snowstorm rages.
+func _storm_wind_loop(duration: float) -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * duration)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	var smoothed: float = 0.0
+	for i in range(frames):
+		smoothed = lerpf(smoothed, randf() * 2.0 - 1.0, 0.008)
+		var t: float = float(i) / frames
+		# Two detuned slow swells read as gusting howls rather than flat noise.
+		var howl: float = 0.6 + 0.25 * sin(t * TAU * 2.0) + 0.15 * sin(t * TAU * 3.7)
+		# Fade the loop seam so the wrap-around doesn't click.
+		var seam: float = minf(1.0, minf(i, frames - i) / (_MIX_RATE * 0.2))
+		_write_sample(bytes, i, smoothed * howl * 0.9 * seam)
+	var stream: AudioStreamWAV = _make_stream(frames, bytes)
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = frames
+	return stream
+
+
+## Ice crack (Revamp Phase 5): a sharp bright snap — a fast-decaying burst of
+## high-passed noise with a falling ping on top.
+func _ice_crack() -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * 0.2)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	var prev: float = 0.0
+	var phase: float = 0.0
+	for i in range(frames):
+		var t: float = float(i) / frames
+		var env: float = (1.0 - t) * (1.0 - t)
+		var white: float = randf() * 2.0 - 1.0
+		var high: float = white - prev  # crude high-pass: keeps the snap bright
+		prev = white
+		phase += lerpf(2400.0, 500.0, t) / _MIX_RATE
+		_write_sample(bytes, i, (high * 0.5 + sin(phase * TAU) * 0.35) * env * 0.6)
 	return _make_stream(frames, bytes)
 
 

@@ -44,6 +44,7 @@ const _TECH_ICONS: Dictionary = {
 	"arcane_might": preload("res://frost_mines_assets/icons/icon_wizard.png"),
 	"reinforced_pack": preload("res://frost_mines_assets/icons/icon_miner.png"),
 	"swift_boots": preload("res://frost_mines_assets/icons/icon_miner.png"),
+	"weather_alert": preload("res://frost_mines_assets/icons/icon_weather_alert.png"),
 }
 
 
@@ -194,8 +195,10 @@ func _build_ui() -> void:
 	_canvas = TreeCanvas.new()
 	_canvas.col_open = _COL_EDGE_OPEN
 	_canvas.col_locked = _COL_EDGE_LOCKED
+	# Three tier columns (Phase 5 added the tier-3 capstone Meteorological
+	# Array): origin margin + two inter-column pitches + one node width.
 	_canvas.custom_minimum_size = Vector2(
-		_TREE_ORIGIN.x * 2 + _COL_PITCH + _NODE_SIZE.x,
+		_TREE_ORIGIN.x * 2 + _COL_PITCH * 2 + _NODE_SIZE.x,
 		_TREE_ORIGIN.y * 2 + _ROW_PITCH * 5 + _NODE_SIZE.y)
 	_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(_canvas)

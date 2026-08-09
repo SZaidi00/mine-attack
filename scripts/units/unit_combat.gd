@@ -10,7 +10,11 @@ func _init(u: Unit) -> void:
 	unit = u
 
 
-func take_damage(amount: int, attacker: Node2D = null) -> void:
+## environmental = weather/terrain chip damage (Revamp Phase 5 snowstorm
+## exposure): no popup, no hit flash, and no combat reflexes (miner flee,
+## retaliation, Fight Back) — the storm is an attrition effect, not an
+## attacker, so units keep following their current orders through it.
+func take_damage(amount: int, attacker: Node2D = null, environmental: bool = false) -> void:
 	# Corpses take no damage: a dying unit stays valid for its 1s fade-out and
 	# in-flight projectiles can still land on it — without this guard each
 	# extra hit re-runs _die() and leaks a population slot (army grows past
@@ -25,20 +29,22 @@ func take_damage(amount: int, attacker: Node2D = null) -> void:
 		amount = maxi(1, amount - unit._armor)
 	unit.hp -= amount
 	unit._regen_delay = Constants.UNIT_REGEN_DELAY
-	unit._hit_flash_timer = 0.15
 	unit._damage_log.append([0.0, amount])
+	if not environmental:
+		unit._hit_flash_timer = 0.15
+		_spawn_damage_popup(amount)
+		# Fight Back (Brute): miners hit back when a fighter strikes them in melee.
+		unit._abilities.on_take_damage_fight_back(attacker)
 	unit.queue_redraw()
-	_spawn_damage_popup(amount)
-	# Fight Back (Brute): miners hit back when a fighter strikes them in melee.
-	unit._abilities.on_take_damage_fight_back(attacker)
 	if unit.hp <= 0:
 		# Supply Drop (Industrial): a dragon kill generates coin for its team.
 		unit._abilities.on_kill_supply_drop(attacker)
 		unit._die()
-	elif unit.data.is_miner:
-		unit._navigation._start_flee()
-	else:
-		_maybe_retaliate(attacker)
+	elif not environmental:
+		if unit.data.is_miner:
+			unit._navigation._start_flee()
+		else:
+			_maybe_retaliate(attacker)
 
 
 ## Damage per second taken over the rolling 3s window (0 when untouched).

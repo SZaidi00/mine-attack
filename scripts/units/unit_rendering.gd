@@ -133,6 +133,10 @@ func draw() -> void:
 		var impact_size: Vector2 = _IMPACT_TEXTURE.get_size()
 		unit.draw_texture(_IMPACT_TEXTURE, -impact_size / 2.0 + Vector2(0, -altitude))
 
+	# Snowstorm frost (Revamp Phase 5): an icy glaze over exposed surface units.
+	if unit._frosted:
+		unit.draw_circle(Vector2(0, -altitude), selection_radius - 2.0, Color(0.55, 0.75, 1.0, 0.35))
+
 	# HP bar when damaged, hovered, or selected.
 	if unit.selected or unit.hovered or unit.hp < unit.data.max_hp:
 		var hp_pct: float = float(unit.hp) / float(unit.data.max_hp)

@@ -68,13 +68,15 @@ func _update_vision(team: GameManager.Team) -> void:
 
 ## Every vision source for a team as [center_cell, radius_cells, layer_mask]
 ## triples: living units (per-type radii), the team's building, built
-## lanterns, and built towers.
+## lanterns, and built towers. A raging snowstorm (Revamp Phase 5) halves the
+## radius of units, lanterns, and towers; buildings keep their full radius.
 func _get_vision_sources(team: GameManager.Team) -> Array:
 	var sources: Array = []
+	var weather_mult: float = WeatherManager.get_vision_multiplier()
 	for unit in grid.get_tree().get_nodes_in_group("units"):
 		if unit.team != team or unit._state == Unit.State.DEAD:
 			continue
-		var radius: int = unit.get_vision_radius()
+		var radius: int = maxi(1, roundi(unit.get_vision_radius() * weather_mult))
 		if radius > 0:
 			sources.append([grid.world_to_grid(unit.global_position), radius, unit.get_vision_layer()])
 	for b in grid.get_tree().get_nodes_in_group("buildings"):
@@ -83,11 +85,11 @@ func _get_vision_sources(team: GameManager.Team) -> Array:
 	for lantern in grid.get_tree().get_nodes_in_group("lanterns"):
 		if lantern.team == team and lantern.is_built():
 			var layer: int = GridWorld.VISION_LAYER_UNDERGROUND if lantern.is_underground_lantern else GridWorld.VISION_LAYER_SURFACE
-			sources.append([grid.world_to_grid(lantern.global_position), lantern.vision_radius, layer])
+			sources.append([grid.world_to_grid(lantern.global_position), maxi(1, roundi(lantern.vision_radius * weather_mult)), layer])
 	# Revamp Phase 3: built sentry towers are surface-only vision sources.
 	for tower in grid.get_tree().get_nodes_in_group("towers"):
 		if tower.team == team and tower.is_built():
-			sources.append([grid.world_to_grid(tower.global_position), tower.vision_radius, GridWorld.VISION_LAYER_SURFACE])
+			sources.append([grid.world_to_grid(tower.global_position), maxi(1, roundi(tower.vision_radius * weather_mult)), GridWorld.VISION_LAYER_SURFACE])
 	return sources
 
 

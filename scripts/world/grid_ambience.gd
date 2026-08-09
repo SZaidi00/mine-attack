@@ -38,6 +38,34 @@ func _spawn_ambient_particles() -> void:
 	snow.process_material = snow_mat
 	grid.add_child(snow)
 
+	# Storm snow (Revamp Phase 5): a denser, wind-driven burst layered over the
+	# ambient snow while a snowstorm rages — 2× the flakes angled ~15° gusts.
+	var storm: GPUParticles2D = GPUParticles2D.new()
+	storm.name = "StormSnowParticles"
+	storm.amount = 400
+	storm.lifetime = 10.0
+	storm.texture = dot
+	storm.modulate = Color(1, 1, 1, 0.55)
+	storm.position = Vector2(world_center_x, -300)
+	storm.visibility_rect = Rect2(-world_half_w - 100, -100, (world_half_w + 100) * 2, 450)
+	storm.emitting = false
+	var storm_mat: ParticleProcessMaterial = ParticleProcessMaterial.new()
+	storm_mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	storm_mat.emission_box_extents = Vector3(world_half_w, 10, 1)
+	storm_mat.direction = Vector3(0.3, 1, 0)
+	storm_mat.spread = 15.0
+	storm_mat.gravity = Vector3(12, 14, 0)
+	storm_mat.initial_velocity_min = 30.0
+	storm_mat.initial_velocity_max = 60.0
+	storm_mat.scale_min = 0.2
+	storm_mat.scale_max = 0.4
+	storm.process_material = storm_mat
+	grid.add_child(storm)
+	# Target-based callables (not lambdas) so the connections die with the
+	# emitter when the scene reloads — WeatherManager outlives the grid.
+	WeatherManager.snowstorm_started.connect(storm.set_emitting.bind(true))
+	WeatherManager.snowstorm_ended.connect(storm.set_emitting.bind(false))
+
 	# Dust motes: slow drifting specks across the whole underground.
 	var dust: GPUParticles2D = GPUParticles2D.new()
 	dust.name = "DustMoteParticles"
