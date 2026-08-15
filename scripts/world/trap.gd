@@ -11,10 +11,24 @@ var team: GameManager.Team = GameManager.Team.PLAYER
 # Coin spent on this trap (consistency with tower/wall).
 var total_cost: int = 0
 
+# Selection highlight (set by PlayerController when the player clicks this
+# structure; drawn as a gold ring).
+var selected: bool = false
+
 
 func _ready() -> void:
 	add_to_group("traps")
 	queue_redraw()
+
+
+## Player-initiated demolition: refunds 25% of the total cost directly as
+## coin and removes the trap.
+func demolish() -> void:
+	remove_from_group("traps")
+	var refund: int = roundi(total_cost * Constants.STRUCTURE_DEMOLISH_REFUND_RATIO)
+	if refund > 0 and team == GameManager.Team.PLAYER:
+		EconomyManager.add_coin(team, refund)
+	queue_free()
 
 
 func _process(_delta: float) -> void:
@@ -44,3 +58,7 @@ func _draw() -> void:
 	# Team marker dot at the center.
 	var team_color: Color = GameManager.COLOR_PLAYER if team == GameManager.Team.PLAYER else GameManager.COLOR_ENEMY
 	draw_circle(Vector2.ZERO, 2.5, team_color)
+
+	# Selection highlight ring.
+	if selected:
+		draw_arc(Vector2.ZERO, 12.0, 0, TAU, 16, Color(1.0, 0.9, 0.25), 2.0)

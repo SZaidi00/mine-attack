@@ -65,19 +65,61 @@ func _sync_stance_buttons(pc: PlayerController) -> void:
 			btn.set_pressed_no_signal(stance == stance_name)
 
 
-## Selection readout in the top bar: a count for groups, and the unit's name
-## plus live HP when exactly one unit is selected (click a unit to inspect it).
+## Selection readout in the top bar: a count for groups, the unit's name
+## plus live HP when exactly one unit is selected, or structure info and the
+## demolition refund when structures are selected.
 func _update_selection_label(pc: PlayerController) -> void:
-	var selected: Array = pc.get_selected_units().filter(func(u): return is_instance_valid(u))
-	if selected.size() == 1:
-		var unit = selected[0]
+	var selected_units: Array = pc.get_selected_units().filter(func(u): return is_instance_valid(u))
+	var selected_structures: Array = pc.get_selected_structures().filter(func(s): return is_instance_valid(s))
+	if selected_units.size() == 1 and selected_structures.is_empty():
+		var unit = selected_units[0]
 		var data = unit.get("data")
 		if data != null:
 			hud._selection_label.text = "%s — HP %d/%d" % [data.unit_name, unit.get("hp"), data.max_hp]
 			if data.is_miner:
 				hud._selection_label.text += " — Gold %d/%d" % [unit.get("carried_coin"), data.carry_capacity]
 			return
-	hud._selection_label.text = "Selected: %d" % selected.size()
+	if selected_structures.size() == 1 and selected_units.is_empty():
+		var structure = selected_structures[0]
+		var name: String = _structure_display_name(structure)
+		var hp: int = structure.get("hp") if structure.get("max_hp") != null else 0
+		var max_hp: int = structure.get("max_hp") if structure.get("max_hp") != null else 0
+		var refund: int = _total_demolish_refund(selected_structures)
+		hud._selection_label.text = "%s — HP %d/%d — Demolish for %dg" % [name, hp, max_hp, refund]
+		return
+	if selected_units.is_empty() and selected_structures.is_empty():
+		hud._selection_label.text = "Selected: 0"
+		return
+	# Mixed or multi-selection: show counts and total structure refund.
+	var refund: int = _total_demolish_refund(selected_structures)
+	var text: String = "Selected: %d units" % selected_units.size()
+	if not selected_structures.is_empty():
+		text += ", %d structures" % selected_structures.size()
+	if refund > 0:
+		text += " — Demolish for %dg" % refund
+	hud._selection_label.text = text
+
+
+func _structure_display_name(structure: Node) -> String:
+	if structure.is_in_group("lanterns"):
+		if structure.get("is_underground_lantern"):
+			return "Mine Lantern"
+		return "Lantern T%d" % structure.get("tier")
+	if structure.is_in_group("towers"):
+		return "Sentry Tower"
+	if structure.is_in_group("walls"):
+		return "Wall"
+	if structure.is_in_group("traps"):
+		return "Trap"
+	return "Structure"
+
+
+func _total_demolish_refund(structures: Array) -> int:
+	var total: int = 0
+	for s in structures:
+		if is_instance_valid(s):
+			total += roundi(s.get("total_cost") * hud._Constants.STRUCTURE_DEMOLISH_REFUND_RATIO)
+	return total
 
 
 func _update_unit_breakdown() -> void:

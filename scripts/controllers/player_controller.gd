@@ -18,6 +18,7 @@ signal view_mode_changed(mode: ViewMode)
 @export var selection_box: ColorRect
 
 var _selected_units: Array = []
+var _selected_structures: Array = []
 var _drag_start: Vector2 = Vector2.ZERO
 var _is_dragging: bool = false
 var _camera_speed: float = 600.0
@@ -280,6 +281,10 @@ func get_selected_units() -> Array:
 	return _selected_units
 
 
+func get_selected_structures() -> Array:
+	return _selected_structures
+
+
 func kill_selected() -> void:
 	_commands.kill_selected()
 
@@ -312,3 +317,7 @@ func _filter_dragons(units: Array) -> Array:
 
 func _select_units(units: Array) -> void:
 	_selection._select_units(units)
+
+
+func _select_structures(structures: Array) -> void:
+	_selection._select_structures(structures)

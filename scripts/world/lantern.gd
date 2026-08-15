@@ -35,6 +35,10 @@ var total_cost: int = 0
 var _build_progress: float = 0.0
 var _is_built: bool = false
 
+# Selection highlight (set by PlayerController when the player clicks this
+# structure; drawn as a gold ring around the base).
+var selected: bool = false
+
 # Shared soft radial texture for the glow halo (built once).
 static var _glow_texture: Texture2D = null
 
@@ -134,6 +138,18 @@ func take_damage(amount: int) -> void:
 		_destroy()
 
 
+## Player-initiated demolition: refunds 25% of the total cost directly as
+## coin and removes the lantern (no salvage pickup).
+func demolish() -> void:
+	remove_from_group("lanterns")
+	destroyed.emit(self)
+	AudioManager.play("blast", global_position, -6.0)
+	var refund: int = roundi(total_cost * _Constants.STRUCTURE_DEMOLISH_REFUND_RATIO)
+	if refund > 0 and team == GameManager.Team.PLAYER:
+		EconomyManager.add_coin(team, refund)
+	queue_free()
+
+
 func _destroy() -> void:
 	remove_from_group("lanterns")
 	destroyed.emit(self)
@@ -202,6 +218,10 @@ func _draw() -> void:
 	# Team marker: a small colored ring at the base.
 	var team_color: Color = GameManager.COLOR_PLAYER if team == GameManager.Team.PLAYER else GameManager.COLOR_ENEMY
 	draw_arc(Vector2(0, 14.0) if not is_underground_lantern else Vector2(0, 12.0), 8.0, 0, TAU, 12, team_color, 2.0)
+
+	# Selection highlight ring.
+	if selected:
+		draw_arc(Vector2(0, 14.0) if not is_underground_lantern else Vector2(0, 12.0), 11.0, 0, TAU, 16, Color(1.0, 0.9, 0.25), 2.0)
 
 	# Construction progress bar.
 	if not _is_built:

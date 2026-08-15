@@ -207,11 +207,17 @@ func set_stance(stance: String) -> void:
 
 func kill_selected() -> void:
 	pc._selected_units = pc._selected_units.filter(func(u): return is_instance_valid(u))
-	if pc._selected_units.is_empty():
-		DebugLog.log_reject("PlayerController", "kill_selected", "no selected units")
+	pc._selected_structures = pc._selected_structures.filter(func(s): return is_instance_valid(s))
+	if pc._selected_units.is_empty() and pc._selected_structures.is_empty():
+		DebugLog.log_reject("PlayerController", "kill_selected", "no selection")
 		return
-	DebugLog.log_command("PlayerController", "kill_selected", "units=%d" % pc._selected_units.size())
+	DebugLog.log_command("PlayerController", "kill_selected", "units=%d structures=%d" % [pc._selected_units.size(), pc._selected_structures.size()])
 	var victims: Array = pc._selected_units.duplicate()
+	var structures: Array = pc._selected_structures.duplicate()
 	pc._selection._select_units([])  # dying units must not linger in the selection
+	pc._selection._select_structures([])
 	for u in victims:
 		u.kill()
+	for s in structures:
+		if s.has_method("demolish"):
+			s.demolish()

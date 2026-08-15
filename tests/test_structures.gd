@@ -29,6 +29,7 @@ func after_all() -> void:
 
 func before_each() -> void:
 	EconomyManager.add_coin(PLAYER, 5000)
+	ResearchManager.reset()
 	# Tests place structures at fixed cells — start each test with a clean map.
 	_cleanup_structures()
 
@@ -376,3 +377,68 @@ func test_wave_peels_fighters_onto_remembered_structures() -> void:
 	assert_eq(structures[0], lantern, "nearest to the enemy base is hit first")
 	assert_eq(result["peel_count"], 4, "2 fighters per structure")
 	assert_eq(small["peel_count"], 1, "the peel is capped at half the wave")
+
+
+# ─── Player demolition ───
+
+func test_demolish_tower_refunds_coin_and_removes_it() -> void:
+	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0)))
+	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
+	await _finish_construction(tower)
+	var coin_before: int = EconomyManager.get_coin(PLAYER)
+	var pickups_before: int = _count_pickups()
+	_pc._select_structures([tower])
+	_pc.kill_selected()
+	assert_eq(get_tree().get_nodes_in_group("towers").size(), 0, "demolished tower removed")
+	assert_eq(EconomyManager.get_coin(PLAYER), coin_before + roundi(300 * Constants.STRUCTURE_DEMOLISH_REFUND_RATIO), "25% refund")
+	assert_eq(_count_pickups(), pickups_before, "demolition does not drop a salvage pickup")
+
+
+func test_demolish_wall_unseals_its_column() -> void:
+	var cell := Vector2i(-20, 0)
+	_pc.try_place_structure("wall", _grid.grid_to_world(cell))
+	var wall: Node2D = get_tree().get_nodes_in_group("walls")[0]
+	await _finish_construction(wall)
+	assert_true(_grid._astar.is_point_solid(cell), "built wall seals the cell")
+	_pc._select_structures([wall])
+	_pc.kill_selected()
+	assert_false(_grid._astar.is_point_solid(cell), "demolished wall frees the cell")
+
+
+func test_demolish_lantern_refunds_upgrade_cost() -> void:
+	_pc.try_place_structure("lantern", _grid.grid_to_world(Vector2i(-10, 0)))
+	var lantern: Node2D = get_tree().get_nodes_in_group("lanterns")[0]
+	await _finish_construction(lantern)
+	# Upgrade it to T3 to verify total_cost is respected.
+	_pc.try_place_structure("lantern", _grid.grid_to_world(Vector2i(-10, 0)))
+	_pc.try_place_structure("lantern", _grid.grid_to_world(Vector2i(-10, 0)))
+	var total_cost: int = lantern.total_cost
+	var coin_before: int = EconomyManager.get_coin(PLAYER)
+	_pc._select_structures([lantern])
+	_pc.kill_selected()
+	assert_eq(get_tree().get_nodes_in_group("lanterns").size(), 0, "demolished lantern removed")
+	assert_eq(EconomyManager.get_coin(PLAYER), coin_before + roundi(total_cost * Constants.STRUCTURE_DEMOLISH_REFUND_RATIO), "25% of total spent cost refunded")
+
+
+func test_demolish_trap_refunds_coin() -> void:
+	# Traps require Guerrilla Tactics.
+	ResearchManager._levels[PLAYER]["guerrilla"] = 1
+	assert_true(_pc.try_place_structure("trap", _grid.grid_to_world(Vector2i(-18, 0))), "trap places on walkable surface cell")
+	var trap: Node2D = get_tree().get_nodes_in_group("traps")[0]
+	var coin_before: int = EconomyManager.get_coin(PLAYER)
+	_pc._select_structures([trap])
+	_pc.kill_selected()
+	assert_eq(get_tree().get_nodes_in_group("traps").size(), 0, "demolished trap removed")
+	assert_eq(EconomyManager.get_coin(PLAYER), coin_before + roundi(Constants.TRAP_COST * Constants.STRUCTURE_DEMOLISH_REFUND_RATIO), "25% trap refund")
+
+
+func test_selecting_structure_clears_unit_selection() -> void:
+	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0)))
+	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
+	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, tower.global_position + Vector2(-64, 16))
+	_pc._select_units([swordsman])
+	assert_eq(_pc.get_selected_units().size(), 1, "unit selected")
+	_pc._select_structures([tower])
+	assert_eq(_pc.get_selected_units().size(), 0, "selecting a structure clears units")
+	assert_eq(_pc.get_selected_structures().size(), 1, "structure selected")
+	assert_true(tower.selected, "structure selection flag set")

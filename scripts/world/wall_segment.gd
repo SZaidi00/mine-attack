@@ -31,6 +31,10 @@ var _build_progress: float = 0.0
 var _is_built: bool = false
 var _cell: Vector2i = Vector2i(-9999, -9999)
 
+# Selection highlight (set by PlayerController when the player clicks this
+# structure; drawn as a gold outline around the segment).
+var selected: bool = false
+
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
 
@@ -120,6 +124,23 @@ func take_damage(amount: int) -> void:
 		_destroy()
 
 
+## Player-initiated demolition: refunds 25% of the total cost directly as
+## coin, frees the sealed column, and removes the wall (no salvage pickup).
+func demolish() -> void:
+	remove_from_group("walls")
+	if _grid != null:
+		for y in range(GridWorld.Y_MIN, GridWorld.Y_MAX + 1):
+			var pos := Vector2i(_cell.x, y)
+			if _is_sealable(pos):
+				_grid.unseal_wall_cell(pos)
+	destroyed.emit(self)
+	AudioManager.play("blast", global_position, -6.0)
+	var refund: int = roundi(total_cost * _Constants.STRUCTURE_DEMOLISH_REFUND_RATIO)
+	if refund > 0 and team == GameManager.Team.PLAYER:
+		EconomyManager.add_coin(team, refund)
+	queue_free()
+
+
 func _destroy() -> void:
 	remove_from_group("walls")
 	# Free the cells this wall sealed: the surface row and dug cells beneath
@@ -152,6 +173,10 @@ func _draw() -> void:
 	var alpha: float = 1.0 if _is_built else 0.55
 	# The wall fills its surface-row cell (local +16 = cell center).
 	draw_texture_rect(texture, Rect2(-tex_size / 2.0, tex_size), false, Color(1, 1, 1, alpha))
+
+	# Selection highlight outline.
+	if selected:
+		draw_rect(Rect2(-tex_size.x / 2.0 - 2.0, -tex_size.y / 2.0 - 2.0, tex_size.x + 4.0, tex_size.y + 4.0), Color(1.0, 0.9, 0.25), false, 2.0)
 
 	# Construction progress bar / HP bar.
 	if not _is_built:

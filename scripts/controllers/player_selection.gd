@@ -28,6 +28,16 @@ func _single_select(screen_pos: Vector2) -> void:
 		else:
 			_select_units([clicked_unit])
 		return
+	# Then own placeable structures (towers/walls/lanterns/traps).
+	var clicked_structure: Node2D = _own_structure_at(world_pos)
+	if clicked_structure != null:
+		if shift:
+			if not pc._selected_structures.has(clicked_structure):
+				pc._selected_structures.append(clicked_structure)
+			_select_structures(pc._selected_structures)
+		else:
+			_select_structures([clicked_structure])
+		return
 	# Then buildings.
 	var clicked_building: Node2D = _building_at(world_pos)
 	if clicked_building != null and clicked_building.get("team") == GameManager.Team.PLAYER:
@@ -72,6 +82,30 @@ func _select_units(units: Array) -> void:
 		if is_instance_valid(u):
 			u.selected = true
 			u.queue_redraw()
+	# Selecting units clears any selected structures.
+	for s in pc._selected_structures:
+		if is_instance_valid(s):
+			s.selected = false
+			s.queue_redraw()
+	pc._selected_structures = []
+
+
+func _select_structures(structures: Array) -> void:
+	for s in pc._selected_structures:
+		if is_instance_valid(s):
+			s.selected = false
+			s.queue_redraw()
+	pc._selected_structures = structures
+	for s in pc._selected_structures:
+		if is_instance_valid(s):
+			s.selected = true
+			s.queue_redraw()
+	# Selecting structures clears any selected units.
+	for u in pc._selected_units:
+		if is_instance_valid(u):
+			u.selected = false
+			u.queue_redraw()
+	pc._selected_units = []
 
 
 func _unit_at(world_pos: Vector2) -> Unit:
@@ -102,6 +136,17 @@ func _enemy_structure_at(world_pos: Vector2) -> Node2D:
 			if structure.team == GameManager.Team.PLAYER:
 				continue
 			if not pc._grid.is_visible_to(GameManager.Team.PLAYER, structure.global_position):
+				continue
+			if structure.global_position.distance_to(world_pos) < GridWorld.CELL_SIZE:
+				return structure
+	return null
+
+
+## Own placeable structure near the click point (lanterns/towers/walls/traps).
+func _own_structure_at(world_pos: Vector2) -> Node2D:
+	for group: String in ["lanterns", "towers", "walls", "traps"]:
+		for structure in pc.get_tree().get_nodes_in_group(group):
+			if structure.team != GameManager.Team.PLAYER:
 				continue
 			if structure.global_position.distance_to(world_pos) < GridWorld.CELL_SIZE:
 				return structure

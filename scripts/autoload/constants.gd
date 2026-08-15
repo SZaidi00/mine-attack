@@ -157,6 +157,9 @@ const PLACED_WALL_BUILD_TIME: float = 3.0
 const PLACED_WALL_MAX_COUNT: int = 2
 # Destroyed towers/walls drop this share of their build cost (as lanterns do).
 const STRUCTURE_SALVAGE_RATIO: float = 0.5
+# Player-initiated demolition of own towers/walls/lanterns/traps refunds this
+# share of the structure's total spent cost directly as coin (no pickup).
+const STRUCTURE_DEMOLISH_REFUND_RATIO: float = 0.25
 
 # ─── DYNAMIC TERRAIN & EVENTS (Revamp Phase 4) ───
 # Lava rising: every LAVA_MIN/MAX_INTERVAL seconds of match time (random,
