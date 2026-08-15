@@ -24,6 +24,14 @@ var _faction_center: CenterContainer
 var _selected_faction_id: String = ""
 var _faction_cards: Dictionary = {}  # faction_id -> PanelContainer
 var _play_button: Button
+# Revamp Phase 7: faction-themed background particles on the select screen
+# (purple sparks / red embers / yellow steam), tinted on selection.
+var _faction_particles: CPUParticles2D
+const _FACTION_PARTICLE_COLORS: Dictionary = {
+	"arcane": Color(0.77, 0.52, 0.99, 0.55),  # purple sparks
+	"brute": Color(0.97, 0.44, 0.44, 0.55),  # red embers
+	"industrial": Color(0.98, 0.79, 0.21, 0.45),  # yellow steam
+}
 
 
 func _ready() -> void:
@@ -288,6 +296,8 @@ func _build_faction_select() -> void:
 	if FactionManager.player_faction_id != "":
 		_select_faction(FactionManager.player_faction_id)
 
+	_build_faction_particles()
+
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 16)
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -385,11 +395,48 @@ func _faction_card_style(faction: FactionData, selected: bool) -> StyleBoxFlat:
 	style.border_color = Color("#fbbf24") if selected else faction.menu_color.darkened(0.5)
 	style.set_border_width_all(3 if selected else 1)
 	style.set_corner_radius_all(10)
+	if selected:
+		# Gold glow bleeding out from behind the card.
+		style.shadow_color = Color(0.98, 0.75, 0.14, 0.35)
+		style.shadow_size = 18
 	style.content_margin_left = 16
 	style.content_margin_top = 16
 	style.content_margin_right = 16
 	style.content_margin_bottom = 16
 	return style
+
+
+## Revamp Phase 7: subtle faction-colored motes rising from the bottom edge
+## while the faction select screen is open; tinted by the current pick.
+func _build_faction_particles() -> void:
+	_faction_particles = CPUParticles2D.new()
+	_faction_particles.amount = 60
+	_faction_particles.lifetime = 5.0
+	_faction_particles.preprocess = 5.0  # Already drifting when the screen opens.
+	_faction_particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	_faction_particles.emission_rect_extents = Vector2(1400, 8)
+	_faction_particles.direction = Vector2(0, -1)
+	_faction_particles.spread = 15.0
+	_faction_particles.initial_velocity_min = 12.0
+	_faction_particles.initial_velocity_max = 35.0
+	_faction_particles.gravity = Vector2(0, -6)
+	_faction_particles.scale_amount_min = 0.6
+	_faction_particles.scale_amount_max = 1.8
+	_faction_particles.texture = _make_soft_dot_texture()
+	_faction_particles.emitting = _selected_faction_id != ""
+	if _selected_faction_id != "":
+		_faction_particles.color = _FACTION_PARTICLE_COLORS[_selected_faction_id]
+	add_child(_faction_particles)
+	# Behind the faction cards, in front of the backdrop.
+	move_child(_faction_particles, _faction_center.get_index())
+	_reposition_faction_particles.call_deferred()
+
+
+func _reposition_faction_particles() -> void:
+	if not is_instance_valid(_faction_particles):
+		return
+	_faction_particles.position = Vector2(size.x * 0.5, size.y + 10.0)
+	_faction_particles.emission_rect_extents = Vector2(size.x * 0.55, 8.0)
 
 
 func _select_faction(faction_id: String) -> void:
@@ -398,16 +445,22 @@ func _select_faction(faction_id: String) -> void:
 		_faction_cards[id].add_theme_stylebox_override("panel", _faction_card_style(FactionManager.FACTIONS[id], id == faction_id))
 	if _play_button != null:
 		_play_button.disabled = false
+	if _faction_particles != null:
+		_faction_particles.color = _FACTION_PARTICLE_COLORS[faction_id]
+		_faction_particles.emitting = _faction_center.visible
 
 
 func _show_faction_select() -> void:
 	_main_center.visible = false
 	_faction_center.visible = true
+	_reposition_faction_particles()
+	_faction_particles.emitting = _selected_faction_id != ""
 
 
 func _show_main_card() -> void:
 	_faction_center.visible = false
 	_main_center.visible = true
+	_faction_particles.emitting = false
 
 
 func _on_play() -> void:

@@ -38,6 +38,9 @@ var _scan_timer: float = 0.0
 var _target: Node2D = null
 # Rotating scan-beam angle (purely cosmetic).
 var _scan_angle: float = 0.0
+# Post-faction attack range; the Surface Warfare branch bonus multiplies this
+# base so recomputing on research changes never compounds.
+var _base_attack_range: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -52,8 +55,32 @@ func _ready() -> void:
 		attack_cooldown = faction.tower_cooldown
 		build_time = _Constants.TOWER_BUILD_TIME * faction.tower_build_time_mult
 	hp = max_hp
+	_base_attack_range = attack_range
+	_apply_branch_range()
+	if not ResearchManager.research_completed.is_connected(_on_research_completed):
+		ResearchManager.research_completed.connect(_on_research_completed)
+	if not ResearchManager.research_changed.is_connected(_on_research_changed):
+		ResearchManager.research_changed.connect(_on_research_changed)
 	_scan_angle = randf() * TAU
 	queue_redraw()
+
+
+func _on_research_completed(completed_team: GameManager.Team, _tech_id: String) -> void:
+	if completed_team == team:
+		_apply_branch_range()
+
+
+func _on_research_changed(changed_team: GameManager.Team) -> void:
+	if changed_team == team:
+		_apply_branch_range()
+
+
+## Phase 6: the Surface Warfare branch widens tower range; respec reverts it.
+## Recomputed from the post-faction base so already-placed towers update.
+func _apply_branch_range() -> void:
+	attack_range = _base_attack_range
+	if ResearchManager.has_branch(team, "surface_war"):
+		attack_range = _base_attack_range * _Constants.SURFACE_WAR_TOWER_RANGE_MULT
 
 
 func is_built() -> bool:

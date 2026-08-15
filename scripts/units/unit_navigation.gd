@@ -19,7 +19,7 @@ func _follow_path(delta: float) -> void:
 	# larger). Without the step-aware threshold, a large delta (lag spike, high
 	# time scale) plus the separation nudge can orbit the point forever without
 	# ever coming within 2px at the start of a frame.
-	var step: float = unit.data.speed * unit._slow_mult * _weather_speed_mult() * delta
+	var step: float = unit.data.speed * unit._slow_mult * _weather_speed_mult() * _research_speed_mult() * delta
 	if unit.is_underground and unit.data.is_fighter:
 		step *= 0.6
 	var arrive: float = maxf(2.0, step)
@@ -63,6 +63,20 @@ func _weather_speed_mult() -> float:
 	return WeatherManager.get_speed_multiplier()
 
 
+## Revamp Phase 6 branch speed bonuses: Deep Delve speeds miners up
+## underground, Surface War speeds fighters up on the surface, and Guerrilla
+## speeds up any unit with no ally nearby (flag maintained by Unit._process).
+func _research_speed_mult() -> float:
+	var mult: float = 1.0
+	if unit.data.is_miner and unit.is_underground and ResearchManager.has_branch(unit.team, "deep_delve"):
+		mult *= Constants.DEEP_DELVE_UG_SPEED_MULT
+	elif unit.data.is_fighter and not unit.is_underground and ResearchManager.has_branch(unit.team, "surface_war"):
+		mult *= Constants.SURFACE_WAR_SPEED_MULT
+	if unit._guerrilla_active:
+		mult *= Constants.GUERRILLA_SPEED_MULT
+	return mult
+
+
 ## Phase 3.4: push away from nearby friendly units to avoid stacking and
 ## single-file parade artifacts. This is a soft steering nudge, not physics.
 func _compute_separation() -> Vector2:
@@ -87,7 +101,7 @@ func _kite_away_from(threat_pos: Vector2, delta: float) -> void:
 	var away: Vector2 = unit.global_position - threat_pos
 	if away.length_squared() < 0.001:
 		away = Vector2.LEFT
-	var step: float = unit.data.speed * unit._slow_mult * _weather_speed_mult() * delta
+	var step: float = unit.data.speed * unit._slow_mult * _weather_speed_mult() * _research_speed_mult() * delta
 	if unit.is_underground and unit.data.is_fighter:
 		step *= 0.6
 	var next_pos: Vector2 = unit.global_position + away.normalized() * step

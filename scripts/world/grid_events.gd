@@ -103,11 +103,7 @@ func _start_lava_warning(layers: int = -1) -> void:
 	if _lava_warning_left > 0.0 or _lava_active_left > 0.0:
 		return
 	_lava_layers = layers if layers > 0 else randi_range(_Constants.LAVA_LAYERS_MIN, _Constants.LAVA_LAYERS_MAX)
-	# Weather Alert research (Phase 5/6 tech) extends the warning; get_level
-	# degrades to 0 while the tech doesn't exist, so the base time applies.
 	var warning: float = _Constants.LAVA_WARNING_TIME
-	if ResearchManager.get_level(GameManager.Team.PLAYER, "weather_alert") > 0:
-		warning = _Constants.LAVA_WARNING_TIME_RESEARCH
 	_lava_warning_left = warning
 	DebugLog.log_command("GridEvents", "lava_warning", "layers=%d warning=%.0fs" % [_lava_layers, warning])
 	AudioManager.play("rumble", Vector2.INF, -4.0)
@@ -249,6 +245,10 @@ func _trigger_cave_in(center: Vector2i) -> void:
 			continue
 		unit.take_damage(_Constants.CAVEIN_DAMAGE)
 		if unit._state == Unit.State.DEAD:
+			continue
+		# Reinforced Pack (Revamp Phase 6): miners take the damage but brace
+		# against the shove — no push/reposition.
+		if unit.data.is_miner and ResearchManager.has_branch(unit.team, "reinforced_pack"):
 			continue
 		var escape: Vector2i = grid._path.nearest_walkable_cell(upos, 6)
 		if grid._path.is_walkable(escape):

@@ -191,7 +191,8 @@ func _process_attack(delta: float) -> void:
 
 	# Fog of War: a unit target that slipped out of the team's vision breaks
 	# the lock — you cannot chase what you cannot see (Revamp Phase 1).
-	if unit._target_unit != null and target_alive and not unit._vision._team_can_see(unit._target_unit.global_position):
+	# Longbow archers (Revamp Phase 6) keep the lock and blind-fire into fog.
+	if unit._target_unit != null and target_alive and not unit._vision._has_blind_fire() and not unit._vision._team_can_see(unit._target_unit.global_position):
 		unit._clear_target()
 		unit._set_state(Unit.State.IDLE, "target lost to fog")
 		return
@@ -247,6 +248,12 @@ func _process_attack(delta: float) -> void:
 		# Rune Blade (Arcane): the first hit of each engagement deals +50%.
 		hit_damage = unit._abilities.apply_rune_blade(hit_damage)
 		unit._has_hit_this_engagement = true
+		# Surface War (Revamp Phase 6): fighters deal bonus damage on the surface.
+		if unit.data.is_fighter and not unit.is_underground and ResearchManager.has_branch(unit.team, "surface_war"):
+			hit_damage = roundi(hit_damage * Constants.SURFACE_WAR_DMG_MULT)
+		# Siege Master (Revamp Phase 6): swordsmen deal bonus damage to buildings.
+		if unit._target_building != null and unit.data.unit_name.to_lower() == "swordsman" and ResearchManager.has_branch(unit.team, "siege_master"):
+			hit_damage = roundi(hit_damage * Constants.SIEGE_MASTER_BUILDING_DMG_MULT)
 		if unit.data.attack_range <= 35.0:
 			# Melee
 			AudioManager.play("sword", unit.global_position, -8.0)

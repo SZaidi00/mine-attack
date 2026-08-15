@@ -57,6 +57,7 @@ const _ICON_SNOWSTORM: Texture2D = preload("res://frost_mines_assets/icons/icon_
 @onready var _research_panel: Control = $ResearchPanel
 @onready var _player_faction_icon: TextureRect = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/PlayerFactionIcon
 @onready var _enemy_faction_icon: TextureRect = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyFactionIcon
+@onready var _enemy_faction_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyFactionLabel
 @onready var _stance_buttons: Dictionary = {}
 @onready var _game_over_panel: PanelContainer = $GameOverPanel
 
@@ -142,6 +143,7 @@ func _ready() -> void:
 	_menus._build_build_menu()
 	_build_lava_banner()
 	_build_weather_banner()
+	_build_faction_popup()
 	_on_economy_changed(GameManager.Team.PLAYER)
 	_updates._sync_view_buttons()
 	_updates._sync_speed_buttons()
@@ -330,7 +332,8 @@ func _get_enemy_building() -> Node2D:
 
 
 var _pause_panel: PanelContainer = null
-var _build_menu: PanelContainer = null
+# Radial build menu (Revamp Phase 7): options fan out above the Build button.
+var _build_menu: Control = null
 var _build_lantern_button: Button = null
 var _build_mine_lantern_button: Button = null
 var _build_tower_button: Button = null
@@ -422,7 +425,8 @@ func _build_weather_banner() -> void:
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_weather_banner.add_child(icon)
 	_weather_banner_label = Label.new()
-	_weather_banner_label.add_theme_color_override("font_color", Color(0.65, 0.8, 1.0))
+	# Revamp Phase 7: the warning flashes red (the storm itself stays icy).
+	_weather_banner_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.25))
 	_weather_banner_label.add_theme_font_size_override("font_size", 28)
 	_weather_banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_weather_banner.add_child(_weather_banner_label)
@@ -479,7 +483,7 @@ func _update_weather_banner() -> void:
 			_weather_banner.visible = false
 		else:
 			_weather_banner_label.text = "SNOWSTORM IN %ds" % ceili(remaining)
-			# Flashing icy pulse.
+			# Flashing red pulse.
 			var pulse: float = 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0)
 			_weather_banner.modulate = Color(1.0, 1.0, 1.0, pulse)
 	# The vignette follows the live storm state (covers scene reloads and
@@ -487,6 +491,64 @@ func _update_weather_banner() -> void:
 	var storm_on: bool = WeatherManager.is_snowstorm_active() and GameManager.game_active
 	if _storm_vignette != null and _storm_vignette.visible != storm_on:
 		_storm_vignette.visible = storm_on
+
+
+# Faction identified popup (Revamp Phase 7): a brief center-screen banner
+# with the enemy faction's icon when a scout reaches their base.
+var _faction_popup: PanelContainer = null
+var _faction_popup_icon: TextureRect = null
+var _faction_popup_label: Label = null
+var _faction_popup_tween: Tween = null
+
+
+func _build_faction_popup() -> void:
+	_faction_popup = PanelContainer.new()
+	_faction_popup.name = "FactionIdentifiedPopup"
+	_faction_popup.visible = false
+	_faction_popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_styling._style_panel(_faction_popup)
+	_faction_popup.set_anchors_preset(Control.PRESET_CENTER)
+	_faction_popup.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_faction_popup.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_faction_popup.position.y = -160.0
+	var hbox: HBoxContainer = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 12)
+	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_faction_popup.add_child(hbox)
+	_faction_popup_icon = TextureRect.new()
+	_faction_popup_icon.custom_minimum_size = Vector2(40, 40)
+	_faction_popup_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_faction_popup_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_faction_popup_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_child(_faction_popup_icon)
+	_faction_popup_label = Label.new()
+	_faction_popup_label.add_theme_font_size_override("font_size", 24)
+	_faction_popup_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_child(_faction_popup_label)
+	add_child(_faction_popup)
+	FactionManager.faction_identified.connect(_on_faction_identified_popup)
+
+
+func _on_faction_identified_popup(team: GameManager.Team) -> void:
+	# Only the player learning the ENEMY faction warrants a popup (the AI
+	# scouting the player's base is its own business).
+	if team != GameManager.Team.ENEMY:
+		return
+	var faction: FactionData = FactionManager.get_faction(GameManager.Team.ENEMY)
+	if faction == null:
+		return
+	_faction_popup_icon.texture = faction.icon
+	_faction_popup_label.text = "ENEMY FACTION IDENTIFIED: %s" % faction.faction_name.to_upper()
+	_faction_popup_label.add_theme_color_override("font_color", faction.menu_color)
+	if _faction_popup_tween != null and _faction_popup_tween.is_valid():
+		_faction_popup_tween.kill()
+	_faction_popup.visible = true
+	_faction_popup.modulate.a = 0.0
+	_faction_popup_tween = create_tween()
+	_faction_popup_tween.tween_property(_faction_popup, "modulate:a", 1.0, 0.3)
+	_faction_popup_tween.tween_interval(3.5)
+	_faction_popup_tween.tween_property(_faction_popup, "modulate:a", 0.0, 0.6)
+	_faction_popup_tween.tween_callback(func(): _faction_popup.visible = false)
 
 
 func _on_game_over(winner: GameManager.Team) -> void:

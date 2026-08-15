@@ -21,7 +21,7 @@ func _process_mine(delta: float) -> void:
 	if unit.carried_coin >= unit.data.carry_capacity:
 		unit._commands.deposit_coin()
 		return
-	if unit.data.miner_level < cell.miner_level_required:
+	if unit.get_effective_miner_level() < cell.miner_level_required:
 		unit._release_claim()
 		unit._set_state(Unit.State.IDLE, "miner level too low")
 		return
@@ -48,7 +48,7 @@ func _process_mine(delta: float) -> void:
 		unit._mine_timer = 1.0 / max(0.1, unit.data.mining_swings_per_sec)
 		unit._mine_hit_flash = 0.08
 		var dmg: int = max(1, unit.data.mining_damage)
-		var coin: int = unit._grid.damage_cell(unit._target_cell, dmg, unit.data.miner_level)
+		var coin: int = unit._grid.damage_cell(unit._target_cell, dmg, unit.get_effective_miner_level())
 		AudioManager.play("pickaxe", unit.global_position, -10.0)
 		if coin > 0:
 			# Efficiency (Industrial): ore yields bonus gold per swing.
@@ -111,7 +111,7 @@ func _find_and_mine() -> void:
 				continue
 			# Level gate enforced at seek time so miners never path to tiles
 			# they can never dig.
-			if unit.data.miner_level < c.miner_level_required:
+			if unit.get_effective_miner_level() < c.miner_level_required:
 				continue
 			# Skip tiles another miner reserved.
 			if not unit._grid.is_cell_claimable(pos, id):

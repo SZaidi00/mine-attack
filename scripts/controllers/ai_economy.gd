@@ -45,7 +45,7 @@ func _run_economy() -> void:
 	# rule as fighter upgrades. Research time is not difficulty-scaled — the
 	# difficulty multipliers already speed up the income that pays for it.
 	if not ResearchManager.is_researching(ai.team):
-		var tech: String = _pick_research(building)
+		var tech: String = _pick_research()
 		if tech != "":
 			var data: Dictionary = ResearchManager.get_next_level_data(ai.team, tech)
 			if EconomyManager.get_coin(ai.team) - reserve >= int(data.cost) + 250:
@@ -126,38 +126,33 @@ func _effective_army_mix() -> Dictionary:
 	return mix
 
 
-## Next research to buy, by priority: sonar first (revealed ore shortens
-## every miner trip), fortify when the base is hurt, then the fighter tech
-## matching the army's most numerous fighter type, then anything left.
-func _pick_research(building: Node2D) -> String:
-	if _research_open("ore_sonar"):
-		return "ore_sonar"
-	var hurt: bool = building != null and float(building.get("_hp")) < float(building.get("max_hp")) * 0.6
-	if hurt and _research_open("fortify"):
-		return "fortify"
-	# Only count fighter types that have a matching research tech — dragons
-	# have no tech row, so they must not become best_unit and index-miss.
-	var counts: Dictionary = { "swordsman": 0, "archer": 0, "wizard": 0 }
-	for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
-		if unit.data.is_fighter:
-			var unit_id: String = unit.data.unit_name.to_lower()
-			if counts.has(unit_id):
-				counts[unit_id] += 1
-	var tech_by_unit: Dictionary = { "swordsman": "bulwark", "archer": "longbow", "wizard": "inferno" }
-	var best_unit: String = "swordsman"
-	for unit_id in counts:
-		if counts[unit_id] > counts[best_unit]:
-			best_unit = unit_id
-	if _research_open(tech_by_unit[best_unit]):
-		return tech_by_unit[best_unit]
-	for tech in ["bulwark", "longbow", "inferno", "berserk", "rapid_fire", "arcane_might", "reinforced_pack", "swift_boots", "deep_scan", "self_repair", "fortify"]:
+## Next research to buy in the branch tree: commit to a tier-1 side by army
+## composition (fighter-majority army → surface_war, miner-heavy → deep_delve),
+## then climb that side tier by tier in a deterministic preference order.
+## Alternatives lock permanently once researched, so _research_open gates
+## every pick on is_locked. Returns "" when nothing on the side is pickable.
+func _pick_research() -> String:
+	var deep_side: bool = ResearchManager.has_branch(ai.team, "deep_delve")
+	var war_side: bool = ResearchManager.has_branch(ai.team, "surface_war")
+	if not deep_side and not war_side:
+		return "surface_war" if _count_fighters() > _count_miners() else "deep_delve"
+	var tier2: Array[String] = ["ore_sonar", "reinforced_pack"] if deep_side else ["longbow", "rapid_fire"]
+	if not ResearchManager.has_branch(ai.team, tier2[0]) and not ResearchManager.has_branch(ai.team, tier2[1]):
+		for tech in tier2:
+			if _research_open(tech):
+				return tech
+		return ""
+	var tier3: Array[String] = ["crystal_forge", "earth_shield"] if deep_side else ["siege_master", "guerrilla"]
+	for tech in tier3:
 		if _research_open(tech):
 			return tech
 	return ""
 
 
 func _research_open(tech_id: String) -> bool:
-	return not ResearchManager.get_next_level_data(ai.team, tech_id).is_empty() \
+	return ResearchManager.get_level(ai.team, tech_id) == 0 \
+		and not ResearchManager.is_locked(ai.team, tech_id) \
+		and not ResearchManager.get_next_level_data(ai.team, tech_id).is_empty() \
 		and ResearchManager.are_prerequisites_met(ai.team, tech_id)
 
 
@@ -178,5 +173,13 @@ func _count_miners() -> int:
 	var n: int = 0
 	for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
 		if unit.data.is_miner and unit._state != Unit.State.DEAD:
+			n += 1
+	return n
+
+
+func _count_fighters() -> int:
+	var n: int = 0
+	for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
+		if unit.data.is_fighter and unit._state != Unit.State.DEAD:
 			n += 1
 	return n

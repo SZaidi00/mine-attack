@@ -24,7 +24,7 @@ signal unit_spawned(unit: Node2D)
 @export var height_cells: int = 5
 
 var _hp: int = max_hp
-var _base_max_hp: int = max_hp  # Fortify research adds on top of this.
+var _base_max_hp: int = max_hp  # Earth Shield research adds on top of this.
 var _queue: Array = []  # { id: String, data: UnitData, remaining: float }
 var _resources: Dictionary = {}
 var _destroyed: bool = false
@@ -33,8 +33,6 @@ var _deposit_point: Marker2D
 # seconds (stretched by the game-over slow-mo, which is the point).
 var _collapsing: bool = false
 var _collapse_t: float = 0.0
-# Fractional HP accumulator for the Self-Repair research regen.
-var _regen_accum: float = 0.0
 # match_time of the last hit taken (drives is_under_attack()).
 var _last_damage_time: float = -999.0
 # Throttle for the faction-identification scout check (enemy building only).
@@ -58,21 +56,36 @@ func _ready() -> void:
 	_connect_view_mode()
 	if not ResearchManager.research_completed.is_connected(_on_research_completed):
 		ResearchManager.research_completed.connect(_on_research_completed)
+	if not ResearchManager.research_changed.is_connected(_on_research_changed):
+		ResearchManager.research_changed.connect(_on_research_changed)
 	queue_redraw()
 	call_deferred("_spawn_starting_miners")
 
 
-## Fortify research: raises max HP on top of the base value and heals the
-## delta, so the upgrade is immediately visible in the HP bar.
-func _on_research_completed(completed_team: GameManager.Team, tech_id: String) -> void:
-	if completed_team != team or tech_id != "fortify" or _destroyed:
+func _on_research_completed(completed_team: GameManager.Team, _tech_id: String) -> void:
+	_recompute_max_hp(completed_team)
+
+
+func _on_research_changed(changed_team: GameManager.Team) -> void:
+	_recompute_max_hp(changed_team)
+
+
+## Earth Shield research (`building_hp` bonus): raises max HP on top of the
+## base value and heals the delta, so the upgrade is immediately visible in
+## the HP bar. On respec the bonus shrinks back — no negative heal, the
+## current HP is just clamped to the new max.
+func _recompute_max_hp(changed_team: GameManager.Team) -> void:
+	if changed_team != team or _destroyed:
 		return
 	var new_max: int = _base_max_hp + int(ResearchManager.get_stat_bonus(team, "building_hp"))
 	var delta: int = new_max - max_hp
-	if delta <= 0:
+	if delta == 0:
 		return
 	max_hp = new_max
-	_hp += delta
+	if delta > 0:
+		_hp += delta
+	else:
+		_hp = mini(_hp, max_hp)
 	hp_changed.emit(_hp, max_hp)
 	queue_redraw()
 
@@ -164,16 +177,6 @@ func _process(delta: float) -> void:
 				_check_faction_identified()
 	if not GameManager.game_active:
 		return
-	# Self-Repair research: slow regeneration up to max HP.
-	var regen: float = ResearchManager.get_stat_bonus(team, "building_regen")
-	if regen > 0.0 and _hp < max_hp:
-		_regen_accum += regen * delta
-		var whole: int = int(_regen_accum)
-		if whole > 0:
-			_regen_accum -= whole
-			_hp = mini(_hp + whole, max_hp)
-			hp_changed.emit(_hp, max_hp)
-			queue_redraw()
 	if _queue.is_empty():
 		return
 	var current = _queue[0]

@@ -8,12 +8,14 @@ func _init(h: HUD) -> void:
 
 
 ## Revamp Phase 2: faction icons in the top bar. The player's own faction is
-## always shown; the enemy's stays hidden until a scout identifies it.
+## always shown; the enemy's stays hidden until a scout identifies it (the
+## "Enemy: ???" label swaps to the faction name — Revamp Phase 7).
 func _setup_faction_icons() -> void:
 	if hud._player_faction_icon:
 		var player_faction: FactionData = FactionManager.get_faction(GameManager.Team.PLAYER)
 		if player_faction != null and player_faction.icon != null:
 			hud._player_faction_icon.texture = player_faction.icon
+			hud._player_faction_icon.tooltip_text = "Your faction: %s" % player_faction.faction_name
 		else:
 			hud._player_faction_icon.visible = false
 	if hud._enemy_faction_icon:
@@ -31,6 +33,10 @@ func _on_faction_identified(team: GameManager.Team) -> void:
 	if enemy_faction != null and enemy_faction.icon != null:
 		hud._enemy_faction_icon.texture = enemy_faction.icon
 		hud._enemy_faction_icon.visible = true
+	if enemy_faction != null and hud._enemy_faction_label != null:
+		hud._enemy_faction_label.text = "Enemy: %s" % enemy_faction.faction_name
+		hud._enemy_faction_label.add_theme_color_override("font_color", enemy_faction.menu_color)
+		hud._enemy_faction_label.tooltip_text = enemy_faction.description
 
 
 func _sync_speed_buttons() -> void:

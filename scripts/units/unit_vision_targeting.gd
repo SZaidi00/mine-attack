@@ -42,6 +42,12 @@ func _team_can_see(world_pos: Vector2) -> bool:
 	return unit._grid.is_visible_to(unit.team, world_pos)
 
 
+## Longbow (Revamp Phase 6): archers blind-fire into fog — their targeting
+## skips the visibility gate.
+func _has_blind_fire() -> bool:
+	return unit.data.unit_name.to_lower() == "archer" and ResearchManager.has_branch(unit.team, "longbow")
+
+
 func _team_dir() -> int:
 	return -1 if unit.team == GameManager.Team.PLAYER else 1
 
@@ -87,8 +93,9 @@ func _find_auto_attack_target():
 					continue
 				if not unit._combat.can_damage_unit(u):
 					continue
-				# Fog of War: cannot auto-attack what the team cannot see.
-				if not _team_can_see(u.global_position):
+				# Fog of War: cannot auto-attack what the team cannot see
+				# (Longbow archers blind-fire past this, Revamp Phase 6).
+				if not _has_blind_fire() and not _team_can_see(u.global_position):
 					continue
 				if leashed and unit._post_point.distance_squared_to(u.global_position) > leash_d2:
 					continue

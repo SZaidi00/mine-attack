@@ -117,14 +117,12 @@ func get_speed_multiplier() -> float:
 func _start_snowstorm_warning() -> void:
 	if _warning_left > 0.0 or _storm_left > 0.0:
 		return
-	# Weather Alert research extends the warning without naming the event.
-	var warning: float = _Constants.SNOWSTORM_WARNING_TIME
-	if ResearchManager.get_level(GameManager.Team.PLAYER, "weather_alert") > 0:
-		warning = _Constants.SNOWSTORM_WARNING_TIME_RESEARCH
-	_warning_left = warning
-	DebugLog.log_command("WeatherManager", "snowstorm_warning", "warning=%.0fs" % warning)
+	# The warning always runs the base duration (Phase 6 removed the Weather
+	# Alert tech that used to extend it).
+	_warning_left = _Constants.SNOWSTORM_WARNING_TIME
+	DebugLog.log_command("WeatherManager", "snowstorm_warning", "warning=%.0fs" % _Constants.SNOWSTORM_WARNING_TIME)
 	AudioManager.play("alarm", Vector2.INF, -6.0)
-	weather_warning_started.emit(warning)
+	weather_warning_started.emit(_Constants.SNOWSTORM_WARNING_TIME)
 
 
 func _start_snowstorm() -> void:

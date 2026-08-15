@@ -2,7 +2,7 @@ extends GutTest
 
 # Weather system (Revamp Phase 5): snowstorm warning → storm → end lifecycle,
 # the vision/speed multipliers, lantern-shelter exposure damage with the frost
-# overlay, and the Meteorological Array (weather_alert) warning extension.
+# overlay, and the fixed-length storm warning.
 # Random scheduling is disabled for the whole suite — every storm is forced.
 
 const PLAYER: int = 0
@@ -86,10 +86,10 @@ func test_snowstorm_full_lifecycle() -> void:
 	assert_signal_emitted(WeatherManager, "snowstorm_ended")
 
 
-func test_weather_alert_research_extends_warning() -> void:
-	ResearchManager._levels[PLAYER]["weather_alert"] = 1
+func test_snowstorm_warning_is_always_the_base_time() -> void:
+	# Phase 6 removed the weather_alert research: nothing extends the warning.
 	WeatherManager.force_snowstorm_warning()
-	assert_almost_eq(WeatherManager.get_snowstorm_warning_remaining(), Constants.SNOWSTORM_WARNING_TIME_RESEARCH, 0.1)
+	assert_almost_eq(WeatherManager.get_snowstorm_warning_remaining(), Constants.SNOWSTORM_WARNING_TIME, 0.1)
 
 
 func test_multipliers_only_during_storm() -> void:

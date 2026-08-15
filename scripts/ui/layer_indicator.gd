@@ -10,6 +10,7 @@ func _ready() -> void:
 	custom_minimum_size = Vector2(220, 44)
 	_update_level()
 	EconomyManager.miner_level_changed.connect(_on_miner_level_changed)
+	ResearchManager.research_changed.connect(_on_research_changed)
 	queue_redraw()
 
 
@@ -17,6 +18,14 @@ func _on_miner_level_changed(team: GameManager.Team) -> void:
 	if team != GameManager.Team.PLAYER:
 		return
 	_update_level()
+	queue_redraw()
+
+
+## Phase 6 branches change layer reach independently of the miner level
+## (Deep Delve unlocks everything, Surface Warfare caps at layer 4).
+func _on_research_changed(team: GameManager.Team) -> void:
+	if team != GameManager.Team.PLAYER:
+		return
 	queue_redraw()
 
 
@@ -46,6 +55,10 @@ func _draw() -> void:
 
 
 func _is_accessible(layer: int) -> bool:
+	if ResearchManager.has_branch(GameManager.Team.PLAYER, "deep_delve"):
+		return true
+	if ResearchManager.has_branch(GameManager.Team.PLAYER, "surface_war"):
+		return layer <= 4
 	if _level >= 3:
 		return true
 	if _level >= 2:

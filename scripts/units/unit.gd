@@ -67,16 +67,21 @@ var _rally_point: Vector2 = Vector2.ZERO
 var _rally_scan_timer: float = 0.0
 # Team-wide fighter upgrade level already applied to this unit's data.
 var _fighter_level_applied: int = 1
-# Research tree bonuses: _armor is a flat damage reduction (Bulwark). The
-# base combat stats below are captured once so research bonuses recompute
-# from them each tick — nothing else mutates them, and the recompute never
-# compounds (miner speed/carry recompute from Constants.MINER_STATS for the
-# same reason: _apply_miner_upgrade rewrites those stats on level-up).
+# Research tree bonuses: the base combat stats below are captured once so
+# research bonuses recompute from them each tick — nothing else mutates them,
+# and the recompute never compounds (miner speed/carry recompute from
+# Constants.MINER_STATS for the same reason: _apply_miner_upgrade rewrites
+# those stats on level-up). _armor was the Bulwark tech's flat damage
+# reduction; the tech is gone (Revamp Phase 6) so nothing sets it anymore,
+# but the take_damage hook stays in place.
 var _armor: int = 0
 var _research_base_captured: bool = false
 var _base_attack_range: float = 0.0
 var _base_aoe_radius: float = 0.0
 var _base_attack_cooldown: float = 0.0
+# Captured after _apply_faction_bonuses() in _ready (faction adds its HP
+# terms at spawn); miner/fighter upgrades mirror their max_hp gains into it.
+var _base_max_hp: int = 0
 # Out-of-combat regen: counts down after each hit taken; HP accrues once it
 # reaches zero (see _process).
 var _regen_delay: float = 0.0
@@ -115,6 +120,10 @@ var _reveal_timer: float = 0.0
 var _swarm_timer: float = 0.0
 var _base_speed: float = 0.0
 var _swarm_active: bool = false
+# Guerrilla (Revamp Phase 6): throttled lone-unit check; while active the
+# unit moves faster (read by UnitNavigation).
+var _guerrilla_timer: float = 0.0
+var _guerrilla_active: bool = false
 # Heavy Bolt (Brute archer): movement-slow debuff.
 var _slow_mult: float = 1.0
 var _slow_timer: float = 0.0
@@ -154,8 +163,10 @@ func _ready() -> void:
 	_faction = FactionManager.get_faction(team)
 	if data.is_miner:
 		_apply_miner_upgrade()
-	_apply_research_bonuses()
+	# Faction bonuses run first: they capture _base_speed/_base_max_hp that
+	# _apply_research_bonuses recomputes from.
 	_apply_faction_bonuses()
+	_apply_research_bonuses()
 	hp = data.max_hp
 	add_to_group("units")
 	_add_hover_area()
@@ -248,6 +259,11 @@ func _process(delta: float) -> void:
 		return
 
 	_apply_research_bonuses()
+	# Guerrilla (Phase 6): lone-unit speed flag, refreshed on a timer.
+	_guerrilla_timer -= delta
+	if _guerrilla_timer <= 0.0:
+		_guerrilla_timer = 0.25
+		_update_guerrilla()
 	_sync_flight_visuals()
 	if data.is_miner:
 		_apply_miner_upgrade()
@@ -411,6 +427,17 @@ func get_vision_radius() -> int:
 
 func get_vision_layer() -> int:
 	return _vision.get_vision_layer()
+
+
+## Effective mining depth permission (Revamp Phase 6 branches): Deep Delve
+## unlocks layers 5-7 immediately (level 3); Surface War caps miners at
+## layer 4 (level 2). Used for every miner-level dig gate.
+func get_effective_miner_level() -> int:
+	if ResearchManager.has_branch(team, "deep_delve"):
+		return 3
+	if ResearchManager.has_branch(team, "surface_war"):
+		return mini(data.miner_level, 2)
+	return data.miner_level
 
 
 func is_cell_blacklisted(grid_pos: Vector2i) -> bool:
@@ -670,6 +697,8 @@ func _apply_fighter_upgrade() -> void:
 	var new_max_hp: int = roundi(stats.hp * hp_mult)
 	var hp_gain: int = new_max_hp - data.max_hp
 	data.max_hp = new_max_hp
+	# Keep the research recompute base authoritative (unit_hp_mult rides on top).
+	_base_max_hp = new_max_hp
 	data.damage_per_hit = stats.damage * dmg_mult
 	hp += hp_gain
 	_fighter_level_applied = level
@@ -685,10 +714,12 @@ func _apply_miner_upgrade() -> void:
 		data.max_dig_layer = 4
 		data.carry_capacity += 10
 		data.max_hp += 10
+		_base_max_hp += 10
 	if level >= 3:
 		data.max_dig_layer = 7
 		data.carry_capacity += 10
 		data.max_hp += 15
+		_base_max_hp += 15
 	# Authoritative per-level stats — no incremental compounding. The faction
 	# mining-speed multiplier (Revamp Phase 2) rides on top.
 	data.speed = Constants.MINER_STATS[level].speed
@@ -713,23 +744,40 @@ func _apply_research_bonuses() -> void:
 		_base_attack_range = data.attack_range
 		_base_aoe_radius = data.aoe_radius
 		_base_attack_cooldown = data.attack_cooldown
+	# Max HP (Revamp Phase 6): unit_hp_mult (Earth Shield) applies to every
+	# unit, miner_hp (Reinforced Pack) is a flat miner bonus. Recomputed from
+	# _base_max_hp (captured after faction bonuses; 0 until _ready finishes,
+	# which is why the first pre-capture tick is skipped). Gains heal the
+	# delta; a respec shrinking the max clamps current HP instead.
+	if _base_max_hp > 0:
+		var miner_hp_bonus: int = int(ResearchManager.get_stat_bonus(team, "miner_hp")) if data.is_miner else 0
+		var new_max_hp: int = roundi(_base_max_hp * (1.0 + ResearchManager.get_stat_bonus(team, "unit_hp_mult")) + miner_hp_bonus)
+		if new_max_hp != data.max_hp:
+			var hp_delta: int = new_max_hp - data.max_hp
+			data.max_hp = new_max_hp
+			if hp_delta > 0:
+				hp += hp_delta
+			else:
+				hp = mini(hp, data.max_hp)
+			queue_redraw()
 	if data.is_miner:
 		var level: int = clampi(data.miner_level, 1, 3)
 		# Faction carry bonus (Revamp Phase 2) composes with research here so
 		# the per-tick recompute never erases it.
 		var carry_bonus: int = _faction.miner_carry_bonus if _faction != null else 0
-		data.speed = Constants.MINER_STATS[level].speed + ResearchManager.get_stat_bonus(team, "miner_speed")
+		data.speed = Constants.MINER_STATS[level].speed
 		data.carry_capacity = maxi(1, Constants.MINER_STATS[level].carry + int(ResearchManager.get_stat_bonus(team, "miner_carry")) + carry_bonus)
 	elif data.is_fighter:
+		# Rapid Fire: attack-cooldown reduction for all fighters.
+		data.attack_cooldown = _base_attack_cooldown * (1.0 - ResearchManager.get_stat_bonus(team, "fighter_cdr"))
 		match data.unit_name.to_lower():
 			"swordsman":
-				_armor = int(ResearchManager.get_stat_bonus(team, "swordsman_armor"))
-				data.attack_cooldown = _base_attack_cooldown * (1.0 - ResearchManager.get_stat_bonus(team, "swordsman_cdr"))
+				# Rapid Fire speed bonus; Swarm (Industrial) composes on top.
+				data.speed = _base_speed * (1.0 + ResearchManager.get_stat_bonus(team, "swordsman_speed")) * (1.15 if _swarm_active else 1.0)
 			"archer":
 				data.attack_range = _base_attack_range + ResearchManager.get_stat_bonus(team, "archer_range")
-				data.attack_cooldown = _base_attack_cooldown * (1.0 - ResearchManager.get_stat_bonus(team, "archer_cdr"))
 			"wizard":
-				var aoe_mult: float = 1.0 + ResearchManager.get_stat_bonus(team, "wizard_aoe_mult")
+				var aoe_mult: float = 1.0
 				# Fortify (Brute): fireballs splash 30% wider.
 				if _faction != null and _faction.wizard_fortify:
 					aoe_mult += 0.3
@@ -762,3 +810,20 @@ func _apply_faction_bonuses() -> void:
 					data.max_hp = roundi(data.max_hp * _faction.dragon_hp_mult)
 					data.damage_per_hit *= _faction.dragon_dmg_mult
 	_base_speed = data.speed
+	_base_max_hp = data.max_hp
+
+
+## Guerrilla (Revamp Phase 6): active while the team has the branch and no
+## other living same-team unit is within GUERRILLA_ALLY_RADIUS_CELLS.
+func _update_guerrilla() -> void:
+	_guerrilla_active = false
+	if not ResearchManager.has_branch(team, "guerrilla"):
+		return
+	var radius: float = Constants.GUERRILLA_ALLY_RADIUS_CELLS * GridWorld.CELL_SIZE
+	var radius_sq: float = radius * radius
+	for u in get_tree().get_nodes_in_group("units"):
+		if u == self or u.team != team or u._state == State.DEAD:
+			continue
+		if u.global_position.distance_squared_to(global_position) <= radius_sq:
+			return
+	_guerrilla_active = true

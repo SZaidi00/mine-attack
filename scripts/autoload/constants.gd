@@ -165,9 +165,6 @@ const STRUCTURE_SALVAGE_RATIO: float = 0.5
 const LAVA_MIN_INTERVAL: float = 90.0
 const LAVA_MAX_INTERVAL: float = 120.0
 const LAVA_WARNING_TIME: float = 5.0
-# Extended warning when the team has the Weather Alert research (Phase 5/6
-# tech — the lookup degrades to the base time while it doesn't exist).
-const LAVA_WARNING_TIME_RESEARCH: float = 15.0
 const LAVA_DURATION: float = 20.0
 const LAVA_LAYERS_MIN: int = 1
 const LAVA_LAYERS_MAX: int = 2
@@ -205,167 +202,173 @@ const ORE_RESPAWN_MIN_LAYER: int = 3
 # sweeps the surface for SNOWSTORM_DURATION seconds. While it rages: all unit
 # and lantern vision radii are halved, surface units move at
 # SNOWSTORM_SPEED_MULT, and any surface unit outside a friendly lantern's
-# radius takes SNOWSTORM_DAMAGE_PER_SEC (buildings are immune). The Weather
-# Alert research extends the warning like the lava one — without saying which
-# event is coming.
+# radius takes SNOWSTORM_DAMAGE_PER_SEC (buildings are immune).
 const SNOWSTORM_MIN_INTERVAL: float = 60.0
 const SNOWSTORM_MAX_INTERVAL: float = 90.0
 const SNOWSTORM_DURATION: float = 15.0
 const SNOWSTORM_WARNING_TIME: float = 5.0
-const SNOWSTORM_WARNING_TIME_RESEARCH: float = 15.0
 const SNOWSTORM_VISION_MULT: float = 0.5
 const SNOWSTORM_SPEED_MULT: float = 0.9
 const SNOWSTORM_DAMAGE_PER_SEC: float = 2.0
 
-# ─── RESEARCH TREE ───
-# Timed techs bought with coin through the ResearchManager (one active
-# research per team, 100% refund on cancel). These coexist with the instant
-# miner/fighter upgrades above — research only covers new techs.
+# ─── RESEARCH TREE (Revamp Phase 6) ───
+# Mutually-exclusive branch techs: timed research bought with coin through the
+# ResearchManager (one active research per team, 100% refund on cancel).
+# Completing a tech permanently locks its "locks" alternative for the team
+# (branch_locked signal); a one-time respec (BRANCH_RESPEC_COST) resets the
+# team's choices. These coexist with the instant miner/fighter upgrades above.
 # Each tech: name, optional unit branch, tree_pos (column = tier, row =
-# branch) for the research overlay, optional requires (prerequisite tech id →
-# level), and per-level cost/time/effects/desc (desc feeds the hover tooltip).
+# branch) for the research overlay, "locks" (alternative tech id locked on
+# completion), optional requires (ALL prerequisite tech ids → level) or
+# requires_any (AT LEAST ONE listed tech id at level ≥ 1), and per-level
+# cost/time/effects/desc (desc feeds the hover tooltip).
 # Effect keys are read through ResearchManager.get_stat_bonus():
-#   building_hp     → flat max-HP added to the team's building (heals the delta)
-#   building_regen  → building HP regenerated per second
-#   swordsman_armor → flat damage reduction per hit taken
-#   swordsman_cdr   → swordsman attack-cooldown reduction (0.2 = 20% faster)
-#   archer_range    → flat attack-range bonus
-#   archer_cdr      → archer attack-cooldown reduction
-#   wizard_aoe_mult → fireball AoE radius multiplier bonus (0.5 = +50%)
-#   wizard_damage_mult → wizard damage multiplier bonus (0.25 = +25%)
-#   miner_carry     → flat carry-capacity bonus
-#   miner_speed     → flat move-speed bonus
+#   miner_carry        → flat carry-capacity bonus
+#   miner_hp           → flat max-HP bonus for miners
+#   archer_range       → flat attack-range bonus
+#   fighter_cdr        → attack-cooldown reduction for all fighters (0.2 = 20% faster)
+#   swordsman_speed    → swordsman move-speed multiplier bonus (0.1 = +10%)
+#   wizard_damage_mult → wizard damage multiplier bonus (0.4 = +40%)
+#   unit_hp_mult       → max-HP multiplier bonus for all units (0.15 = +15%)
+#   building_hp        → flat max-HP added to the team's building (heals the delta)
+# Techs without effect keys (deep_delve, surface_war, ore_sonar,
+# siege_master, guerrilla) are read through ResearchManager.has_branch() by
+# the systems that implement their hard-coded effects.
 const RESEARCH_TECHS: Dictionary = {
-	# ── Economy branch ──
-	"reinforced_pack": {
-		"name": "Reinforced Pack",
+	# ── Tier 1: the branch root ──
+	"deep_delve": {
+		"name": "Deep Delve",
 		"unit": "miner",
 		"tree_pos": Vector2i(0, 0),
+		"locks": "surface_war",
 		"levels": {
-			1: { "cost": 400, "time": 15.0, "miner_carry": 15, "desc": "Miners +15 carry capacity" },
+			1: { "cost": 400, "time": 20.0, "desc": "Miners reach layers 5-7 immediately; miners +10% underground move speed" },
 		},
 	},
-	"swift_boots": {
-		"name": "Swift Boots",
-		"unit": "miner",
-		"tree_pos": Vector2i(1, 0),
-		"requires": { "reinforced_pack": 1 },
+	"surface_war": {
+		"name": "Surface War",
+		"unit": "fighter",
+		"tree_pos": Vector2i(0, 1),
+		"locks": "deep_delve",
 		"levels": {
-			1: { "cost": 500, "time": 20.0, "miner_speed": 15, "desc": "Miners +15 move speed" },
+			1: { "cost": 400, "time": 20.0, "desc": "Fighters +15% speed & damage on the surface; miners capped at layer 4; towers +20% range" },
 		},
 	},
-	# ── Recon branch ──
+	# ── Tier 2: Deep Delve side ──
 	"ore_sonar": {
 		"name": "Ore Sonar",
 		"unit": "",
-		"tree_pos": Vector2i(0, 1),
+		"tree_pos": Vector2i(1, 0),
+		"requires": { "deep_delve": 1 },
+		"locks": "reinforced_pack",
 		"levels": {
-			1: { "cost": 300, "time": 15.0, "desc": "Unlock Scan: reveal buried ore within 8 cells of the mine (60s cooldown)" },
-			2: { "cost": 800, "time": 20.0, "desc": "Scan radius 12 cells, cooldown 40s" },
+			1: { "cost": 500, "time": 20.0, "desc": "Unlock Scan: reveal buried ore (incl. Fresh Ore) within 12 cells of the mine (40s cooldown)" },
 		},
 	},
-	"deep_scan": {
-		"name": "Deep Scan",
-		"unit": "",
+	"reinforced_pack": {
+		"name": "Reinforced Pack",
+		"unit": "miner",
 		"tree_pos": Vector2i(1, 1),
-		"requires": { "ore_sonar": 2 },
+		"requires": { "deep_delve": 1 },
+		"locks": "ore_sonar",
 		"levels": {
-			1: { "cost": 1000, "time": 25.0, "desc": "Scan radius 16 cells, cooldown 25s" },
+			1: { "cost": 600, "time": 25.0, "miner_carry": 20, "miner_hp": 10, "desc": "Miners +20 carry capacity, +10 HP, immune to cave-in push" },
 		},
 	},
-	# ── Defense branch ──
-	"fortify": {
-		"name": "Fortify",
-		"unit": "",
-		"tree_pos": Vector2i(0, 2),
-		"levels": {
-			1: { "cost": 600, "time": 20.0, "building_hp": 2000, "desc": "Building +2000 max HP (heals the difference)" },
-			2: { "cost": 1500, "time": 30.0, "building_hp": 3000, "desc": "Building +3000 more max HP" },
-		},
-	},
-	"self_repair": {
-		"name": "Self-Repair",
-		"unit": "",
-		"tree_pos": Vector2i(1, 2),
-		"requires": { "fortify": 1 },
-		"levels": {
-			1: { "cost": 800, "time": 25.0, "building_regen": 5.0, "desc": "Building regenerates 5 HP per second" },
-		},
-	},
-	# ── Swords branch ──
-	"bulwark": {
-		"name": "Bulwark",
-		"unit": "swordsman",
-		"tree_pos": Vector2i(0, 3),
-		"levels": {
-			1: { "cost": 500, "time": 20.0, "swordsman_armor": 2, "desc": "Swordsmen take 2 less damage per hit" },
-			2: { "cost": 1000, "time": 25.0, "swordsman_armor": 2, "desc": "Swordsmen take 2 less damage per hit (4 total)" },  # total 4
-		},
-	},
-	"berserk": {
-		"name": "Berserk",
-		"unit": "swordsman",
-		"tree_pos": Vector2i(1, 3),
-		"requires": { "bulwark": 2 },
-		"levels": {
-			1: { "cost": 800, "time": 25.0, "swordsman_cdr": 0.2, "desc": "Swordsmen attack 20% faster" },
-		},
-	},
-	# ── Bows branch ──
+	# ── Tier 2: Surface War side ──
 	"longbow": {
 		"name": "Longbow",
 		"unit": "archer",
-		"tree_pos": Vector2i(0, 4),
+		"tree_pos": Vector2i(1, 2),
+		"requires": { "surface_war": 1 },
+		"locks": "rapid_fire",
 		"levels": {
-			1: { "cost": 500, "time": 20.0, "archer_range": 30.0, "desc": "Archers +30 attack range" },
+			1: { "cost": 600, "time": 25.0, "archer_range": 25, "desc": "Archers +25 attack range and can blind-fire into the fog" },
 		},
 	},
 	"rapid_fire": {
 		"name": "Rapid Fire",
-		"unit": "archer",
-		"tree_pos": Vector2i(1, 4),
-		"requires": { "longbow": 1 },
+		"unit": "fighter",
+		"tree_pos": Vector2i(1, 3),
+		"requires": { "surface_war": 1 },
+		"locks": "longbow",
 		"levels": {
-			1: { "cost": 700, "time": 25.0, "archer_cdr": 0.25, "desc": "Archers attack 25% faster" },
+			1: { "cost": 700, "time": 25.0, "fighter_cdr": 0.2, "swordsman_speed": 0.1, "desc": "All fighters attack 20% faster; swordsmen +10% move speed" },
 		},
 	},
-	# ── Arcane branch ──
-	"inferno": {
-		"name": "Inferno",
+	# ── Tier 3: Deep Delve side ──
+	"crystal_forge": {
+		"name": "Crystal Forge",
 		"unit": "wizard",
-		"tree_pos": Vector2i(0, 5),
+		"tree_pos": Vector2i(2, 0),
+		"requires_any": ["ore_sonar", "reinforced_pack"],
+		"locks": "earth_shield",
 		"levels": {
-			1: { "cost": 600, "time": 25.0, "wizard_aoe_mult": 0.5, "desc": "Fireballs +50% blast radius" },
+			1: { "cost": 1000, "time": 30.0, "wizard_damage_mult": 0.4, "desc": "Wizards +40% damage; fireballs leave burning ground (5 DPS for 3s)" },
 		},
 	},
-	"arcane_might": {
-		"name": "Arcane Might",
-		"unit": "wizard",
-		"tree_pos": Vector2i(1, 5),
-		"requires": { "inferno": 1 },
-		"levels": {
-			1: { "cost": 900, "time": 25.0, "wizard_damage_mult": 0.25, "desc": "Wizards +25% damage" },
-		},
-	},
-	# ── Tier 3 capstone (Revamp Phase 5) ──
-	# Meteorological Array: luxury early-warning system. Extends both the
-	# snowstorm and the lava warning from 5s to 15s without revealing which
-	# event is coming. Read through get_level(), not get_stat_bonus().
-	"weather_alert": {
-		"name": "Meteorological Array",
+	"earth_shield": {
+		"name": "Earth Shield",
 		"unit": "",
 		"tree_pos": Vector2i(2, 1),
+		"requires_any": ["ore_sonar", "reinforced_pack"],
+		"locks": "crystal_forge",
 		"levels": {
-			1: { "cost": 2500, "time": 60.0, "desc": "Weather & lava warnings arrive 15s early (event type stays hidden)" },
+			1: { "cost": 900, "time": 30.0, "unit_hp_mult": 0.15, "building_hp": 1000, "desc": "All units +15% max HP; building +1000 max HP (heals the difference)" },
+		},
+	},
+	# ── Tier 3: Surface War side ──
+	"siege_master": {
+		"name": "Siege Master",
+		"unit": "swordsman",
+		"tree_pos": Vector2i(2, 2),
+		"requires_any": ["longbow", "rapid_fire"],
+		"locks": "guerrilla",
+		"levels": {
+			1: { "cost": 1000, "time": 30.0, "desc": "Swordsmen +30% damage vs buildings; towers cost 50% less" },
+		},
+	},
+	"guerrilla": {
+		"name": "Guerrilla",
+		"unit": "",
+		"tree_pos": Vector2i(2, 3),
+		"requires_any": ["longbow", "rapid_fire"],
+		"locks": "siege_master",
+		"levels": {
+			1: { "cost": 800, "time": 30.0, "desc": "Units +20% speed with no ally within 6 cells; miners can place traps (50 damage)" },
 		},
 	},
 }
 
 # Ore Sonar scan ability: reveals buried ore around the team's mine so miners
 # path straight to it. Radius is in grid cells, cooldown in seconds. The
-# effective sonar level is ore_sonar + deep_scan levels (3 = Deep Scan).
-const SONAR_RADIUS: Dictionary = { 1: 8, 2: 12, 3: 16 }
-const SONAR_COOLDOWN: Dictionary = { 1: 60.0, 2: 40.0, 3: 25.0 }
+# effective sonar level equals the ore_sonar research level.
+const SONAR_RADIUS: Dictionary = { 1: 12 }
+const SONAR_COOLDOWN: Dictionary = { 1: 40.0 }
+
+# ─── RESEARCH BRANCH EFFECTS (Revamp Phase 6) ───
+# Hard-coded branch effects read through ResearchManager.has_branch().
+# One-time respec cost: resets the team's researched branches and locks.
+const BRANCH_RESPEC_COST: int = 500
+# deep_delve: underground miner speed multiplier.
+const DEEP_DELVE_UG_SPEED_MULT: float = 1.1
+# surface_war: surface fighter speed/damage multipliers and tower range.
+const SURFACE_WAR_SPEED_MULT: float = 1.15
+const SURFACE_WAR_DMG_MULT: float = 1.15
+const SURFACE_WAR_TOWER_RANGE_MULT: float = 1.2
+# crystal_forge: burning ground left by fireballs.
+const BURNING_GROUND_DPS: float = 5.0
+const BURNING_GROUND_DURATION: float = 3.0
+# guerrilla: miner-placed traps.
+const TRAP_COST: int = 50
+const TRAP_DAMAGE: float = 50.0
+const TRAP_MAX_COUNT: int = 5
+# guerrilla: speed multiplier while no ally is within this radius (cells).
+const GUERRILLA_SPEED_MULT: float = 1.2
+const GUERRILLA_ALLY_RADIUS_CELLS: int = 6
+# siege_master: swordsman damage vs buildings and tower cost discount.
+const SIEGE_MASTER_BUILDING_DMG_MULT: float = 1.3
+const SIEGE_MASTER_TOWER_COST_MULT: float = 0.5
 
 # ─── OUT-OF-COMBAT REGEN ───
 # Units that avoid damage for this long slowly recover HP. Slow on purpose:

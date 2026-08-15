@@ -1,13 +1,16 @@
 extends Node
 
-# ResearchManager — timed tech tree (Phase: research v1).
+# ResearchManager — timed tech tree (Revamp Phase 6: branch tree).
 #
 # Owns per-team research state: one active research at a time per team, coin
 # paid up front, timed completion, 100% refund on cancel (mirrors the
-# training-queue convention). Tech definitions live in
+# training-queue convention). Completing a branch tech permanently locks its
+# "locks" alternative for the team; a one-time respec (BRANCH_RESPEC_COST)
+# resets the team's researched branches and locks. Tech definitions live in
 # Constants.RESEARCH_TECHS; effects are applied by the systems that own the
-# stat (unit.gd, building.gd) listening to research_completed or querying
-# get_stat_bonus(). Also owns the Ore Sonar scan ability and its cooldown.
+# stat (unit.gd, building.gd) listening to research_completed/research_changed
+# or querying get_stat_bonus()/has_branch(). Also owns the Ore Sonar scan
+# ability and its cooldown.
 #
 # Like the other autoloads, state survives scene reloads — hud.gd calls
 # reset() on Play Again / Quit to Menu alongside GameManager/EconomyManager.
@@ -17,6 +20,7 @@ const _Constants = preload("res://scripts/autoload/constants.gd")
 signal research_started(team: GameManager.Team, tech_id: String)
 signal research_completed(team: GameManager.Team, tech_id: String)
 signal research_changed(team: GameManager.Team)
+signal branch_locked(team: GameManager.Team, tech_id: String)
 signal sonar_used(team: GameManager.Team, revealed_count: int)
 signal sonar_ready(team: GameManager.Team)
 
@@ -24,6 +28,10 @@ signal sonar_ready(team: GameManager.Team)
 var _levels: Dictionary = {}
 # One active research slot per team: { tech_id, level, remaining, total, cost } or {}.
 var _active: Dictionary = {}
+# Branch tech ids locked per team (the unchosen alternative of a completed branch).
+var _locked: Dictionary = {}
+# One-time branch respec per team per match.
+var _respec_used: Dictionary = {}
 # Remaining sonar cooldown seconds per team.
 var _sonar_cooldown: Dictionary = {}
 
@@ -37,6 +45,14 @@ func reset() -> void:
 	_active = {
 		GameManager.Team.PLAYER: {},
 		GameManager.Team.ENEMY: {},
+	}
+	_locked = {
+		GameManager.Team.PLAYER: [],
+		GameManager.Team.ENEMY: [],
+	}
+	_respec_used = {
+		GameManager.Team.PLAYER: false,
+		GameManager.Team.ENEMY: false,
 	}
 	_sonar_cooldown = {
 		GameManager.Team.PLAYER: 0.0,
@@ -69,6 +85,12 @@ func _process(delta: float) -> void:
 				_levels[team][active.tech_id] = active.level
 				DebugLog.log_command("ResearchManager", "research_complete", "team=%s tech=%s level=%d" % [_team_name(team), active.tech_id, active.level])
 				research_completed.emit(team, active.tech_id)
+				# Completing a branch locks its alternative for good.
+				var locks: String = _Constants.RESEARCH_TECHS[active.tech_id].get("locks", "")
+				if locks != "" and not _locked[team].has(locks):
+					_locked[team].append(locks)
+					DebugLog.log_command("ResearchManager", "branch_locked", "team=%s tech=%s" % [_team_name(team), locks])
+					branch_locked.emit(team, locks)
 				research_changed.emit(team)
 		if _sonar_cooldown[team] > 0.0:
 			_sonar_cooldown[team] = maxf(0.0, _sonar_cooldown[team] - delta)
@@ -84,6 +106,16 @@ func _team_name(team: GameManager.Team) -> String:
 
 func get_level(team: GameManager.Team, tech_id: String) -> int:
 	return _levels[team].get(tech_id, 0)
+
+
+## True once the team has researched the branch (level ≥ 1).
+func has_branch(team: GameManager.Team, branch_id: String) -> bool:
+	return get_level(team, branch_id) > 0
+
+
+## True when the tech is the locked-out alternative of a completed branch.
+func is_locked(team: GameManager.Team, tech_id: String) -> bool:
+	return _locked[team].has(tech_id)
 
 
 func get_max_level(tech_id: String) -> int:
@@ -108,8 +140,9 @@ func is_researching(team: GameManager.Team) -> bool:
 	return not _active[team].is_empty()
 
 
-## Prerequisite techs (the "requires" table) must be fully researched first —
-## this is what gives the tree its tiers.
+## Prerequisite techs must be researched first — this is what gives the tree
+## its tiers. "requires" (id → level) is AND: all listed techs must reach the
+## level. "requires_any" (Array of ids) is OR: at least one at level ≥ 1.
 func are_prerequisites_met(team: GameManager.Team, tech_id: String) -> bool:
 	if not _Constants.RESEARCH_TECHS.has(tech_id):
 		return false
@@ -117,6 +150,12 @@ func are_prerequisites_met(team: GameManager.Team, tech_id: String) -> bool:
 		var needed: int = _Constants.RESEARCH_TECHS[tech_id].requires[prereq_id]
 		if get_level(team, prereq_id) < needed:
 			return false
+	var any_of: Array = _Constants.RESEARCH_TECHS[tech_id].get("requires_any", [])
+	if not any_of.is_empty():
+		for prereq_id in any_of:
+			if get_level(team, prereq_id) >= 1:
+				return true
+		return false
 	return true
 
 
@@ -126,6 +165,9 @@ func start_research(team: GameManager.Team, tech_id: String) -> bool:
 		return false
 	if is_researching(team):
 		DebugLog.log_reject("ResearchManager", "start_research", "research slot busy")
+		return false
+	if is_locked(team, tech_id):
+		DebugLog.log_reject("ResearchManager", "start_research", tech_id + " is locked by the chosen branch")
 		return false
 	var data: Dictionary = get_next_level_data(team, tech_id)
 	if data.is_empty():
@@ -162,8 +204,41 @@ func cancel_research(team: GameManager.Team) -> bool:
 	return true
 
 
+## One-time branch respec: allowed once per match, only after the team has
+## researched something, and only if it can afford BRANCH_RESPEC_COST.
+func can_respec(team: GameManager.Team) -> bool:
+	if _respec_used[team]:
+		return false
+	var has_any: bool = false
+	for tech_id in _levels[team]:
+		if _levels[team][tech_id] > 0:
+			has_any = true
+			break
+	if not has_any:
+		return false
+	return EconomyManager.can_afford(team, _Constants.BRANCH_RESPEC_COST)
+
+
+## Resets the team's researched branches and locks for BRANCH_RESPEC_COST.
+## In-progress research is unaffected (the slot is a separate purchase);
+## effects revert via the research_changed listeners recomputing from base.
+func respec(team: GameManager.Team) -> bool:
+	if not can_respec(team):
+		DebugLog.log_reject("ResearchManager", "respec", "not available for team")
+		return false
+	EconomyManager.spend_coin(team, _Constants.BRANCH_RESPEC_COST)
+	for tech_id in _levels[team]:
+		_levels[team][tech_id] = 0
+	_locked[team] = []
+	_respec_used[team] = true
+	DebugLog.log_command("ResearchManager", "respec", "team=%s cost=%d" % [_team_name(team), _Constants.BRANCH_RESPEC_COST])
+	research_changed.emit(team)
+	return true
+
+
 ## Total bonus for an effect key across all researched tech levels.
-## Level values are per-level increments and sum (e.g. bulwark 2 + 2 = 4).
+## Level values are per-level increments and sum (e.g. two levels of the same
+## tech each granting archer_range would add up).
 func get_stat_bonus(team: GameManager.Team, key: String) -> float:
 	var total: float = 0.0
 	for tech_id in _Constants.RESEARCH_TECHS:
@@ -175,9 +250,9 @@ func get_stat_bonus(team: GameManager.Team, key: String) -> float:
 
 # ─── Ore Sonar ───
 
-## Effective sonar level: Ore Sonar levels plus Deep Scan on top (3 = max).
+## Effective sonar level: the ore_sonar research level (1 = unlocked).
 func get_sonar_level(team: GameManager.Team) -> int:
-	return get_level(team, "ore_sonar") + get_level(team, "deep_scan")
+	return get_level(team, "ore_sonar")
 
 
 func get_scan_cooldown_remaining(team: GameManager.Team) -> float:

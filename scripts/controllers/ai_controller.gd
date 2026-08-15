@@ -140,8 +140,8 @@ func _effective_army_mix() -> Dictionary:
 	return _economy._effective_army_mix()
 
 
-func _pick_research(building: Node2D) -> String:
-	return _economy._pick_research(building)
+func _pick_research(_building: Node2D) -> String:
+	return _economy._pick_research()
 
 
 func _research_open(tech_id: String) -> bool:

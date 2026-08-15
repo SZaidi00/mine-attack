@@ -2,6 +2,7 @@ extends Node2D
 
 const _ARROW_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/projectile_arrow.png")
 const _BLAST_TEXTURE: Texture2D = preload("res://frost_mines_assets/effects/projectile_blast.png")
+const _BURNING_GROUND_SCENE: PackedScene = preload("res://scenes/effects/burning_ground.tscn")
 
 @export var speed: float = 300.0
 @export var damage: int = 10
@@ -141,6 +142,14 @@ func _impact() -> void:
 			continue
 		if building.global_position.distance_to(pos) <= hit_radius:
 			building.call("take_damage", damage)
+	# Crystal Forge (Revamp Phase 6): wizard fireballs (not dragon breath)
+	# scorch the impact area, leaving a patch of burning ground.
+	if not is_dragon_flame and ResearchManager.has_branch(team, "crystal_forge"):
+		var patch: Node2D = _BURNING_GROUND_SCENE.instantiate()
+		patch.set("team", team)
+		patch.set("radius", aoe_radius)
+		patch.global_position = pos
+		get_node("/root/Main/Projectiles").add_child(patch)
 
 
 func _draw() -> void:

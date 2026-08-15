@@ -113,12 +113,15 @@ func _draw_underground() -> void:
 			else:
 				grid.draw_rect(rect, Color(1.0, 0.45, 0.15, 0.04 + 0.07 * wave), true)
 
-		# Ore Sonar glimmer: pulsing gold marker on ore revealed to the player
+		# Ore Sonar glimmer: pulsing marker on ore revealed to the player
 		# (redrawn at the shimmer cadence, so the pulse animates for free).
-		if cell.type == GridWorld.CellType.ORE and cell.sonar_revealed.get(GameManager.Team.PLAYER, false):
+		# Fresh Ore gets a brighter green-gold tint to stand out from old veins.
+		if (cell.type == GridWorld.CellType.ORE or cell.type == GridWorld.CellType.FRESH_ORE) \
+				and cell.sonar_revealed.get(GameManager.Team.PLAYER, false):
 			var pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 300.0 + float(hash(pos) % 100))
-			grid.draw_rect(rect, Color(1.0, 0.85, 0.3, 0.10 + 0.10 * pulse), true)
-			grid.draw_rect(rect, Color(1.0, 0.85, 0.3, 0.35 + 0.35 * pulse), false, 2.0)
+			var tint: Color = Color(1.0, 0.85, 0.3) if cell.type == GridWorld.CellType.ORE else Color(0.6, 1.0, 0.5)
+			grid.draw_rect(rect, Color(tint, 0.10 + 0.10 * pulse), true)
+			grid.draw_rect(rect, Color(tint, 0.35 + 0.35 * pulse), false, 2.0)
 
 	# Dust burst for cells destroyed since the last redraw (already erased
 	# from _cells, so the main loop above skips them).

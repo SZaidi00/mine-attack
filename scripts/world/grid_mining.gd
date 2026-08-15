@@ -113,6 +113,12 @@ static func is_depleted(cell: GridWorld.Cell) -> bool:
 
 func count_accessible_unmined_tiles(side: int, miner_level: int) -> int:
 	var max_layer: int = grid._Constants.MINER_STATS[miner_level].max_layer
+	# Phase 6 branches override the level-derived reach: Deep Delve opens the
+	# full depth immediately, Surface Warfare caps miners at layer 4.
+	if ResearchManager.has_branch(side, "deep_delve"):
+		max_layer = 7
+	elif ResearchManager.has_branch(side, "surface_war"):
+		max_layer = mini(max_layer, 4)
 	var team_dir: int = -1 if side == GameManager.Team.PLAYER else 1
 	var count: int = 0
 	for pos in grid._cells.keys():

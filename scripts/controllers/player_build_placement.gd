@@ -3,6 +3,19 @@ extends RefCounted
 
 const _TOWER_SCENE: PackedScene = preload("res://scenes/tower.tscn")
 const _WALL_SCENE: PackedScene = preload("res://scenes/wall_segment.tscn")
+const _TRAP_SCENE: PackedScene = preload("res://scenes/trap.tscn")
+
+
+## Code-drawn placement marker for traps (no texture asset exists); drawn in
+## white so the ghost's green/red validity modulate tints it like the sprites.
+class _TrapGhostMarker:
+	extends Node2D
+
+	func _draw() -> void:
+		draw_arc(Vector2.ZERO, 10.0, 0, TAU, 12, Color(1, 1, 1, 0.9), 2.0)
+		for i in 5:
+			var dir: Vector2 = Vector2.RIGHT.rotated(i * TAU / 5.0)
+			draw_line(dir * 4.0, dir * 9.0, Color(1, 1, 1, 0.9), 2.0)
 
 var pc: PlayerController
 
@@ -37,7 +50,7 @@ func _handle_input(event: InputEvent) -> void:
 
 ## Enters placement mode: a ghost follows the cursor until left-click
 ## confirms or right-click/Esc cancels. kind is "lantern" (surface),
-## "underground_lantern", "tower", or "wall".
+## "underground_lantern", "tower", "wall", or "trap".
 func start_build_placement(kind: String) -> void:
 	_cancel_build_mode()
 	pc._rally_armed = false
@@ -54,6 +67,8 @@ func start_build_placement(kind: String) -> void:
 			ring_radius_cells = pc._Constants.TOWER_RANGE_CELLS
 		"wall":
 			texture = preload("res://frost_mines_assets/props/wall_player.png")
+		"trap":
+			pass  # no texture asset — code-drawn marker added below
 		_:
 			texture = preload("res://frost_mines_assets/props/lantern_t1.png")
 			ring_radius_cells = pc._Constants.LANTERN_T1_VISION
@@ -63,6 +78,8 @@ func start_build_placement(kind: String) -> void:
 		# Surface structures stand on the ground line at the bottom of the row.
 		sprite.position = Vector2(0, 16.0 - texture.get_height() / 2.0)
 	pc._build_ghost.add_child(sprite)
+	if kind == "trap":
+		pc._build_ghost.add_child(_TrapGhostMarker.new())
 	if ring_radius_cells > 0:
 		# Faint ring showing the vision/attack radius the structure provides.
 		var ring: Sprite2D = Sprite2D.new()
@@ -96,6 +113,8 @@ func _placement_error(kind: String, cell: Vector2i) -> String:
 			return _tower_placement_error(cell)
 		"wall":
 			return _wall_placement_error(cell)
+		"trap":
+			return _trap_placement_error(cell)
 		_:
 			return _lantern_placement_error(kind, cell)
 
@@ -103,7 +122,7 @@ func _placement_error(kind: String, cell: Vector2i) -> String:
 ## Any placed structure standing on the given cell (any team — occupancy is
 ## physical).
 func _structure_at_cell(cell: Vector2i) -> Node2D:
-	for group: String in ["lanterns", "towers", "walls"]:
+	for group: String in ["lanterns", "towers", "walls", "traps"]:
 		for structure in pc.get_tree().get_nodes_in_group(group):
 			if pc._grid.world_to_grid(structure.global_position) == cell:
 				return structure
@@ -155,7 +174,26 @@ func _wall_placement_error(cell: Vector2i) -> String:
 	return ""
 
 
-## Validates and executes a tower/wall placement (lanterns route to
+## Trap rules (Revamp Phase 6, Guerrilla Tactics branch): any walkable cell,
+## unoccupied, at most TRAP_MAX_COUNT per team. Requires the branch research.
+func _trap_placement_error(cell: Vector2i) -> String:
+	var team: GameManager.Team = GameManager.Team.PLAYER
+	if not ResearchManager.has_branch(team, "guerrilla"):
+		return "requires Guerrilla Tactics research"
+	if not pc._grid.is_walkable(cell):
+		return "must be placed on a walkable cell"
+	if _structure_at_cell(cell) != null:
+		return "cell is occupied"
+	var count: int = 0
+	for trap in pc.get_tree().get_nodes_in_group("traps"):
+		if trap.team == team:
+			count += 1
+	if count >= pc._Constants.TRAP_MAX_COUNT:
+		return "max traps reached"
+	return ""
+
+
+## Validates and executes a tower/wall/trap placement (lanterns route to
 ## try_place_lantern). Spends the coin and spawns the structure on success.
 ## Public so the HUD, tests, and (later) the AI can share one code path.
 func try_place_structure(kind: String, world_pos: Vector2) -> bool:
@@ -167,11 +205,25 @@ func try_place_structure(kind: String, world_pos: Vector2) -> bool:
 		pc._commands._reject_command("build", err, world_pos)
 		return false
 	var team: GameManager.Team = GameManager.Team.PLAYER
-	var cost: int = FactionManager.get_tower_cost(team) if kind == "tower" else FactionManager.get_wall_cost(team)
+	var cost: int
+	var scene: PackedScene
+	match kind:
+		"tower":
+			cost = FactionManager.get_tower_cost(team)
+			# Siege Master (Revamp Phase 6): towers cost half.
+			if ResearchManager.has_branch(team, "siege_master"):
+				cost = roundi(cost * pc._Constants.SIEGE_MASTER_TOWER_COST_MULT)
+			scene = _TOWER_SCENE
+		"wall":
+			cost = FactionManager.get_wall_cost(team)
+			scene = _WALL_SCENE
+		_:
+			cost = pc._Constants.TRAP_COST
+			scene = _TRAP_SCENE
 	if not EconomyManager.spend_coin(team, cost):
 		pc._commands._reject_command("build", "not enough coin (%d needed)" % cost, world_pos)
 		return false
-	var structure: Node2D = (_TOWER_SCENE if kind == "tower" else _WALL_SCENE).instantiate()
+	var structure: Node2D = scene.instantiate()
 	structure.team = team
 	structure.total_cost = cost
 	structure.global_position = pc._grid.grid_to_world(cell)
