@@ -19,12 +19,18 @@ enum Difficulty { EASY, NORMAL, HARD, NIGHTMARE, GODLY }
 #                  3: + counter-composition army mix.
 #   wave:          attack-tempo multiplier (lower = earlier, more frequent
 #                  waves); scales the wave size thresholds and the wave tick.
+#   snowstorm_speed:   surface movement multiplier during snowstorms (lower on
+#                  harder difficulties; the Arctic Training research can raise it).
+#   snowstorm_interval: multiplier on the random snowstorm scheduling interval
+#                  (lower = more frequent storms on harder difficulties).
+#   snowstorm_damage:  multiplier on exposure damage dealt by active snowstorms
+#                  (higher on harder difficulties).
 const DIFFICULTY_MODIFIERS: Dictionary = {
-	Difficulty.EASY: { "coin": 0.9, "train_time": 1.0, "upgrade_speed": 0.8, "push_ratio": 1.8, "defend_ratio": 0.8, "retaliation": 0.35, "smarts": 0, "wave": 1.15 },
-	Difficulty.NORMAL: { "coin": 1.15, "train_time": 0.95, "upgrade_speed": 1.15, "push_ratio": 1.4, "defend_ratio": 0.5, "retaliation": 0.6, "smarts": 2, "wave": 1.0 },
-	Difficulty.HARD: { "coin": 1.4, "train_time": 0.8, "upgrade_speed": 1.45, "push_ratio": 1.2, "defend_ratio": 0.35, "retaliation": 0.8, "smarts": 3, "wave": 0.85 },
-	Difficulty.NIGHTMARE: { "coin": 1.75, "train_time": 0.65, "upgrade_speed": 1.8, "push_ratio": 1.1, "defend_ratio": 0.2, "retaliation": 1.0, "smarts": 3, "wave": 0.7 },
-	Difficulty.GODLY: { "coin": 2.5, "train_time": 0.45, "upgrade_speed": 2.5, "push_ratio": 1.0, "defend_ratio": 0.15, "retaliation": 1.0, "smarts": 3, "wave": 0.55 },
+	Difficulty.EASY: { "coin": 0.9, "train_time": 1.0, "upgrade_speed": 0.8, "push_ratio": 1.8, "defend_ratio": 0.8, "retaliation": 0.35, "smarts": 0, "wave": 1.15, "snowstorm_speed": 0.9, "snowstorm_interval": 1.2, "snowstorm_damage": 0.8 },
+	Difficulty.NORMAL: { "coin": 1.15, "train_time": 0.95, "upgrade_speed": 1.15, "push_ratio": 1.4, "defend_ratio": 0.5, "retaliation": 0.6, "smarts": 2, "wave": 1.0, "snowstorm_speed": 0.8, "snowstorm_interval": 1.0, "snowstorm_damage": 1.0 },
+	Difficulty.HARD: { "coin": 1.4, "train_time": 0.8, "upgrade_speed": 1.45, "push_ratio": 1.2, "defend_ratio": 0.35, "retaliation": 0.8, "smarts": 3, "wave": 0.85, "snowstorm_speed": 0.6, "snowstorm_interval": 0.8, "snowstorm_damage": 1.3 },
+	Difficulty.NIGHTMARE: { "coin": 1.75, "train_time": 0.65, "upgrade_speed": 1.8, "push_ratio": 1.1, "defend_ratio": 0.2, "retaliation": 1.0, "smarts": 3, "wave": 0.7, "snowstorm_speed": 0.5, "snowstorm_interval": 0.65, "snowstorm_damage": 1.6 },
+	Difficulty.GODLY: { "coin": 2.5, "train_time": 0.45, "upgrade_speed": 2.5, "push_ratio": 1.0, "defend_ratio": 0.15, "retaliation": 1.0, "smarts": 3, "wave": 0.55, "snowstorm_speed": 0.5, "snowstorm_interval": 0.5, "snowstorm_damage": 2.0 },
 }
 
 const COLOR_PLAYER: Color = Color("#3B82F6")
@@ -133,3 +139,18 @@ func get_ai_smarts() -> int:
 ## tick (lower = smaller, more frequent waves).
 func get_ai_wave_multiplier() -> float:
 	return get_difficulty_modifiers().wave
+
+
+## Surface movement multiplier during snowstorms (lower on harder difficulties).
+func get_snowstorm_speed_multiplier() -> float:
+	return get_difficulty_modifiers().snowstorm_speed
+
+
+## Snowstorm scheduling-interval multiplier (lower = more frequent storms).
+func get_snowstorm_interval_multiplier() -> float:
+	return get_difficulty_modifiers().snowstorm_interval
+
+
+## Snowstorm exposure-damage multiplier (higher = more damage per second).
+func get_snowstorm_damage_multiplier() -> float:
+	return get_difficulty_modifiers().snowstorm_damage

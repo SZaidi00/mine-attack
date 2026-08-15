@@ -61,6 +61,8 @@ func test_arcane_ai_climbs_to_crystal_forge() -> void:
 	FactionManager.enemy_faction_id = "arcane"
 	assert_eq(_ai._pick_research(null), "deep_delve", "Arcane takes the deep side of tier 1")
 	ResearchManager._levels[ENEMY]["deep_delve"] = 1
+	assert_eq(_ai._pick_research(null), "arctic_training", "Arcane picks Arctic Training after committing to a side")
+	ResearchManager._levels[ENEMY]["arctic_training"] = 1
 	assert_eq(_ai._pick_research(null), "ore_sonar", "Arcane climbs the deep side tier 2")
 	ResearchManager._levels[ENEMY]["ore_sonar"] = 1
 	assert_eq(_ai._pick_research(null), "crystal_forge", "Arcane heads for Crystal Forge")
@@ -70,6 +72,7 @@ func test_brute_ai_climbs_to_siege_master() -> void:
 	FactionManager.enemy_faction_id = "brute"
 	assert_eq(_ai._pick_research(null), "surface_war", "Brute takes the war side of tier 1")
 	ResearchManager._levels[ENEMY]["surface_war"] = 1
+	ResearchManager._levels[ENEMY]["arctic_training"] = 1
 	ResearchManager._levels[ENEMY]["longbow"] = 1
 	assert_eq(_ai._pick_research(null), "siege_master", "Brute heads for Siege Master")
 
@@ -78,6 +81,7 @@ func test_industrial_ai_prefers_guerrilla_tactics() -> void:
 	FactionManager.enemy_faction_id = "industrial"
 	assert_eq(_ai._pick_research(null), "surface_war", "Industrial takes the war side of tier 1")
 	ResearchManager._levels[ENEMY]["surface_war"] = 1
+	ResearchManager._levels[ENEMY]["arctic_training"] = 1
 	ResearchManager._levels[ENEMY]["longbow"] = 1
 	assert_eq(_ai._pick_research(null), "guerrilla", "Industrial prefers Guerrilla Tactics over Siege Master")
 

@@ -55,12 +55,13 @@ func _follow_path(delta: float) -> void:
 		unit.global_position += move
 
 
-## Snowstorm slowdown (Revamp Phase 5): surface units move at
-## SNOWSTORM_SPEED_MULT while a storm rages; underground units are sheltered.
+## Snowstorm slowdown (Revamp Phase 5): surface units move at the difficulty
+## scaled storm multiplier while a storm rages; underground units are sheltered.
+## Arctic Training researched by this unit's team improves the multiplier.
 func _weather_speed_mult() -> float:
 	if unit.is_underground:
 		return 1.0
-	return WeatherManager.get_speed_multiplier()
+	return WeatherManager.get_speed_multiplier(unit.team)
 
 
 ## Revamp Phase 6 branch speed bonuses: Deep Delve speeds miners up

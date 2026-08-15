@@ -53,7 +53,7 @@ func reset() -> void:
 	_warning_left = 0.0
 	_storm_left = 0.0
 	_damage_accum.clear()
-	_snow_next_at = randf_range(_Constants.SNOWSTORM_MIN_INTERVAL, _Constants.SNOWSTORM_MAX_INTERVAL)
+	_snow_next_at = _seconds_to_next_snowstorm()
 
 
 func _process(delta: float) -> void:
@@ -109,9 +109,23 @@ func get_vision_multiplier() -> float:
 	return _Constants.SNOWSTORM_VISION_MULT if is_snowstorm_active() else 1.0
 
 
-## Surface movement multiplier; underground units are sheltered.
-func get_speed_multiplier() -> float:
-	return _Constants.SNOWSTORM_SPEED_MULT if is_snowstorm_active() else 1.0
+## Surface movement multiplier for the given team. Underground units are
+## sheltered. During a storm the base multiplier comes from the current
+## difficulty and the team's Arctic Training research adds to it (capped at
+## normal speed so the tech mitigates the penalty without outpacing clear weather).
+func get_speed_multiplier(team: GameManager.Team = GameManager.Team.PLAYER) -> float:
+	if not is_snowstorm_active():
+		return 1.0
+	var mult: float = GameManager.get_snowstorm_speed_multiplier()
+	mult += ResearchManager.get_stat_bonus(team, "snowstorm_speed")
+	return clampf(mult, 0.1, 1.0)
+
+
+## Random seconds until the next snowstorm, scaled by difficulty so storms hit
+## more frequently on higher difficulties.
+func _seconds_to_next_snowstorm() -> float:
+	var interval_mult: float = GameManager.get_snowstorm_interval_multiplier()
+	return randf_range(_Constants.SNOWSTORM_MIN_INTERVAL, _Constants.SNOWSTORM_MAX_INTERVAL) * interval_mult
 
 
 func _start_snowstorm_warning() -> void:
@@ -144,12 +158,13 @@ func _end_snowstorm() -> void:
 	_end_storm_wind()
 	_clear_frost()
 	snowstorm_ended.emit()
-	_snow_next_at = _clock + randf_range(_Constants.SNOWSTORM_MIN_INTERVAL, _Constants.SNOWSTORM_MAX_INTERVAL)
+	_snow_next_at = _clock + _seconds_to_next_snowstorm()
 
 
-## 2 HP/s to every surface unit outside a friendly lantern's radius (the
-## lantern's light is the shelter). Underground units and buildings are
-## unaffected. Exposed units also gain the frost overlay.
+## Exposure damage to every surface unit outside a friendly lantern's radius
+## (the lantern's light is the shelter). Underground units and buildings are
+## unaffected. Damage scales with difficulty; exposed units also gain the frost
+## overlay.
 func _apply_exposure_damage(step: float) -> void:
 	var seen: Dictionary = {}
 	for unit in get_tree().get_nodes_in_group("units"):
@@ -161,7 +176,8 @@ func _apply_exposure_damage(step: float) -> void:
 			_set_frosted(unit, false)
 			continue
 		_set_frosted(unit, true)
-		var accum: float = _damage_accum.get(id, 0.0) + _Constants.SNOWSTORM_DAMAGE_PER_SEC * step
+		var damage_per_sec: float = _Constants.SNOWSTORM_DAMAGE_PER_SEC * GameManager.get_snowstorm_damage_multiplier()
+		var accum: float = _damage_accum.get(id, 0.0) + damage_per_sec * step
 		var whole: int = int(accum)
 		if whole > 0:
 			accum -= whole

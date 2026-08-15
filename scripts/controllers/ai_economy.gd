@@ -151,7 +151,8 @@ func _effective_army_mix() -> Dictionary:
 ## side (Revamp Phase 8 — Arcane climbs to Crystal Forge, Brute to Siege
 ## Master, Industrial to Guerrilla Tactics); a factionless AI commits by army
 ## composition (fighter-majority → surface_war, miner-heavy → deep_delve).
-## Then it climbs that side tier by tier in a deterministic preference order.
+## After committing to a side the AI picks Arctic Training for storm mobility,
+## then climbs that side tier by tier in a deterministic preference order.
 ## Alternatives lock permanently once researched, so _research_open gates
 ## every pick on is_locked. Returns "" when nothing on the side is pickable.
 func _pick_research() -> String:
@@ -166,6 +167,11 @@ func _pick_research() -> String:
 			"brute", "industrial":
 				return "surface_war"
 		return "surface_war" if _count_fighters() > _count_miners() else "deep_delve"
+	# Optional survival pick: Arctic Training counters the heavier snowstorm
+	# slowdown on higher difficulties. Grab it after committing to a main branch.
+	if not ResearchManager.has_branch(ai.team, "arctic_training") and _research_open("arctic_training"):
+		return "arctic_training"
+
 	var tier2: Array[String]
 	if deep_side:
 		tier2 = ["ore_sonar", "reinforced_pack"]

@@ -39,6 +39,7 @@ const _TREE_ORIGIN: Vector2 = Vector2(10, 10)
 const _TECH_ICONS: Dictionary = {
 	"deep_delve": preload("res://improvements/mine_attack_sprites/tech_deep_delve.png"),
 	"surface_war": preload("res://improvements/mine_attack_sprites/tech_surface_war.png"),
+	"arctic_training": preload("res://frost_mines_assets/icons/icon_snowstorm.png"),
 	"ore_sonar": preload("res://improvements/mine_attack_sprites/tech_ore_sonar.png"),
 	"reinforced_pack": preload("res://improvements/mine_attack_sprites/tech_reinforced_pack.png"),
 	"longbow": preload("res://frost_mines_assets/icons/icon_archer.png"),
@@ -210,7 +211,7 @@ func _build_ui() -> void:
 	_canvas = TreeCanvas.new()
 	_canvas.col_open = _COL_EDGE_OPEN
 	_canvas.col_locked = _COL_EDGE_LOCKED
-	# Three tier columns × up to four branch rows (2-4-4 layout): origin
+	# Three tier columns × up to four branch rows (3-4-4 layout): origin
 	# margin + two inter-column pitches + one node wide; origin margin +
 	# three inter-row pitches + one node tall.
 	_canvas.custom_minimum_size = Vector2(

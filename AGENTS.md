@@ -60,10 +60,10 @@ Global singletons.
 - `game_manager.gd` — `Team`/`Difficulty` enums, team colors, difficulty modifiers, game speed, match timer, win/loss.
 - `faction_manager.gd` — faction picks, hidden-faction identification, faction-modified costs and starting bonuses.
 - `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined.
-- `research_manager.gd` — timed branch research tree (Phase 6): mutually-exclusive tiers where completing a tech permanently locks its alternative, one-time 500g respec, active research slot, Ore Sonar scan.
+- `research_manager.gd` — timed branch research tree (Phase 6): mutually-exclusive tiers where completing a tech permanently locks its alternative, one-time 500g respec, active research slot, Ore Sonar scan. Includes the standalone `arctic_training` snowstorm-movement buff.
 - `audio_manager.gd` — synthesized SFX and ambience.
 - `settings_manager.gd` — window resolution persistence (desktop only).
-- `weather_manager.gd` — Phase 5 snowstorms: game-time state machine (warning → storm), vision/speed multipliers, lantern-shelter exposure damage, frost overlay flags, storm wind/ice-crack audio. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` (tests force storms instead).
+- `weather_manager.gd` — Phase 5 snowstorms: game-time state machine (warning → storm), vision/speed multipliers (storm movement speed now scales down on higher difficulties and is raised by the Arctic Training research), lantern-shelter exposure damage (damage and storm frequency also scale up with difficulty), frost overlay flags, storm wind/ice-crack audio. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` (tests force storms instead).
 - `ai_belief_system.gd` — Phase 8: per-team belief maps (cells/unit sightings/enemy-faction guess) built only from that team's vision; confidence decays on stale intel. `update_belief_from_vision`, `get_believed_enemy_army`, `infer_enemy_faction`. Reset per match via `AIBeliefSystem.reset()` (HUD reset flows).
 
 ### `scripts/controllers/`

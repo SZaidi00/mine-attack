@@ -206,15 +206,18 @@ const ORE_RESPAWN_MIN_LAYER: int = 3
 # Snowstorms: every SNOWSTORM_MIN/MAX_INTERVAL seconds of match time (random,
 # uniform, independent of the lava timer) a warning sounds, then a storm
 # sweeps the surface for SNOWSTORM_DURATION seconds. While it rages: all unit
-# and lantern vision radii are halved, surface units move at
-# SNOWSTORM_SPEED_MULT, and any surface unit outside a friendly lantern's
-# radius takes SNOWSTORM_DAMAGE_PER_SEC (buildings are immune).
+# and lantern vision radii are halved, surface units move at the difficulty
+# scaled snowstorm speed multiplier (see GameManager.DIFFICULTY_MODIFIERS),
+# and any surface unit outside a friendly lantern's radius takes
+# SNOWSTORM_DAMAGE_PER_SEC (buildings are immune). The Arctic Training
+# research raises the storm movement multiplier for the owning team.
+# Both the scheduling interval and the exposure damage are further scaled by
+# difficulty (more frequent and deadlier storms on higher difficulties).
 const SNOWSTORM_MIN_INTERVAL: float = 60.0
 const SNOWSTORM_MAX_INTERVAL: float = 90.0
 const SNOWSTORM_DURATION: float = 15.0
 const SNOWSTORM_WARNING_TIME: float = 5.0
 const SNOWSTORM_VISION_MULT: float = 0.5
-const SNOWSTORM_SPEED_MULT: float = 0.9
 const SNOWSTORM_DAMAGE_PER_SEC: float = 2.0
 
 # ─── RESEARCH TREE (Revamp Phase 6) ───
@@ -238,6 +241,7 @@ const SNOWSTORM_DAMAGE_PER_SEC: float = 2.0
 #   wizard_damage_mult → wizard damage multiplier bonus (0.4 = +40%)
 #   unit_hp_mult       → max-HP multiplier bonus for all units (0.15 = +15%)
 #   building_hp        → flat max-HP added to the team's building (heals the delta)
+#   snowstorm_speed    → added to the difficulty-scaled snowstorm movement multiplier
 # Techs without effect keys (deep_delve, surface_war, ore_sonar,
 # siege_master, guerrilla) are read through ResearchManager.has_branch() by
 # the systems that implement their hard-coded effects.
@@ -260,6 +264,14 @@ const RESEARCH_TECHS: Dictionary = {
 		"locks": "deep_delve",
 		"levels": {
 			1: { "cost": 400, "time": 20.0, "desc": "Fighters +15% speed & damage on the surface; miners capped at layer 4; towers +20% range" },
+		},
+	},
+	"arctic_training": {
+		"name": "Arctic Training",
+		"unit": "",
+		"tree_pos": Vector2i(0, 2),
+		"levels": {
+			1: { "cost": 400, "time": 20.0, "snowstorm_speed": 0.2, "desc": "Units move 20% faster during snowstorms" },
 		},
 	},
 	# ── Tier 2: Deep Delve side ──
