@@ -6,7 +6,7 @@ signal wall_hp_changed(current: int, maximum: int)
 # Emitted by the Ore Sonar scan with the newly revealed ore cells (VFX hook).
 signal cells_revealed(cells: Array)
 # Revamp Phase 4 dynamic-terrain events (HUD banners, VFX hooks).
-signal lava_warning_started(seconds: float)
+signal lava_warning_started(seconds: float, layers: int)
 signal lava_risen(layers: int)
 signal lava_receded()
 signal cave_in_occurred(center: Vector2i)

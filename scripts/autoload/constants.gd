@@ -157,17 +157,23 @@ const STRUCTURE_SALVAGE_RATIO: float = 0.5
 
 # ─── DYNAMIC TERRAIN & EVENTS (Revamp Phase 4) ───
 # Lava rising: every LAVA_MIN/MAX_INTERVAL seconds of match time (random,
-# uniform) a warning sounds, then the bottom 1–2 layers flood with lava.
-# Units caught in the zone die instantly (no cargo drop), underground
-# lanterns are destroyed, and every non-wall cell becomes indestructible
-# LAVA. After LAVA_DURATION the lava recedes into diggable MAGMA_ROCK
-# (0 gold), with MAGMA_ORE_CHANCE per cell of high-value FRESH_ORE instead.
+# uniform) a warning sounds, then a random span of bottom layers floods.
+# The flood top is picked between LAVA_TOP_LAYER_MIN and MAX (layer 1 is the
+# shallowest; layer 7 is the deepest). Before LAVA_TOP_LAYER_UNLOCK_TIME the
+# minimum top is LAVA_TOP_LAYER_EARLY_MIN, so the most severe floods (top
+# layer 3) cannot happen in the first 7 minutes. Units caught in the zone
+# die instantly (no cargo drop), underground lanterns are destroyed, and
+# every non-wall cell becomes indestructible LAVA. After LAVA_DURATION the
+# lava recedes into diggable MAGMA_ROCK (0 gold), with MAGMA_ORE_CHANCE per
+# cell of high-value FRESH_ORE instead — but only on layers 6 and 7.
 const LAVA_MIN_INTERVAL: float = 90.0
 const LAVA_MAX_INTERVAL: float = 120.0
 const LAVA_WARNING_TIME: float = 5.0
 const LAVA_DURATION: float = 20.0
-const LAVA_LAYERS_MIN: int = 1
-const LAVA_LAYERS_MAX: int = 2
+const LAVA_TOP_LAYER_MIN: int = 3
+const LAVA_TOP_LAYER_MAX: int = 7
+const LAVA_TOP_LAYER_EARLY_MIN: int = 5
+const LAVA_TOP_LAYER_UNLOCK_TIME: float = 420.0
 const MAGMA_ROCK_HP: int = 150
 const MAGMA_ORE_CHANCE: float = 0.4
 const MAGMA_ORE_MIN: int = 100

@@ -23,6 +23,9 @@ var _lava_warning_left: float = 0.0
 var _lava_active_left: float = 0.0
 var _lava_layers: int = 0
 var _lava_sweep_timer: float = 0.0
+# pos -> original Cell for ore/fresh-ore tiles submerged by the current lava
+# event, so their gold can be restored after the flood if they weren't mined.
+var _lava_original_cells: Dictionary = {}
 
 # Cave-in schedule and the pending restore (pos -> original cell fields).
 var _cavein_next_at: float = 0.0
@@ -102,13 +105,27 @@ func get_lava_warning_remaining() -> float:
 func _start_lava_warning(layers: int = -1) -> void:
 	if _lava_warning_left > 0.0 or _lava_active_left > 0.0:
 		return
-	_lava_layers = layers if layers > 0 else randi_range(_Constants.LAVA_LAYERS_MIN, _Constants.LAVA_LAYERS_MAX)
+	if layers > 0:
+		_lava_layers = layers
+	else:
+		# Pick a random flood top. Layer 1 is shallowest, layer 7 is deepest;
+		# flooding more layers means a lower (more severe) top layer. The most
+		# severe top layer (3) is gated behind LAVA_TOP_LAYER_UNLOCK_TIME.
+		var unlock_time: float = _Constants.LAVA_TOP_LAYER_UNLOCK_TIME
+		var min_top: int = _Constants.LAVA_TOP_LAYER_MIN
+		if _clock < unlock_time:
+			var early_min: int = _Constants.LAVA_TOP_LAYER_EARLY_MIN
+			var t: float = _clock / unlock_time
+			min_top = int(round(lerp(float(early_min), float(min_top), t)))
+		min_top = clampi(min_top, _Constants.LAVA_TOP_LAYER_MIN, _Constants.LAVA_TOP_LAYER_MAX)
+		var top: int = randi_range(min_top, _Constants.LAVA_TOP_LAYER_MAX)
+		_lava_layers = _Constants.LAVA_TOP_LAYER_MAX - top + 1
 	var warning: float = _Constants.LAVA_WARNING_TIME
 	_lava_warning_left = warning
 	DebugLog.log_command("GridEvents", "lava_warning", "layers=%d warning=%.0fs" % [_lava_layers, warning])
 	AudioManager.play("rumble", Vector2.INF, -4.0)
 	_shake(4.0)
-	grid.lava_warning_started.emit(warning)
+	grid.lava_warning_started.emit(warning, _lava_layers)
 	grid.queue_redraw()
 
 
@@ -122,6 +139,7 @@ func _rise_lava(layers: int) -> void:
 		return
 	_lava_layers = layers
 	_lava_warning_left = 0.0
+	_lava_original_cells.clear()
 	var y_from: int = _lava_zone_top()
 	for y in range(y_from, grid.Y_MAX + 1):
 		var layer: int = (y - 1) / _Constants.ROWS_PER_LAYER + 1
@@ -130,6 +148,9 @@ func _rise_lava(layers: int) -> void:
 			var cell: GridWorld.Cell = grid._cells.get(pos)
 			if cell != null and cell.is_wall:
 				continue  # The central wall and borders survive the flood.
+			# Preserve existing gold deposits so unmined ore survives the flood.
+			if cell != null and (cell.type == GridWorld.CellType.ORE or cell.type == GridWorld.CellType.FRESH_ORE) and cell.coin_remaining > 0:
+				_lava_original_cells[pos] = cell
 			# Level 99 gate: lava is indestructible and undiggable.
 			grid._cells[pos] = GridWorld.Cell.new(GridWorld.CellType.LAVA, layer, 99, 9999, 0)
 			if grid._astar.is_in_boundsv(pos):
@@ -151,12 +172,24 @@ func _recede_lava() -> void:
 	for y in range(y_from, grid.Y_MAX + 1):
 		var layer: int = (y - 1) / _Constants.ROWS_PER_LAYER + 1
 		var ml_req: int = grid._map_gen._layer_miner_level(layer)
+		# Fresh ore only appears on the deepest two layers; higher flooded
+		# layers reset to empty magma rock.
+		var can_spawn_gold: bool = layer >= 6
 		for x in range(grid.X_MIN, grid.X_MAX + 1):
 			var pos: Vector2i = Vector2i(x, y)
 			var cell: GridWorld.Cell = grid._cells.get(pos)
 			if cell == null or cell.type != GridWorld.CellType.LAVA:
 				continue
-			if randf() < _Constants.MAGMA_ORE_CHANCE:
+			# If this tile held an unmined gold deposit before the flood,
+			# restore it exactly as it was.
+			var backup: GridWorld.Cell = _lava_original_cells.get(pos)
+			if backup != null and backup.coin_remaining > 0:
+				grid._cells[pos] = backup
+				if grid._astar.is_in_boundsv(pos):
+					grid._astar.set_point_solid(pos, true)
+				grid._cell_flash[pos] = 0.6
+				continue
+			if can_spawn_gold and randf() < _Constants.MAGMA_ORE_CHANCE:
 				var coin: int = randi_range(_Constants.MAGMA_ORE_MIN, _Constants.MAGMA_ORE_MAX)
 				grid._cells[pos] = GridWorld.Cell.new(GridWorld.CellType.FRESH_ORE, layer, ml_req, _Constants.MAGMA_ROCK_HP, coin)
 			else:
@@ -165,6 +198,7 @@ func _recede_lava() -> void:
 			if grid._astar.is_in_boundsv(pos):
 				grid._astar.set_point_solid(pos, true)
 			grid._cell_flash[pos] = 0.6
+	_lava_original_cells.clear()
 	_lava_layers = 0
 	_lava_active_left = 0.0
 	DebugLog.log_command("GridEvents", "lava_receded", "")

@@ -387,7 +387,7 @@ func _build_lava_banner() -> void:
 		grid.lava_risen.connect(_on_lava_risen)
 
 
-func _on_lava_warning_started(_seconds: float) -> void:
+func _on_lava_warning_started(_seconds: float, _layers: int) -> void:
 	_lava_banner.visible = true
 
 
