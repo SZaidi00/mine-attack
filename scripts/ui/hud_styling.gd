@@ -56,8 +56,9 @@ func _style_tab_buttons() -> void:
 
 
 func _style_speed_buttons() -> void:
-	for speed: float in hud._speed_buttons:
-		var btn: Button = hud._speed_buttons[speed]
+	var buttons: Array[Button] = [hud._pause_button]
+	buttons.append_array(hud._speed_buttons.values())
+	for btn: Button in buttons:
 		btn.custom_minimum_size = Vector2(40, 28)
 		btn.add_theme_font_size_override("font_size", 11)
 		btn.add_theme_color_override("font_color", Color("#e2e8f0"))

@@ -43,8 +43,14 @@ func before_each() -> void:
 	# Events persist in the scene across tests; reset the slate so one test's
 	# lava flood or cave-in can't leak into the next.
 	_grid._events._lava_warning_left = 0.0
+	_grid._events._lava_state = GridEvents.LavaState.IDLE
 	if _grid.is_lava_active():
 		_grid.force_lava_recede()
+	_grid._events._lava_wave_profile.clear()
+	_grid._events._lava_flooded_cells.clear()
+	_grid._events._lava_original_cells.clear()
+	_grid._events._lava_y_tide = float(GridWorld.Y_MAX + 1)
+	_grid._events._lava_top_min = GridWorld.Y_MAX + 1
 	if _grid._events._cavein_restore_left > 0.0:
 		_grid._events._cavein_restore_left = 0.0
 		_grid._events._restore_cave_in()
@@ -65,13 +71,10 @@ func _spawn_unit(tres_path: String, team: int, pos: Vector2) -> Node2D:
 	return unit
 
 
-func _lava_zone_cells(layers: int) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	var y_from: int = GridWorld.Y_MAX - layers * Constants.ROWS_PER_LAYER + 1
-	for y in range(y_from, GridWorld.Y_MAX + 1):
-		for x in range(GridWorld.X_MIN, GridWorld.X_MAX + 1):
-			cells.append(Vector2i(x, y))
-	return cells
+func _lava_zone_cells(_layers: int) -> Array[Vector2i]:
+	# The flood is now a cosine wave, so the "zone" is the set of cells that
+	# were actually converted to LAVA by the current rise.
+	return _grid.get_lava_cells()
 
 
 # ─── Lava rising ───
@@ -95,11 +98,12 @@ func test_lava_rise_converts_zone_and_spares_walls() -> void:
 
 func test_lava_recedes_into_magma_rock_and_fresh_ore() -> void:
 	_grid.force_lava_rise(2)
+	var flooded: Array[Vector2i] = _grid.get_lava_cells()
 	_grid.force_lava_recede()
 	assert_false(_grid.is_lava_active(), "lava must be gone after the recede")
 	var magma: int = 0
 	var fresh: int = 0
-	for pos in _lava_zone_cells(2):
+	for pos in flooded:
 		var cell = _grid.get_cell(pos)
 		if cell == null or pos.x in [-1, 0, 1]:
 			continue
@@ -118,9 +122,10 @@ func test_lava_recedes_into_magma_rock_and_fresh_ore() -> void:
 
 func test_magma_rock_is_diggable_and_yields_nothing() -> void:
 	_grid.force_lava_rise(1)
+	var flooded: Array[Vector2i] = _grid.get_lava_cells()
 	_grid.force_lava_recede()
 	var pos: Vector2i = Vector2i(-9999, -9999)
-	for candidate in _lava_zone_cells(1):
+	for candidate in flooded:
 		var cell = _grid.get_cell(candidate)
 		if cell != null and cell.type == GridWorld.CellType.MAGMA_ROCK:
 			pos = candidate
@@ -136,12 +141,14 @@ func test_magma_rock_is_diggable_and_yields_nothing() -> void:
 
 
 func test_lava_kills_underground_units_without_cargo_drop() -> void:
-	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _grid.grid_to_world(Vector2i(-5, 20)))
+	# The bottom row is always flooded, so y = Y_MAX is a guaranteed death cell.
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _grid.grid_to_world(Vector2i(-5, GridWorld.Y_MAX)))
 	miner.is_underground = true
 	miner.carried_coin = 30
-	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, _grid.grid_to_world(Vector2i(5, 20)))
+	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, _grid.grid_to_world(Vector2i(5, GridWorld.Y_MAX)))
 	fighter.is_underground = true
-	var survivor: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _grid.grid_to_world(Vector2i(-5, 10)))
+	# Place the survivor well above even the highest possible wave peak.
+	var survivor: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _grid.grid_to_world(Vector2i(-5, 5)))
 	survivor.is_underground = true
 	_grid.force_lava_rise(2)
 	assert_eq(miner._state, Unit.State.DEAD, "miner in the lava zone dies instantly")
@@ -155,7 +162,8 @@ func test_lava_destroys_underground_lanterns() -> void:
 	var lantern: Lantern = load("res://scenes/lantern.tscn").instantiate()
 	lantern.team = PLAYER
 	lantern.is_underground_lantern = true
-	lantern.position = _grid.grid_to_world(Vector2i(-5, 20))
+	# The bottom row is always flooded regardless of the wave shape.
+	lantern.position = _grid.grid_to_world(Vector2i(-5, GridWorld.Y_MAX))
 	_main.get_node("Structures").add_child(lantern)
 	lantern._build_progress = 999.0
 	lantern._process(0.1)
@@ -174,6 +182,61 @@ func test_lava_warning_then_rise_on_countdown() -> void:
 	await wait_seconds(Constants.LAVA_WARNING_TIME + 0.4)
 	assert_true(_grid.is_lava_active(), "lava rises when the warning expires")
 	assert_signal_emitted(_grid, "lava_risen")
+	_grid.force_lava_recede()
+
+
+func test_lava_rise_is_non_linear_cosine_wave() -> void:
+	_grid.force_lava_rise(2)
+	var tops: Array[int] = []
+	for x in range(GridWorld.X_MIN, GridWorld.X_MAX + 1):
+		var top: int = GridWorld.Y_MAX + 1
+		for y in range(GridWorld.Y_MIN, GridWorld.Y_MAX + 1):
+			var cell = _grid.get_cell(Vector2i(x, y))
+			if cell != null and cell.type == GridWorld.CellType.LAVA:
+				top = y
+				break
+		if top <= GridWorld.Y_MAX:
+			tops.append(top)
+	var unique_tops: Array[int] = []
+	for t in tops:
+		if not unique_tops.has(t):
+			unique_tops.append(t)
+	assert_gt(unique_tops.size(), 1, "lava top varies across columns (cosine wave)")
+	_grid.force_lava_recede()
+
+
+func test_lava_creeps_up_and_recedes_like_a_tide() -> void:
+	# Manually drive the creep without waiting real time.
+	_grid.force_lava_warning(2)
+	var events: GridEvents = _grid._events
+	assert_eq(events._lava_state, GridEvents.LavaState.WARNING)
+	events._start_lava_creep()
+	assert_eq(events._lava_state, GridEvents.LavaState.CREEPING_UP)
+	var peak: int = events._lava_top_min
+	# Halfway up: some lava exists, but the peak row is not flooded yet.
+	events._lava_timer = Constants.LAVA_CREEP_UP_TIME * 0.5
+	events._lava_y_tide = lerp(float(GridWorld.Y_MAX + 1), float(peak), events._smoothstep(0.5))
+	events._apply_lava_tide()
+	var flooded_mid: int = events._lava_flooded_cells.size()
+	assert_gt(flooded_mid, 0, "tide covers some cells halfway up")
+	var peak_flooded_mid: bool = false
+	for pos in events._lava_flooded_cells:
+		if pos.y <= peak:
+			peak_flooded_mid = true
+			break
+	assert_false(peak_flooded_mid, "peak row is not flooded halfway up")
+	# Fully up: the peak row is now flooded.
+	events._lava_timer = Constants.LAVA_CREEP_UP_TIME
+	events._lava_y_tide = float(peak)
+	events._apply_lava_tide()
+	assert_gt(events._lava_flooded_cells.size(), flooded_mid, "more cells flood at the peak")
+	var flooded_peak: int = events._lava_flooded_cells.size()
+	# Halfway down: some cells have receded.
+	events._lava_state = GridEvents.LavaState.CREEPING_DOWN
+	events._lava_timer = Constants.LAVA_CREEP_DOWN_TIME * 0.5
+	events._lava_y_tide = lerp(float(peak), float(GridWorld.Y_MAX + 1), events._smoothstep(0.5))
+	events._apply_lava_tide()
+	assert_lt(events._lava_flooded_cells.size(), flooded_peak, "tide recedes halfway down")
 	_grid.force_lava_recede()
 
 

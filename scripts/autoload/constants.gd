@@ -175,7 +175,11 @@ const STRUCTURE_DEMOLISH_REFUND_RATIO: float = 0.25
 const LAVA_MIN_INTERVAL: float = 90.0
 const LAVA_MAX_INTERVAL: float = 120.0
 const LAVA_WARNING_TIME: float = 5.0
-const LAVA_DURATION: float = 20.0
+# Creeping tide: lava rises from the bottom to the wave peak over this many
+# seconds, then recedes back down. There is no fixed "active" hold at the top;
+# the tide flows in and out continuously.
+const LAVA_CREEP_UP_TIME: float = 8.0
+const LAVA_CREEP_DOWN_TIME: float = 8.0
 const LAVA_TOP_LAYER_MIN: int = 3
 const LAVA_TOP_LAYER_MAX: int = 7
 const LAVA_TOP_LAYER_EARLY_MIN: int = 5
@@ -184,9 +188,19 @@ const MAGMA_ROCK_HP: int = 150
 const MAGMA_ORE_CHANCE: float = 0.4
 const MAGMA_ORE_MIN: int = 100
 const MAGMA_ORE_MAX: int = 200
-# While lava is up, units standing in a lava cell are re-checked this often
-# (in-flight paths can carry stragglers into the zone after the rise).
+# While the tide is creeping up, units standing in a newly flooded lava cell are
+# re-checked this often (in-flight paths can carry stragglers into the zone).
 const LAVA_SWEEP_INTERVAL: float = 0.5
+# Non-linear lava wave (Revamp Phase 4+): each rise follows a cosine profile so
+# the flood height varies by column. Amplitude is in rows (not layers); cycles
+# are full waves across the underground width. A secondary, faster wave is added
+# so the surface looks uneven rather than a single clean curve.
+const LAVA_WAVE_AMPLITUDE_MIN: int = 1    # rows
+const LAVA_WAVE_AMPLITUDE_MAX: int = 3    # rows
+const LAVA_WAVE_CYCLES_MIN: float = 1.5
+const LAVA_WAVE_CYCLES_MAX: float = 3.0
+const LAVA_WAVE_SECONDARY_AMP: float = 0.6   # rows
+const LAVA_WAVE_SECONDARY_CYCLES: float = 5.0
 # Cave-ins: sudden 3×3 collapses underground. Diggable tiles become
 # indestructible SOLID_ROCK for CAVEIN_ROCK_DURATION seconds, units in the
 # area take CAVEIN_DAMAGE and are pushed to the nearest walkable cell, and

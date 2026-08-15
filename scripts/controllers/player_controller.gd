@@ -237,7 +237,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed(_Constants.INPUT_KILL_UNITS):
 		kill_selected()
 	elif event.is_action_pressed(_Constants.INPUT_PAUSE):
-		get_tree().paused = not get_tree().paused
+		var hud: CanvasLayer = get_node_or_null("/root/Main/UI/HUD")
+		if hud != null and hud.is_research_panel_open():
+			hud.toggle_research_panel()
+		else:
+			get_tree().paused = not get_tree().paused
 
 	if _is_dragging and event is InputEventMouseMotion:
 		_selection._update_selection_box(get_viewport().get_mouse_position())

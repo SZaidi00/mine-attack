@@ -132,14 +132,6 @@ func _draw_underground() -> void:
 		var burst_alpha: float = clampf(grid._cell_flash[pos] / 0.2, 0.0, 1.0)
 		_draw_dust_puffs(burst_rect, burst_alpha)
 
-	# Lava warning (Revamp Phase 4): a red glow pulses over the bottom layers
-	# for the whole warning window so the player can evacuate deep miners.
-	if grid._events.is_lava_warning():
-		var pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() / 150.0)
-		var glow_top: float = (grid.Y_MAX - 2 * grid._Constants.ROWS_PER_LAYER + 1) * grid.CELL_SIZE
-		var glow_bottom: float = (grid.Y_MAX + 1) * grid.CELL_SIZE
-		grid.draw_rect(Rect2(world_left, glow_top, world_width, glow_bottom - glow_top), Color(1.0, 0.15, 0.03, 0.10 + 0.14 * pulse), true)
-
 	# Central wall HP bar (only once the wall has taken damage).
 	if grid._wall_hp > 0 and grid._wall_hp < grid._wall_max_hp:
 		var bar_w: float = 200

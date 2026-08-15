@@ -17,15 +17,35 @@ var events_enabled: bool = true
 # Game-time clock driving the schedules (seconds of active match time).
 var _clock: float = 0.0
 
-# Lava state machine: idle → warning → active → idle (then rescheduled).
+enum LavaState { IDLE, WARNING, CREEPING_UP, CREEPING_DOWN }
+
+# Lava state machine: idle → warning → creeping up → creeping down → idle.
+# The tide rises from the bottom row to a hidden cosine-wave peak, then recedes
+# back down. The exact peak is never shown to the player or AI.
+var _lava_state: LavaState = LavaState.IDLE
 var _lava_next_at: float = 0.0
 var _lava_warning_left: float = 0.0
-var _lava_active_left: float = 0.0
 var _lava_layers: int = 0
+var _lava_timer: float = 0.0
 var _lava_sweep_timer: float = 0.0
+# Current tide top (float). Cells with y >= ceil(_lava_y_tide) are flooded in
+# their column, up to the column's wave top. Starts at Y_MAX + 1 (empty) and
+# creeps down to _lava_top_min at the peak, then back up.
+var _lava_y_tide: float = float(GridWorld.Y_MAX + 1)
+# Hidden peak: the lowest y the tide reaches across the wave profile.
+var _lava_top_min: int = GridWorld.Y_MAX + 1
 # pos -> original Cell for ore/fresh-ore tiles submerged by the current lava
 # event, so their gold can be restored after the flood if they weren't mined.
 var _lava_original_cells: Dictionary = {}
+# All cells currently LAVA, updated incrementally as the tide moves.
+var _lava_flooded_cells: Array[Vector2i] = []
+# Cosine-wave profile for the current event: maps column x to the topmost y
+# that becomes lava in that column. Generated during the warning.
+var _lava_wave_profile: Dictionary = {}
+var _lava_wave_phase: float = 0.0
+var _lava_wave_freq: float = 0.0
+var _lava_wave_amp: int = 0
+var _lava_wave_secondary_phase: float = 0.0
 
 # Cave-in schedule and the pending restore (pos -> original cell fields).
 var _cavein_next_at: float = 0.0
@@ -53,26 +73,37 @@ func schedule_initial() -> void:
 func _process_events(delta: float) -> void:
 	_clock += delta
 
-	# Lava: warning countdown → rise → active countdown (+ straggler sweep) →
-	# recede → reschedule. These run regardless of events_enabled so a forced
-	# event always completes.
-	if _lava_warning_left > 0.0:
-		_lava_warning_left -= delta
-		grid.queue_redraw()  # Keep the warning glow pulsing.
-		if _lava_warning_left <= 0.0:
-			_lava_warning_left = 0.0
-			_rise_lava(_lava_layers)
-	elif _lava_active_left > 0.0:
-		_lava_active_left -= delta
-		_lava_sweep_timer -= delta
-		if _lava_sweep_timer <= 0.0:
-			_lava_sweep_timer = _Constants.LAVA_SWEEP_INTERVAL
-			_kill_units_in_lava()
-		if _lava_active_left <= 0.0:
-			_lava_active_left = 0.0
-			_recede_lava()
-	elif events_enabled and _clock >= _lava_next_at:
-		_start_lava_warning()
+	# Lava: warning countdown → creeping up → creeping down → reschedule. The
+	# tide rises and falls like an incoming wave; the peak is hidden. These run
+	# regardless of events_enabled so a forced event always completes.
+	match _lava_state:
+		LavaState.WARNING:
+			_lava_warning_left -= delta
+			if _lava_warning_left <= 0.0:
+				_lava_warning_left = 0.0
+				_start_lava_creep()
+		LavaState.CREEPING_UP:
+			_lava_timer += delta
+			_lava_sweep_timer -= delta
+			var t: float = clampf(_lava_timer / _Constants.LAVA_CREEP_UP_TIME, 0.0, 1.0)
+			_lava_y_tide = lerp(float(grid.Y_MAX + 1), float(_lava_top_min), _smoothstep(t))
+			_apply_lava_tide()
+			if _lava_sweep_timer <= 0.0:
+				_lava_sweep_timer = _Constants.LAVA_SWEEP_INTERVAL
+				_kill_units_in_lava()
+			if _lava_timer >= _Constants.LAVA_CREEP_UP_TIME:
+				_lava_state = LavaState.CREEPING_DOWN
+				_lava_timer = 0.0
+		LavaState.CREEPING_DOWN:
+			_lava_timer += delta
+			var t: float = clampf(_lava_timer / _Constants.LAVA_CREEP_DOWN_TIME, 0.0, 1.0)
+			_lava_y_tide = lerp(float(_lava_top_min), float(grid.Y_MAX + 1), _smoothstep(t))
+			_apply_lava_tide()
+			if _lava_timer >= _Constants.LAVA_CREEP_DOWN_TIME:
+				_finish_lava_event()
+		LavaState.IDLE:
+			if events_enabled and _clock >= _lava_next_at:
+				_start_lava_warning()
 
 	# Cave-in: warning → collapse → rock restore. The restore always ticks;
 	# only new random cave-ins are gated by events_enabled.
@@ -100,19 +131,24 @@ func _process_events(delta: float) -> void:
 # ─── Lava rising ───
 
 func is_lava_warning() -> bool:
-	return _lava_warning_left > 0.0
+	return _lava_state == LavaState.WARNING
 
 
 func is_lava_active() -> bool:
-	return _lava_active_left > 0.0
+	return _lava_state == LavaState.CREEPING_UP or _lava_state == LavaState.CREEPING_DOWN
 
 
 func get_lava_warning_remaining() -> float:
 	return _lava_warning_left
 
 
+## Ease-in-out curve for a more natural tide motion.
+func _smoothstep(t: float) -> float:
+	return t * t * (3.0 - 2.0 * t)
+
+
 func _start_lava_warning(layers: int = -1) -> void:
-	if _lava_warning_left > 0.0 or _lava_active_left > 0.0:
+	if _lava_state != LavaState.IDLE:
 		return
 	if layers > 0:
 		_lava_layers = layers
@@ -131,6 +167,8 @@ func _start_lava_warning(layers: int = -1) -> void:
 		_lava_layers = _Constants.LAVA_TOP_LAYER_MAX - top + 1
 	var warning: float = _Constants.LAVA_WARNING_TIME
 	_lava_warning_left = warning
+	_lava_state = LavaState.WARNING
+	_generate_lava_wave()
 	DebugLog.log_command("GridEvents", "lava_warning", "layers=%d warning=%.0fs" % [_lava_layers, warning])
 	AudioManager.play("rumble", Vector2.INF, -4.0)
 	_shake(4.0)
@@ -143,98 +181,212 @@ func _lava_zone_top() -> int:
 	return grid.Y_MAX - _lava_layers * _Constants.ROWS_PER_LAYER + 1
 
 
-func _rise_lava(layers: int) -> void:
-	if _lava_active_left > 0.0:
-		return
-	_lava_layers = layers
-	_lava_warning_left = 0.0
+## Highest the lava reaches (lowest y) across the current wave profile.
+func _lava_zone_top_min() -> int:
+	var top: int = grid.Y_MAX + 1
+	for x in range(grid.X_MIN, grid.X_MAX + 1):
+		top = mini(top, _lava_top_at_x(x))
+	return top if not _lava_wave_profile.is_empty() else _lava_zone_top()
+
+
+## Shallowest the lava reaches (highest y) across the current wave profile.
+func _lava_zone_top_max() -> int:
+	var top: int = grid.Y_MIN - 1
+	for x in range(grid.X_MIN, grid.X_MAX + 1):
+		top = maxi(top, _lava_top_at_x(x))
+	return top if not _lava_wave_profile.is_empty() else _lava_zone_top()
+
+
+## Cosine-wave top for a single column. The base flat top is perturbed by a
+## primary wave plus a smaller secondary wave so peaks and dips look uneven.
+func _lava_top_at_x(x: int) -> int:
+	if _lava_wave_profile.is_empty():
+		return _lava_zone_top()
+	return _lava_wave_profile.get(x, _lava_zone_top())
+
+
+## Generate a new wave profile from the current layer count. The profile varies
+## per event so each rise has a different non-linear shape.
+func _generate_lava_wave() -> void:
+	_lava_wave_profile.clear()
+	var base_top: int = _lava_zone_top()
+	var width: float = float(grid.X_MAX - grid.X_MIN)
+	if width <= 0.0:
+		width = 1.0
+	_lava_wave_amp = randi_range(_Constants.LAVA_WAVE_AMPLITUDE_MIN, _Constants.LAVA_WAVE_AMPLITUDE_MAX)
+	var cycles: float = randf_range(_Constants.LAVA_WAVE_CYCLES_MIN, _Constants.LAVA_WAVE_CYCLES_MAX)
+	_lava_wave_freq = TAU * cycles / width
+	_lava_wave_phase = randf() * TAU
+	_lava_wave_secondary_phase = randf() * TAU
+	for x in range(grid.X_MIN, grid.X_MAX + 1):
+		var nx: float = float(x - grid.X_MIN)
+		var primary: float = _lava_wave_amp * cos(_lava_wave_freq * nx + _lava_wave_phase)
+		var secondary: float = _Constants.LAVA_WAVE_SECONDARY_AMP * cos(
+			(TAU * _Constants.LAVA_WAVE_SECONDARY_CYCLES / width) * nx + _lava_wave_secondary_phase)
+		var top: int = base_top + roundi(primary + secondary)
+		# Clamp so the wave never leaves the underground and never floods the
+		# entire map from the surface.
+		top = clampi(top, grid.Y_MIN + 1, grid.Y_MAX)
+		_lava_wave_profile[x] = top
+
+
+func _start_lava_creep() -> void:
+	_lava_state = LavaState.CREEPING_UP
+	_lava_timer = 0.0
+	_lava_y_tide = float(grid.Y_MAX + 1)
+	_lava_top_min = _lava_zone_top_min()
 	_lava_original_cells.clear()
-	var y_from: int = _lava_zone_top()
-	for y in range(y_from, grid.Y_MAX + 1):
-		var layer: int = (y - 1) / _Constants.ROWS_PER_LAYER + 1
-		for x in range(grid.X_MIN, grid.X_MAX + 1):
-			var pos: Vector2i = Vector2i(x, y)
-			var cell: GridWorld.Cell = grid._cells.get(pos)
-			if cell != null and cell.is_wall:
-				continue  # The central wall and borders survive the flood.
-			# Preserve existing gold deposits so unmined ore survives the flood.
-			if cell != null and (cell.type == GridWorld.CellType.ORE or cell.type == GridWorld.CellType.FRESH_ORE) and cell.coin_remaining > 0:
-				_lava_original_cells[pos] = cell
-			# Level 99 gate: lava is indestructible and undiggable.
-			grid._cells[pos] = GridWorld.Cell.new(GridWorld.CellType.LAVA, layer, 99, 9999, 0)
-			if grid._astar.is_in_boundsv(pos):
-				grid._astar.set_point_solid(pos, true)
-			grid._cell_flash[pos] = 0.6
-	_kill_units_in_lava()
-	_destroy_lanterns_below(y_from)
-	_lava_active_left = _Constants.LAVA_DURATION
+	_lava_flooded_cells.clear()
 	_lava_sweep_timer = _Constants.LAVA_SWEEP_INTERVAL
-	DebugLog.log_command("GridEvents", "lava_risen", "layers=%d" % layers)
+	DebugLog.log_command("GridEvents", "lava_creep_started", "layers=%d peak=%d" % [_lava_layers, _lava_top_min])
 	AudioManager.play("rumble", Vector2.INF, 0.0)
 	_shake(8.0)
-	grid.lava_risen.emit(layers)
+	grid.lava_risen.emit(_lava_layers)
 	grid.queue_redraw()
 
 
-func _recede_lava() -> void:
-	var y_from: int = _lava_zone_top()
-	for y in range(y_from, grid.Y_MAX + 1):
-		var layer: int = (y - 1) / _Constants.ROWS_PER_LAYER + 1
-		var ml_req: int = grid._map_gen._layer_miner_level(layer)
-		# Fresh ore only appears on the deepest two layers; higher flooded
-		# layers reset to empty magma rock.
-		var can_spawn_gold: bool = layer >= 6
-		for x in range(grid.X_MIN, grid.X_MAX + 1):
+## Test/debug hook: skip warning and creep, flood instantly to the wave peak and
+## begin receding. This preserves the old test assumption that force_lava_rise
+## makes lava active immediately.
+func force_full_rise(layers: int) -> void:
+	if _lava_state != LavaState.IDLE:
+		return
+	_lava_layers = layers
+	_lava_warning_left = 0.0
+	if _lava_wave_profile.is_empty():
+		_generate_lava_wave()
+	_lava_top_min = _lava_zone_top_min()
+	_lava_y_tide = float(_lava_top_min)
+	_lava_state = LavaState.CREEPING_DOWN
+	_lava_timer = 0.0
+	_lava_original_cells.clear()
+	_lava_flooded_cells.clear()
+	_lava_sweep_timer = _Constants.LAVA_SWEEP_INTERVAL
+	_apply_lava_tide()
+	grid.lava_risen.emit(_lava_layers)
+	grid.queue_redraw()
+
+
+## Applies the current tide level: converts newly flooded cells to lava and
+## recedes cells the tide has left behind. Called every frame while creeping.
+func _apply_lava_tide() -> void:
+	var tide_top: int = ceili(_lava_y_tide)
+	var new_flooded: Array[Vector2i] = []
+	for x in range(grid.X_MIN, grid.X_MAX + 1):
+		var col_top: int = maxi(_lava_top_at_x(x), tide_top)
+		for y in range(col_top, grid.Y_MAX + 1):
 			var pos: Vector2i = Vector2i(x, y)
 			var cell: GridWorld.Cell = grid._cells.get(pos)
-			if cell == null or cell.type != GridWorld.CellType.LAVA:
+			if cell != null and cell.is_wall:
 				continue
-			# If this tile held an unmined gold deposit before the flood,
-			# restore it exactly as it was.
-			var backup: GridWorld.Cell = _lava_original_cells.get(pos)
-			if backup != null and backup.coin_remaining > 0:
-				grid._cells[pos] = backup
+			if cell == null or cell.type != GridWorld.CellType.LAVA:
+				# Preserve existing gold deposits so unmined ore survives the flood.
+				if cell != null and (cell.type == GridWorld.CellType.ORE or cell.type == GridWorld.CellType.FRESH_ORE) and cell.coin_remaining > 0:
+					_lava_original_cells[pos] = cell
+				var layer: int = (y - 1) / _Constants.ROWS_PER_LAYER + 1
+				# Level 99 gate: lava is indestructible and undiggable.
+				grid._cells[pos] = GridWorld.Cell.new(GridWorld.CellType.LAVA, layer, 99, 9999, 0)
 				if grid._astar.is_in_boundsv(pos):
 					grid._astar.set_point_solid(pos, true)
 				grid._cell_flash[pos] = 0.6
-				continue
-			if can_spawn_gold and randf() < _Constants.MAGMA_ORE_CHANCE:
-				var coin: int = randi_range(_Constants.MAGMA_ORE_MIN, _Constants.MAGMA_ORE_MAX)
-				grid._cells[pos] = GridWorld.Cell.new(GridWorld.CellType.FRESH_ORE, layer, ml_req, _Constants.MAGMA_ROCK_HP, coin)
-			else:
-				grid._cells[pos] = GridWorld.Cell.new(GridWorld.CellType.MAGMA_ROCK, layer, ml_req, _Constants.MAGMA_ROCK_HP, 0)
-			# Magma rock blocks like dirt until dug out.
-			if grid._astar.is_in_boundsv(pos):
-				grid._astar.set_point_solid(pos, true)
-			grid._cell_flash[pos] = 0.6
+				_kill_unit_in_cell(pos)
+				_destroy_lantern_in_cell(pos)
+			new_flooded.append(pos)
+	# Recede any cells that are no longer in the tide.
+	for pos: Vector2i in _lava_flooded_cells:
+		if pos in new_flooded:
+			continue
+		var cell: GridWorld.Cell = grid._cells.get(pos)
+		if cell == null or cell.type != GridWorld.CellType.LAVA:
+			continue
+		_recede_cell(pos)
+	_lava_flooded_cells = new_flooded
+	grid.queue_redraw()
+
+
+## Converts a single lava cell back to magma rock / fresh ore / its original
+## ore deposit once the tide recedes past it.
+func _recede_cell(pos: Vector2i) -> void:
+	var cell: GridWorld.Cell = grid._cells.get(pos)
+	if cell == null or cell.type != GridWorld.CellType.LAVA:
+		return
+	var layer: int = (pos.y - 1) / _Constants.ROWS_PER_LAYER + 1
+	var ml_req: int = grid._map_gen._layer_miner_level(layer)
+	# Fresh ore only appears on the deepest two layers; higher flooded
+	# layers reset to empty magma rock.
+	var can_spawn_gold: bool = layer >= 6
+	# If this tile held an unmined gold deposit before the flood,
+	# restore it exactly as it was.
+	var backup: GridWorld.Cell = _lava_original_cells.get(pos)
+	if backup != null and backup.coin_remaining > 0:
+		grid._cells[pos] = backup
+		if grid._astar.is_in_boundsv(pos):
+			grid._astar.set_point_solid(pos, true)
+		grid._cell_flash[pos] = 0.6
+		return
+	if can_spawn_gold and randf() < _Constants.MAGMA_ORE_CHANCE:
+		var coin: int = randi_range(_Constants.MAGMA_ORE_MIN, _Constants.MAGMA_ORE_MAX)
+		grid._cells[pos] = GridWorld.Cell.new(GridWorld.CellType.FRESH_ORE, layer, ml_req, _Constants.MAGMA_ROCK_HP, coin)
+	else:
+		grid._cells[pos] = GridWorld.Cell.new(GridWorld.CellType.MAGMA_ROCK, layer, ml_req, _Constants.MAGMA_ROCK_HP, 0)
+	# Magma rock blocks like dirt until dug out.
+	if grid._astar.is_in_boundsv(pos):
+		grid._astar.set_point_solid(pos, true)
+	grid._cell_flash[pos] = 0.6
+
+
+## Kills a unit standing in a specific lava cell. Called incrementally as the
+## tide floods a cell, so units are caught the moment lava touches them.
+func _kill_unit_in_cell(pos: Vector2i) -> void:
+	for unit in grid.get_tree().get_nodes_in_group("units"):
+		if not unit.is_underground:
+			continue
+		if grid.world_to_grid(unit.global_position) != pos:
+			continue
+		var cell: GridWorld.Cell = grid._cells.get(pos)
+		if cell != null and cell.type == GridWorld.CellType.LAVA:
+			unit.die_in_lava()
+
+
+## Destroys an underground lantern in a specific lava cell.
+func _destroy_lantern_in_cell(pos: Vector2i) -> void:
+	for lantern in grid.get_tree().get_nodes_in_group("lanterns"):
+		if not lantern.is_underground_lantern:
+			continue
+		if grid.world_to_grid(lantern.global_position) != pos:
+			continue
+		lantern._destroy()
+
+
+func _finish_lava_event() -> void:
+	# Ensure any remaining lava is receded.
+	for pos: Vector2i in _lava_flooded_cells:
+		_recede_cell(pos)
 	_lava_original_cells.clear()
+	_lava_flooded_cells.clear()
+	_lava_wave_profile.clear()
 	_lava_layers = 0
-	_lava_active_left = 0.0
+	_lava_top_min = grid.Y_MAX + 1
+	_lava_y_tide = float(grid.Y_MAX + 1)
+	_lava_state = LavaState.IDLE
+	_lava_timer = 0.0
 	DebugLog.log_command("GridEvents", "lava_receded", "")
 	grid.lava_receded.emit()
 	_lava_next_at = _clock + randf_range(_Constants.LAVA_MIN_INTERVAL, _Constants.LAVA_MAX_INTERVAL)
 	grid.queue_redraw()
 
 
-## Instantly kills every unit standing in a lava cell (no cargo drop — the
-## coin melts). Runs on the rise and periodically while lava is up, catching
-## stragglers whose in-flight paths carried them into the zone.
+## Instantly kills every unit standing in a current lava cell (no cargo drop —
+## the coin melts). Runs periodically while the tide is moving, catching
+## stragglers whose in-flight paths carried them into already-flooded cells.
 func _kill_units_in_lava() -> void:
 	for unit in grid.get_tree().get_nodes_in_group("units"):
 		if not unit.is_underground:
 			continue
-		var cell: GridWorld.Cell = grid._cells.get(grid.world_to_grid(unit.global_position))
+		var upos: Vector2i = grid.world_to_grid(unit.global_position)
+		var cell: GridWorld.Cell = grid._cells.get(upos)
 		if cell != null and cell.type == GridWorld.CellType.LAVA:
 			unit.die_in_lava()
-
-
-## Lava destroys underground lanterns in the flooded rows instantly.
-func _destroy_lanterns_below(y_from: int) -> void:
-	for lantern in grid.get_tree().get_nodes_in_group("lanterns"):
-		if not lantern.is_underground_lantern:
-			continue
-		if grid.world_to_grid(lantern.global_position).y >= y_from:
-			lantern._destroy()
 
 
 # ─── Cave-ins ───

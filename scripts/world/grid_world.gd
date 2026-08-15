@@ -382,6 +382,23 @@ func get_lava_warning_remaining() -> float:
 	return _events.get_lava_warning_remaining()
 
 
+## Highest the impending lava wave will reach (lowest y). Useful for evacuation
+## logic that needs to clear every column that might flood.
+func get_lava_warning_top_min() -> int:
+	return _events._lava_zone_top_min()
+
+
+## Highest the active lava currently reaches (lowest y). Returns Y_MAX + 1 when
+## lava is not active.
+func get_active_lava_top_min() -> int:
+	return _events._lava_zone_top_min() if _events.is_lava_active() else Y_MAX + 1
+
+
+## All cells currently converted to LAVA by the active rise.
+func get_lava_cells() -> Array[Vector2i]:
+	return _events._lava_flooded_cells.duplicate()
+
+
 func is_cave_in_rock(grid_pos: Vector2i) -> bool:
 	return _events.is_cave_in_rock(grid_pos)
 
@@ -391,11 +408,11 @@ func force_lava_warning(layers: int = -1) -> void:
 
 
 func force_lava_rise(layers: int = 1) -> void:
-	_events._rise_lava(layers)
+	_events.force_full_rise(layers)
 
 
 func force_lava_recede() -> void:
-	_events._recede_lava()
+	_events._finish_lava_event()
 
 
 func force_cave_in(center: Vector2i) -> void:

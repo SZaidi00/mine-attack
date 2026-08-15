@@ -402,24 +402,47 @@ func test_miner_research_bonuses_survive_miner_upgrade() -> void:
 
 # ─── Overlay pause toggle ───
 
-func test_overlay_pause_toggle_pauses_and_resumes() -> void:
-	# The overlay never pauses by itself; the "Pause game" toggle opts in, and
-	# closing the overlay releases exactly that pause. No awaits here — the
-	# tree is briefly paused, and frames must not pass until it resumes.
+func test_overlay_pause_pauses_and_resumes_automatically() -> void:
+	# The research overlay now pauses automatically while open so the player can
+	# read tooltips and queue techs without time progressing. Closing the overlay
+	# releases exactly that pause. No awaits here — the tree is briefly paused,
+	# and frames must not pass until it resumes.
 	var hud: CanvasLayer = _main.get_node("UI/HUD")
 	var panel: Control = hud.get_node("ResearchPanel")
 	assert_false(get_tree().paused)
 	panel.visible = true
-	assert_false(get_tree().paused, "opening the overlay does not pause")
-	panel._pause_while_open = true
 	panel._sync_pause()
-	assert_true(get_tree().paused, "toggle pauses the game")
+	assert_true(get_tree().paused, "opening the research overlay pauses the game")
 	assert_true(panel.owns_pause())
 	hud._process(0.016)
 	assert_false(hud._pause_panel.visible, "pause menu stays hidden under the overlay")
 	panel.visible = false
+	panel._sync_pause()
 	assert_false(get_tree().paused, "closing the overlay resumes")
 	assert_false(panel.owns_pause())
+
+
+func test_soft_pause_button_pauses_without_menu() -> void:
+	# The HUD has a Pause (0×) button in the speed row that pauses via time_scale
+	# without bringing up the exit menu. Selecting any speed resumes.
+	var hud: CanvasLayer = _main.get_node("UI/HUD")
+	Engine.time_scale = 1.0
+	GameManager.soft_paused = false
+	GameManager.game_speed = 1.0
+	assert_false(hud._pause_panel.visible, "pause menu starts hidden")
+	hud._toggle_soft_pause()
+	assert_true(GameManager.soft_paused, "toggle engages soft pause")
+	assert_eq(Engine.time_scale, 0.0, "time scale freezes")
+	assert_true(hud._pause_button.button_pressed, "pause button shows pressed")
+	assert_false(hud._speed_buttons[1.0].button_pressed, "speed buttons unpress while paused")
+	assert_false(hud._pause_panel.visible, "exit menu stays hidden")
+	hud._set_game_speed(2.0)
+	assert_false(GameManager.soft_paused, "selecting a speed clears soft pause")
+	assert_eq(Engine.time_scale, 2.0, "time scale restores to chosen speed")
+	assert_true(hud._speed_buttons[2.0].button_pressed, "chosen speed button shows pressed")
+	assert_false(hud._pause_button.button_pressed, "pause button unpresses")
+	# Cleanup: leave the suite at normal speed.
+	GameManager.set_game_speed(1.0)
 
 
 # ─── Reset ───

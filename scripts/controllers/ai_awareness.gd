@@ -207,12 +207,20 @@ func _on_snowstorm_ended() -> void:
 
 
 ## Lava warning (Phase 4/8): evacuate the underground layers that the next
-## rise will flood. Miners climb out and hold at the mine entrance until the
-## lava recedes.
+## rise might flood. Because the flood now follows a cosine wave, use the
+## highest the lava can reach (lowest y) across all columns so no miner is left
+## in a peak. Miners climb out and hold at the mine entrance until the lava
+## recedes.
 func _on_lava_warning(_seconds: float, layers: int = 2) -> void:
 	if not GameManager.game_active:
 		return
-	var flood_top: int = GridWorld.Y_MAX - layers * _Constants.ROWS_PER_LAYER + 1
+	var flood_top: int = ai._grid.get_lava_warning_top_min()
+	if flood_top > GridWorld.Y_MAX:
+		# No wave profile yet (direct test hook or pre-rise call): fall back to
+		# the flat layer count passed with the signal.
+		flood_top = GridWorld.Y_MAX - layers * _Constants.ROWS_PER_LAYER + 1
+	if flood_top > GridWorld.Y_MAX:
+		return
 	for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
 		if not unit.data.is_miner or unit._state == Unit.State.DEAD or not unit.is_underground:
 			continue

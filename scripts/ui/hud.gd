@@ -33,6 +33,7 @@ const _ICON_SNOWSTORM: Texture2D = preload("res://frost_mines_assets/icons/icon_
 @onready var _selection_label: Label = %SelectionLabel
 @onready var _surface_button: Button = $TopBar/MarginContainer/VBoxContainer/TabsRow/TabGroup/SurfaceButton
 @onready var _underground_button: Button = $TopBar/MarginContainer/VBoxContainer/TabsRow/TabGroup/UndergroundButton
+@onready var _pause_button: Button = $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/PauseButton
 @onready var _speed_buttons: Dictionary = {
 	1.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed1Button,
 	2.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed2Button,
@@ -117,11 +118,12 @@ func _ready() -> void:
 	_build_button.pressed.connect(_menus._toggle_build_menu)
 	_surface_button.pressed.connect(_set_view.bind(false))
 	_underground_button.pressed.connect(_set_view.bind(true))
+	_pause_button.pressed.connect(_toggle_soft_pause)
 	for speed: float in _speed_buttons:
 		_speed_buttons[speed].pressed.connect(_set_game_speed.bind(speed))
 	$GameOverPanel/MarginContainer/VBoxContainer/QuitButton.pressed.connect(_quit_to_menu)
 	$GameOverPanel/MarginContainer/VBoxContainer/PlayAgainButton.pressed.connect(_play_again)
-	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _kill_button, _research_button, _build_button, _surface_button, _underground_button]:
+	for btn: Button in [_upgrade_button, _attack_button, _defend_button, _garrison_button, _rally_button, _kill_button, _research_button, _build_button, _surface_button, _underground_button, _pause_button]:
 		btn.pressed.connect(func(): AudioManager.play("click"))
 	for unit_id: String in _fighter_upgrade_buttons:
 		_fighter_upgrade_buttons[unit_id].pressed.connect(func(): AudioManager.play("click"))
@@ -210,6 +212,11 @@ func _set_game_speed(speed: float) -> void:
 	_updates._sync_speed_buttons()
 
 
+func _toggle_soft_pause() -> void:
+	GameManager.set_soft_paused(not GameManager.soft_paused)
+	_updates._sync_speed_buttons()
+
+
 func _add_stat_icons() -> void:
 	_add_icon_before_label(_coin_label, _ICON_COIN)
 	_add_icon_before_label(_miner_level_label, _ICON_MINER)
@@ -289,6 +296,10 @@ func _kill_selected() -> void:
 ## BottomBar Research button / R hotkey: shows or hides the research panel.
 func toggle_research_panel() -> void:
 	_research_panel.visible = not _research_panel.visible
+
+
+func is_research_panel_open() -> bool:
+	return _research_panel.visible
 
 
 func _set_view(underground: bool) -> void:

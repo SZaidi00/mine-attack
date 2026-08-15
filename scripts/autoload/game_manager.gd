@@ -51,9 +51,13 @@ var match_time: float = 0.0
 # AI difficulty for the current match. Set from the debug dropdown (Phase 6)
 # or the main menu (Phase 7); survives reset() so Play Again keeps the choice.
 var difficulty: Difficulty = Difficulty.NORMAL
-# Player-chosen game speed (1x/2x/3x). Like difficulty, survives reset() so
-# Play Again keeps the choice. The win slow-mo overrides it temporarily.
+# Player-chosen game speed (1x/2x/3x/5x/10x). Like difficulty, survives reset()
+# so Play Again keeps the choice. The win slow-mo overrides it temporarily.
 var game_speed: float = 1.0
+# Soft pause (separate from the tree-pausing pause menu): a temporary 0x speed
+# the player can toggle from the HUD without bringing up the exit menu. It is
+# cleared on match reset so Play Again does not start paused.
+var soft_paused: bool = false
 # Slow-mo end time (Time.get_ticks_msec()) after a win; -1 = not in slow-mo.
 var _slowmo_end_msec: int = -1
 
@@ -63,7 +67,7 @@ func _process(delta: float) -> void:
 		match_time += delta
 	if _slowmo_end_msec >= 0 and Time.get_ticks_msec() >= _slowmo_end_msec:
 		_slowmo_end_msec = -1
-		Engine.time_scale = game_speed
+		Engine.time_scale = 0.0 if soft_paused else game_speed
 
 
 func declare_winner(winner: Team) -> void:
@@ -81,18 +85,31 @@ func reset() -> void:
 	game_active = true
 	match_time = 0.0
 	_slowmo_end_msec = -1
+	soft_paused = false
 	Engine.time_scale = game_speed
 	# Note: difficulty and game_speed are intentionally kept so Play Again
-	# preserves both choices.
+	# preserves both choices. soft_paused is cleared so Play Again never starts
+	# in a paused state.
 
 
 ## Sets the player-chosen game speed. The value is always stored (so the win
 ## slow-mo and reset() restore it), but only applied live outside the slow-mo.
+## Selecting a speed also clears a temporary soft pause.
 func set_game_speed(speed: float) -> void:
 	game_speed = speed
 	DebugLog.log_command("GameManager", "set_game_speed", "%.2fx" % speed)
 	if game_active and _slowmo_end_msec < 0:
+		soft_paused = false
 		Engine.time_scale = speed
+
+
+## Toggles a temporary 0x pause without showing the pause menu. Cleared by
+## selecting any speed, by reset(), or by toggling it off again.
+func set_soft_paused(paused: bool) -> void:
+	soft_paused = paused
+	DebugLog.log_command("GameManager", "set_soft_paused", str(soft_paused))
+	if game_active and _slowmo_end_msec < 0:
+		Engine.time_scale = 0.0 if soft_paused else game_speed
 
 
 func set_difficulty(d: Difficulty) -> void:

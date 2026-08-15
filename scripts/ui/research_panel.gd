@@ -112,11 +112,11 @@ var _queue_container: VBoxContainer
 var _cancel_button: Button
 var _respec_button: Button
 var _scan_button: Button
-# Optional "Pause game" toggle: the overlay never pauses by itself, but the
-# player can opt in. _paused_by_panel marks a pause this panel engaged, so it
-# (and only it) gets released when the overlay closes — and so the HUD knows
-# not to pop the pause menu on top of the overlay.
-var _pause_while_open: bool = false
+# The research overlay automatically pauses the game while open so the player
+# can read tooltips and queue techs without time progressing. _paused_by_panel
+# marks a pause this panel engaged, so it (and only it) gets released when the
+# overlay closes — and so the HUD knows not to pop the pause menu on top.
+var _pause_while_open: bool = true
 var _paused_by_panel: bool = false
 
 
@@ -211,18 +211,6 @@ func _build_ui() -> void:
 	title.add_theme_color_override("font_color", _COL_TEXT)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
-	# Opt-in pause: the overlay itself never pauses the game, but the player
-	# can choose to freeze the action while browsing the tree.
-	var pause_toggle := CheckBox.new()
-	pause_toggle.text = "Pause game"
-	pause_toggle.tooltip_text = "Pause the game while the research tree is open (closing the tree resumes)"
-	pause_toggle.add_theme_font_size_override("font_size", 12)
-	pause_toggle.add_theme_color_override("font_color", _COL_TEXT_DIM)
-	pause_toggle.toggled.connect(func(on: bool) -> void:
-		_pause_while_open = on
-		_sync_pause()
-	)
-	header.add_child(pause_toggle)
 	var close_button := Button.new()
 	close_button.text = "Close (R)"
 	close_button.add_theme_font_size_override("font_size", 12)

@@ -40,10 +40,13 @@ func _on_faction_identified(team: GameManager.Team) -> void:
 
 
 func _sync_speed_buttons() -> void:
+	if hud._pause_button.button_pressed != GameManager.soft_paused:
+		hud._pause_button.set_pressed_no_signal(GameManager.soft_paused)
 	for speed: float in hud._speed_buttons:
 		var btn: Button = hud._speed_buttons[speed]
-		if btn.button_pressed != (GameManager.game_speed == speed):
-			btn.set_pressed_no_signal(GameManager.game_speed == speed)
+		var pressed: bool = not GameManager.soft_paused and GameManager.game_speed == speed
+		if btn.button_pressed != pressed:
+			btn.set_pressed_no_signal(pressed)
 
 
 func _sync_view_buttons() -> void:
