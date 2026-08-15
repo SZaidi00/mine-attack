@@ -80,7 +80,7 @@ The controllers are split into thin main classes plus `RefCounted` helper module
   - `ai_mining.gd` — miner task assignment and ore selection (skips miners under shelter orders).
   - `ai_combat.gd` — attack waves, base defense, wall breach. Waves peel up to half their fighters (2 per structure) onto remembered enemy towers/lanterns before marching on the base (`_wave_structure_assignments`).
   - `ai_smart_behaviors.gd` — focus fire, wounded retreat, harassment, bait, combat predictor, aggression (Brute pushes on a slimmer lead).
-  - `ai_awareness.gd` — Phase 8: faction scouting (swordsman at 1:00, 30s retry after it dies), defensive lantern placement/upgrades, snowstorm miner recall and lava evacuation (signal-driven, same warnings as the player; sheltered miners hold via `unit.shelter_in_place`).
+  - `ai_awareness.gd` — Phase 8: faction scouting (swordsman at 1:00, 30s retry after it dies), defensive lantern placement/upgrades (now fills up to the raised max count and upgrades T1 → T2 → T3), snowstorm miner recall and lava evacuation (signal-driven, same warnings as the player; sheltered miners hold via `unit.shelter_in_place`).
 
 ### `scripts/world/`
 

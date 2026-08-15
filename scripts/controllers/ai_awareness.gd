@@ -112,17 +112,19 @@ func _run_lantern_placement() -> void:
 		ai.get_node("/root/Main/Structures").add_child(lantern)
 		DebugLog.log_command("AIController", "build", "lantern at %s" % str(cell))
 	elif coin - reserve >= Lantern.cost_for(false, 2) + _Constants.ENEMY_LANTERN_UPGRADE_BUFFER:
-		# All slots filled: upgrade the oldest built T1 to T2 (in place, same
-		# rules as the player's upgrade click).
-		for lantern: Lantern in lanterns:
-			if lantern.tier == 1 and lantern.can_upgrade():
-				var upgrade_cost: int = Lantern.cost_for(false, 2)
-				if not EconomyManager.spend_coin(ai.team, upgrade_cost):
+		# All slots filled: upgrade the lowest-tier built lantern first (T1 → T2,
+		# then T2 → T3), spreading investment across coverage rather than maxing
+		# one lantern early.
+		for tier in [1, 2]:
+			for lantern: Lantern in lanterns:
+				if lantern.tier == tier and lantern.can_upgrade():
+					var upgrade_cost: int = Lantern.cost_for(false, tier + 1)
+					if not EconomyManager.spend_coin(ai.team, upgrade_cost):
+						return
+					lantern.total_cost += upgrade_cost
+					lantern.upgrade()
+					DebugLog.log_command("AIController", "build", "lantern upgraded to T%d at %s" % [lantern.tier, str(ai._grid.world_to_grid(lantern.global_position))])
 					return
-				lantern.total_cost += upgrade_cost
-				lantern.upgrade()
-				DebugLog.log_command("AIController", "build", "lantern upgraded to T2 at %s" % str(ai._grid.world_to_grid(lantern.global_position)))
-				return
 
 
 ## Best surface cell for the next lantern: minimizes the worst-case distance

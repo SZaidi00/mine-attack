@@ -196,8 +196,8 @@ func test_storm_halves_unit_and_lantern_vision() -> void:
 	var stormed: Dictionary = {}
 	for source in _grid._get_vision_sources(PLAYER):
 		stormed[source[0]] = source[1]
-	assert_eq(stormed.get(unit_cell), int(Constants.VISION_SWORDSMAN * Constants.SNOWSTORM_VISION_MULT), "storm halves the swordsman radius")
-	assert_eq(stormed.get(lantern_cell), int(Constants.LANTERN_T1_VISION * Constants.SNOWSTORM_VISION_MULT), "storm halves the lantern radius")
+	assert_eq(stormed.get(unit_cell), roundi(Constants.VISION_SWORDSMAN * Constants.SNOWSTORM_VISION_MULT), "storm halves the swordsman radius")
+	assert_eq(stormed.get(lantern_cell), roundi(Constants.LANTERN_T1_VISION * Constants.SNOWSTORM_VISION_MULT), "storm halves the lantern radius")
 	WeatherManager.force_snowstorm_end()
 
 

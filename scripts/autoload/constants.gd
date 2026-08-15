@@ -108,16 +108,19 @@ const FOG_MEMORY_ALPHA: float = 0.7
 
 # ─── LANTERNS (Revamp Phase 1) ───
 # Surface lanterns: static vision structures, built on the own half's surface
-# row and upgraded in place T1 → T2 → T3.
+# row and upgraded in place T1 → T2 → T3. Radii are deliberately smaller than
+# the half-map width so a single lantern (even T3) cannot light the entire
+# side; players must place several lanterns and/or upgrade them to maintain
+# coverage. Max count is raised so a lighting network is affordable.
 const LANTERN_T1_COST: int = 200
 const LANTERN_T2_COST: int = 600
 const LANTERN_T3_COST: int = 1000
-const LANTERN_T1_VISION: int = 8
-const LANTERN_T2_VISION: int = 14
-const LANTERN_T3_VISION: int = 22
+const LANTERN_T1_VISION: int = 5
+const LANTERN_T2_VISION: int = 9
+const LANTERN_T3_VISION: int = 14
 const LANTERN_HP: int = 500
 const LANTERN_BUILD_TIME: float = 5.0
-const LANTERN_MAX_COUNT: int = 3
+const LANTERN_MAX_COUNT: int = 5
 const LANTERN_MIN_DISTANCE: int = 3  # cells between surface lanterns
 # Underground lanterns: placed in dug-out tunnel cells; they permanently
 # reveal buried ore in their radius for the owning team (like an Ore Sonar

@@ -189,8 +189,10 @@ func test_lantern_min_distance_and_max_count() -> void:
 	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-20, 0))))
 	assert_false(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-21, 0))), "too close to another lantern")
 	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-25, 0))))
-	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-32, 0))))
-	assert_false(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-38, 0))), "4th lantern exceeds the max of 3")
+	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-30, 0))))
+	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-35, 0))))
+	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-38, 0))), "5th lantern is allowed")
+	assert_false(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-15, 0))), "6th lantern exceeds the max of %d" % Constants.LANTERN_MAX_COUNT)
 
 
 func test_built_lantern_is_a_vision_source() -> void:
@@ -200,7 +202,7 @@ func test_built_lantern_is_a_vision_source() -> void:
 	for source in _grid._get_vision_sources(PLAYER):
 		if source[0] == Vector2i(-20, 0) and source[1] == Constants.LANTERN_T1_VISION:
 			found = true
-	assert_true(found, "built lantern must contribute its 8-cell vision")
+	assert_true(found, "built lantern must contribute its T1 vision")
 
 
 func test_lantern_upgrade_in_place() -> void:
@@ -209,7 +211,7 @@ func test_lantern_upgrade_in_place() -> void:
 	var coin_before: int = EconomyManager.get_coin(PLAYER)
 	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-20, 0))), "placing on an own lantern upgrades it")
 	assert_eq(lantern.tier, 2, "upgrade must raise the tier")
-	assert_eq(lantern.vision_radius, Constants.LANTERN_T2_VISION, "T2 sees 14 cells")
+	assert_eq(lantern.vision_radius, Constants.LANTERN_T2_VISION, "T2 sees %d cells" % Constants.LANTERN_T2_VISION)
 	assert_eq(EconomyManager.get_coin(PLAYER), coin_before - Constants.LANTERN_T2_COST, "upgrade costs 600g")
 	assert_false(lantern.is_built(), "upgraded lantern rebuilds before providing vision")
 
