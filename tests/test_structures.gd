@@ -30,6 +30,17 @@ func after_all() -> void:
 func before_each() -> void:
 	EconomyManager.add_coin(PLAYER, 5000)
 	# Tests place structures at fixed cells — start each test with a clean map.
+	_cleanup_structures()
+
+
+func after_each() -> void:
+	# Tower-fire tests can leave projectiles in flight whose source tower gets
+	# freed before impact; wipe them so they do not error in the next test.
+	for proj in _main.get_node("Projectiles").get_children():
+		proj.free()
+
+
+func _cleanup_structures() -> void:
 	for tower in get_tree().get_nodes_in_group("towers"):
 		tower.free()
 	for lantern in get_tree().get_nodes_in_group("lanterns"):
@@ -108,30 +119,49 @@ func test_tower_placement_rejects_occupied_and_caps_at_max() -> void:
 	assert_eq(get_tree().get_nodes_in_group("towers").size(), 2)
 
 
-func test_tower_invulnerable_while_building_then_vision_and_fire() -> void:
+func test_tower_invulnerable_while_building_then_fires() -> void:
 	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0)))
 	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
 	tower.take_damage(100)
 	assert_eq(tower.hp, tower.max_hp, "under-construction tower takes no damage")
 	await _finish_construction(tower)
 	assert_true(tower.is_built())
-	# Towers are surface vision sources (18 cells).
-	assert_true(_grid.is_visible_to(PLAYER, tower.global_position + Vector2(10 * 32, 0)), "built tower lights its radius")
-	# Fires at a visible enemy fighter in range.
+	# Only lanterns lift fog; towers no longer provide vision.
+	assert_false(_grid.is_visible_to(PLAYER, tower.global_position + Vector2(10 * 32, 0)), "built tower must not light fog")
+	# Fires at a visible enemy fighter in range (vision supplied for the test).
+	_grid.set_reveal_all(PLAYER, true)
 	var enemy: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, tower.global_position + Vector2(160, 16))
+	enemy.stop()
 	await wait_seconds(2.0)
 	assert_lt(enemy.get("hp"), enemy.data.max_hp, "tower shot the intruder")
+	_grid.set_reveal_all(PLAYER, false)
 
 
 func test_tower_prioritizes_fighters_over_miners() -> void:
 	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0)))
 	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
 	await _finish_construction(tower)
+	_grid.set_reveal_all(PLAYER, true)
 	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, tower.global_position + Vector2(96, 0))
 	var fighter: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, tower.global_position + Vector2(160, 0))
 	var pick = tower.call("_pick_target")
 	assert_eq(pick, fighter, "fighters outrank miners even when the miner is closer")
 	assert_ne(pick, miner)
+	_grid.set_reveal_all(PLAYER, false)
+
+
+func test_tower_attacks_target_behind_it() -> void:
+	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0)))
+	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
+	await _finish_construction(tower)
+	# Enemy behind the tower (on the player's-base side) must still be targeted.
+	_grid.set_reveal_all(PLAYER, true)
+	var enemy: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, tower.global_position + Vector2(-160, 16))
+	enemy.stop()
+	await wait_seconds(2.0)
+	assert_lt(enemy.get("hp"), enemy.data.max_hp, "tower shoots an enemy behind it")
+	assert_eq(tower.get("_scan_angle"), (enemy.global_position - tower.global_position).angle(), "scan beam faces the rear target")
+	_grid.set_reveal_all(PLAYER, false)
 
 
 func test_tower_destruction_drops_salvage() -> void:

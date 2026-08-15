@@ -2,8 +2,8 @@ class_name Tower
 extends Node2D
 
 ## Sentry tower (Revamp Phase 3): a static surface defense that auto-attacks
-## the highest-priority enemy in range (fighters > miners > buildings) and
-## doubles as a surface vision source once construction finishes. Towers are
+## the highest-priority enemy in range (fighters > miners > buildings).
+## Only lanterns lift fog; towers do not provide vision. Towers are
 ## invulnerable while under construction; a destroyed tower drops half its
 ## build cost as a coin pickup. Faction variants (Arcane cheaper-HP magic
 ## missiles, Brute heavy bolts, Industrial fast build) come from FactionData.
@@ -36,7 +36,8 @@ var _is_built: bool = false
 var _attack_timer: float = 0.0
 var _scan_timer: float = 0.0
 var _target: Node2D = null
-# Rotating scan-beam angle (purely cosmetic).
+# Scan-beam angle (purely cosmetic). Idle towers point outward; when they
+# have a target the beam snaps to face it, so it can aim behind the building.
 var _scan_angle: float = 0.0
 # Post-faction attack range; the Surface Warfare branch bonus multiplies this
 # base so recomputing on research changes never compounds.
@@ -61,7 +62,7 @@ func _ready() -> void:
 		ResearchManager.research_completed.connect(_on_research_completed)
 	if not ResearchManager.research_changed.is_connected(_on_research_changed):
 		ResearchManager.research_changed.connect(_on_research_changed)
-	_scan_angle = randf() * TAU
+	_scan_angle = 0.0 if team == GameManager.Team.PLAYER else PI
 	queue_redraw()
 
 
@@ -88,7 +89,6 @@ func is_built() -> bool:
 
 
 func _process(delta: float) -> void:
-	_scan_angle += delta * 0.8
 	if not GameManager.game_active:
 		return
 	if not _is_built:
@@ -98,14 +98,26 @@ func _process(delta: float) -> void:
 			construction_complete.emit(self)
 		queue_redraw()
 		return
-	queue_redraw()  # scan beam keeps rotating
+	queue_redraw()
 	_attack_timer -= delta
 	_scan_timer -= delta
 	if _scan_timer <= 0.0:
 		_scan_timer = 0.25
 		_target = _pick_target()
+	_update_scan_angle()
 	if _target != null and _attack_timer <= 0.0:
 		_fire_at(_target)
+
+
+## Aim the cosmetic scan beam at the current target; idle towers point outward.
+func _update_scan_angle() -> void:
+	if _target != null and is_instance_valid(_target):
+		var aim: Vector2 = _target.global_position
+		if _target.has_method("get_combat_position"):
+			aim = _target.get_combat_position()
+		_scan_angle = (aim - global_position).angle()
+	else:
+		_scan_angle = 0.0 if team == GameManager.Team.PLAYER else PI
 
 
 ## Target priority per the guide: fighters > miners > buildings. Only what

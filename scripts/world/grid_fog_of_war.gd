@@ -67,9 +67,10 @@ func _update_vision(team: GameManager.Team) -> void:
 
 
 ## Every vision source for a team as [center_cell, radius_cells, layer_mask]
-## triples: living units (per-type radii), the team's building, built
-## lanterns, and built towers. A raging snowstorm (Revamp Phase 5) halves the
-## radius of units, lanterns, and towers; buildings keep their full radius.
+## triples: living units (per-type radii), the team's building, and built
+## lanterns. Sentry towers no longer provide vision — only lanterns light the
+## fog. A raging snowstorm (Revamp Phase 5) halves unit and lantern radius;
+## buildings keep their full radius.
 func _get_vision_sources(team: GameManager.Team) -> Array:
 	var sources: Array = []
 	var weather_mult: float = WeatherManager.get_vision_multiplier()
@@ -86,10 +87,6 @@ func _get_vision_sources(team: GameManager.Team) -> Array:
 		if lantern.team == team and lantern.is_built():
 			var layer: int = GridWorld.VISION_LAYER_UNDERGROUND if lantern.is_underground_lantern else GridWorld.VISION_LAYER_SURFACE
 			sources.append([grid.world_to_grid(lantern.global_position), maxi(1, roundi(lantern.vision_radius * weather_mult)), layer])
-	# Revamp Phase 3: built sentry towers are surface-only vision sources.
-	for tower in grid.get_tree().get_nodes_in_group("towers"):
-		if tower.team == team and tower.is_built():
-			sources.append([grid.world_to_grid(tower.global_position), maxi(1, roundi(tower.vision_radius * weather_mult)), GridWorld.VISION_LAYER_SURFACE])
 	return sources
 
 
