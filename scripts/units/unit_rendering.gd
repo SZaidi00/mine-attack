@@ -77,7 +77,7 @@ func draw() -> void:
 		body_top = -altitude - size / 2.0
 		selection_radius = size + 4.0
 
-	# Ground shadow under flying units (feet stay at local origin).
+	# Ground shadow under flying units (feet stay on local origin).
 	if altitude > 0.0:
 		var shadow_w: float = 18.0 * scale_factor
 		var shadow_h: float = 6.0 * scale_factor
@@ -104,6 +104,8 @@ func draw() -> void:
 		var sprite_size: Vector2 = sprite_texture.get_size() * scale_factor
 		var dest := Rect2(-sprite_size / 2.0 + Vector2(0, -altitude), sprite_size)
 		unit.draw_texture_rect(sprite_texture, dest, false)
+	elif unit.data.is_scout:
+		_draw_pigeon_placeholder(color, altitude, scale_factor)
 	else:
 		var size: float = 18.0 * scale_factor
 		var body_offset := Vector2(0, -altitude)
@@ -156,6 +158,23 @@ func draw() -> void:
 		var text_pos := Vector2(-20, body_top - 12)
 		unit.draw_string(font, text_pos + Vector2(1, 1), cargo_text, HORIZONTAL_ALIGNMENT_CENTER, 40, 10, Color(0, 0, 0, 0.8))
 		unit.draw_string(font, text_pos, cargo_text, HORIZONTAL_ALIGNMENT_CENTER, 40, 10, Color(0.984, 0.749, 0.141))
+
+
+func _draw_pigeon_placeholder(color: Color, altitude: float, scale_factor: float) -> void:
+	# Code-drawn placeholder: small bird silhouette with flapping wings.
+	var body_offset := Vector2(0, -altitude)
+	var size: float = 10.0 * scale_factor
+	var wing_offset: float = sin(Time.get_ticks_msec() / 80.0 + unit.get_instance_id() % 100) * 3.0 * scale_factor
+	var body_center: Vector2 = body_offset
+	# Body.
+	unit.draw_circle(body_center, size * 0.5, color)
+	# Head.
+	unit.draw_circle(body_center + Vector2(size * 0.6, -size * 0.15), size * 0.3, color)
+	# Wings.
+	unit.draw_line(body_center + Vector2(-size * 0.2, size * 0.1), body_center + Vector2(-size * 0.9, -size * 0.4 + wing_offset), color, size * 0.25)
+	unit.draw_line(body_center + Vector2(size * 0.1, size * 0.1), body_center + Vector2(size * 0.7, -size * 0.3 - wing_offset), color, size * 0.25)
+	# Beak.
+	unit.draw_line(body_center + Vector2(size * 0.85, -size * 0.1), body_center + Vector2(size * 1.15, size * 0.05), Color(1.0, 0.85, 0.45), size * 0.15)
 
 
 func _draw_pickaxe(draw_body: bool = true) -> void:

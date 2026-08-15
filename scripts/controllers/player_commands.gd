@@ -125,9 +125,21 @@ func _screen_to_world(screen_pos: Vector2) -> Vector2:
 
 
 func train_unit(unit_id: String) -> bool:
+	if unit_id == "pigeon":
+		return train_pigeon()
 	for building in pc.get_tree().get_nodes_in_group("buildings"):
 		if building.get("team") == GameManager.Team.PLAYER:
 			return building.call("queue_unit", unit_id)
+	return false
+
+
+func train_pigeon() -> bool:
+	# Pigeons train from the first available built player tower.
+	for tower in pc.get_tree().get_nodes_in_group("towers"):
+		if tower.get("team") == GameManager.Team.PLAYER and tower.is_built():
+			if tower.call("queue_pigeon"):
+				return true
+	DebugLog.log_reject("PlayerController", "train_pigeon", "no available tower")
 	return false
 
 

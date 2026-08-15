@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="FactionData" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="FactionData" format=3 uid="uid://be17638goftxy"]
 
-[ext_resource type="Script" path="res://scripts/resources/faction_data.gd" id="1"]
-[ext_resource type="Texture2D" path="res://frost_mines_assets/icons/faction_arcane.png" id="2"]
+[ext_resource type="Script" uid="uid://csqfeip6fouko" path="res://scripts/resources/faction_data.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://drb0ro11lptwj" path="res://frost_mines_assets/icons/faction_arcane.png" id="2"]
 
 [resource]
 script = ExtResource("1")

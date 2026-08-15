@@ -24,6 +24,8 @@ func get_vision_radius() -> int:
 			return Constants.VISION_WIZARD
 		"dragon":
 			return Constants.VISION_DRAGON if not unit.is_underground else Constants.VISION_MINER_UNDERGROUND
+		"pigeon":
+			return Constants.VISION_PIGEON
 	return 0
 
 
@@ -89,7 +91,7 @@ func _find_auto_attack_target():
 			for u in unit.get_tree().get_nodes_in_group("units"):
 				if u.team == unit.team or u._state == Unit.State.DEAD:
 					continue
-				if not u.data.is_fighter:
+				if not u.data.is_fighter and not u.data.is_scout:
 					continue
 				if not unit._combat.can_damage_unit(u):
 					continue

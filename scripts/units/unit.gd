@@ -18,6 +18,7 @@ const UnitAbilities = preload("res://scripts/units/unit_abilities.gd")
 const UnitVisionTargeting = preload("res://scripts/units/unit_vision_targeting.gd")
 const UnitRendering = preload("res://scripts/units/unit_rendering.gd")
 const UnitIdle = preload("res://scripts/units/unit_idle.gd")
+const UnitPigeon = preload("res://scripts/units/unit_pigeon.gd")
 
 @export var data: UnitData
 @export var team: GameManager.Team = GameManager.Team.PLAYER
@@ -157,6 +158,7 @@ var _abilities: UnitAbilities
 var _vision: UnitVisionTargeting
 var _rendering: UnitRendering
 var _idle: UnitIdle
+var _pigeon: UnitPigeon
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -186,6 +188,9 @@ func _ready() -> void:
 	# Spawners (the building) are responsible for issuing the first command.
 	# This avoids double-ordering a miner before its first _process tick.
 	# Deferred safety net: if a surface miner is still idle after spawn, send it in.
+	if data.is_scout:
+		# Pigeons are autonomous scouts; no spawn command needed.
+		return
 	if data.is_miner:
 		# Any destroyed tile can open a new path or ore pocket; wake up immediately.
 		if not _grid.cell_destroyed.is_connected(_mining._on_cell_destroyed):
@@ -202,6 +207,7 @@ func _init_helpers() -> void:
 	_vision = UnitVisionTargeting.new(self)
 	_rendering = UnitRendering.new(self)
 	_idle = UnitIdle.new(self)
+	_pigeon = UnitPigeon.new(self)
 
 
 func _process(delta: float) -> void:
@@ -272,6 +278,12 @@ func _process(delta: float) -> void:
 		_guerrilla_timer = 0.25
 		_update_guerrilla()
 	_sync_flight_visuals()
+	if data.is_scout:
+		_pigeon._process(delta)
+		_apply_research_bonuses()
+		if selected or get_flight_altitude() > 0.0:
+			queue_redraw()
+		return
 	if data.is_miner:
 		_apply_miner_upgrade()
 		# Miner Reveal (Arcane): a personal 4-cell ore scan every 30s while
@@ -631,6 +643,18 @@ func _friendly_building() -> Node2D:
 		if b.get("team") == team:
 			return b
 	return null
+
+
+func _nearest_friendly_tower() -> Node2D:
+	var best: Node2D = null
+	var best_dist: float = 999999.0
+	for tower in get_tree().get_nodes_in_group("towers"):
+		if tower.get("team") == team:
+			var d: float = global_position.distance_squared_to(tower.global_position)
+			if d < best_dist:
+				best_dist = d
+				best = tower
+	return best
 
 
 func _get_enemy_building() -> Node2D:

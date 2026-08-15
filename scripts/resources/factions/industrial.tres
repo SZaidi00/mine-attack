@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="FactionData" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="FactionData" format=3 uid="uid://xsnk2kas6w3h"]
 
-[ext_resource type="Script" path="res://scripts/resources/faction_data.gd" id="1"]
-[ext_resource type="Texture2D" path="res://frost_mines_assets/icons/faction_industrial.png" id="2"]
+[ext_resource type="Script" uid="uid://csqfeip6fouko" path="res://scripts/resources/faction_data.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://dxe044f8fngeo" path="res://frost_mines_assets/icons/faction_industrial.png" id="2"]
 
 [resource]
 script = ExtResource("1")
@@ -20,8 +20,8 @@ miner_mining_mult = 1.25
 miner_carry_bonus = 10
 miner_ore_yield_mult = 1.15
 cost_overrides = {
-"swordsman": 75,
 "archer": 120,
+"swordsman": 75,
 "wizard": 200
 }
 starting_gold_bonus = 200

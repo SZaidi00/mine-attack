@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/unit_data.gd" id="1_pigeon"]
+
+[resource]
+script = ExtResource("1_pigeon")
+unit_name = "Pigeon"
+is_miner = false
+is_fighter = false
+is_scout = true
+cost = 100
+train_time = 8.0
+population = 1
+player_textures = Array[Texture2D]([])
+enemy_textures = Array[Texture2D]([])
+max_hp = 30
+speed = 120.0
+attack_range = 90.0
+sight_range = 250.0
+damage_per_hit = 3.0
+attack_cooldown = 1.5
+projectile_speed = 350.0
+aoe_radius = 0.0
+flight_altitude = 35.0
+draw_scale = 0.8
+miner_level = 0
+carry_capacity = 0
+mining_rate = 0.0
+mining_damage = 0
+mining_swings_per_sec = 0.0
+max_dig_layer = 0

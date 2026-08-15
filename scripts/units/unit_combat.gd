@@ -61,20 +61,34 @@ func get_incoming_dps() -> float:
 	return total / maxf(span, 0.5)
 
 
-## Dragons only take damage from Archers and Wizards. All other units are
-## fully vulnerable to any attacker (including null for legacy call sites).
+## Flying units are only vulnerable to anti-air attackers. Dragons are only
+## hurt by archers and wizards; pigeon scouts are also vulnerable to dragons
+## and sentry towers. Environmental damage with no explicit attacker does not
+## affect flyers (they are above the snowstorm / ground hazards).
 func can_be_damaged_by(attacker: Node2D) -> bool:
-	if unit.data == null or unit.data.unit_name.to_lower() != "dragon":
+	if unit.data == null:
 		return true
+	var is_dragon: bool = unit.data.unit_name.to_lower() == "dragon"
+	var is_scout: bool = unit.data.is_scout
+	if not is_dragon and not is_scout:
+		return true
+	# Flyers ignore environmental/null-attacker damage.
 	if attacker == null or not is_instance_valid(attacker):
 		return false
+	# Sentry towers can shoot down pigeons but not dragons.
+	if attacker.is_in_group("towers"):
+		return is_scout
 	if not (attacker is Unit):
 		return false
 	var atk_data: UnitData = attacker.data
 	if atk_data == null:
 		return false
 	var unit_id: String = atk_data.unit_name.to_lower()
-	return unit_id == "archer" or unit_id == "wizard"
+	# Dragons: only archers and wizards.
+	if is_dragon:
+		return unit_id == "archer" or unit_id == "wizard"
+	# Pigeon scouts: archers, wizards, dragons, and towers (handled above).
+	return unit_id == "archer" or unit_id == "wizard" or unit_id == "dragon"
 
 
 ## Combat never crosses the surface/underground boundary — flying dragons

@@ -38,7 +38,7 @@ position = Vector2(0, -150)
 
 [node name="Projectiles" type="Node2D" parent="." unique_id=1034364661]
 
-[node name="Structures" type="Node2D" parent="."]
+[node name="Structures" type="Node2D" parent="." unique_id=529574686]
 
 [node name="PlayerController" type="Node" parent="." unique_id=1575576657]
 script = ExtResource("4_player")

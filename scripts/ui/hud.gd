@@ -27,6 +27,7 @@ const _ICON_SNOWSTORM: Texture2D = preload("res://frost_mines_assets/icons/icon_
 	"Archer": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/ArcherCountLabel,
 	"Wizard": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/WizardCountLabel,
 	"Dragon": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/DragonCountLabel,
+	"Pigeon": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/PigeonCountLabel,
 }
 @onready var _player_hp_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/PlayerHPLabel
 @onready var _enemy_hp_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyHPLabel
@@ -163,8 +164,9 @@ func _process(_delta: float) -> void:
 		# the controller waits for the rally-point right-click.
 		if _rally_button.button_pressed != pc.is_rally_armed():
 			_rally_button.set_pressed_no_signal(pc.is_rally_armed())
-		if _build_button.button_pressed != pc.is_build_mode_active():
-			_build_button.set_pressed_no_signal(pc.is_build_mode_active())
+		var build_menu_open: bool = _build_menu != null and _build_menu.visible
+		if _build_button.button_pressed != build_menu_open:
+			_build_button.set_pressed_no_signal(build_menu_open)
 		_updates._sync_stance_buttons(pc)
 	_updates._update_upgrade_button()
 	_updates._update_fighter_upgrade_buttons()
@@ -251,7 +253,8 @@ func _add_unit_breakdown_icons() -> void:
 	}
 	for unit_name: String in _unit_count_labels:
 		var label: Label = _unit_count_labels[unit_name]
-		_add_icon_before_label(label, icons[unit_name])
+		if icons.has(unit_name):
+			_add_icon_before_label(label, icons[unit_name])
 		label.tooltip_text = "%s count" % unit_name
 
 
@@ -353,6 +356,7 @@ var _build_lantern_button: Button = null
 var _build_mine_lantern_button: Button = null
 var _build_tower_button: Button = null
 var _build_wall_button: Button = null
+var _build_pigeon_button: Button = null
 
 # Lava warning banner (Revamp Phase 4): flashing countdown above the bottom
 # bar while a lava rise is imminent. Driven entirely by GridWorld signals and

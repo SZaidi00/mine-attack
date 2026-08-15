@@ -19,6 +19,8 @@ const _TEXTURES: Dictionary = {
 	GameManager.Team.ENEMY: preload("res://frost_mines_assets/props/tower_enemy.png"),
 }
 
+const _PIGEON_DATA: UnitData = preload("res://scripts/resources/units/pigeon.tres")
+
 var team: GameManager.Team = GameManager.Team.PLAYER
 
 var vision_radius: int = _Constants.TOWER_VISION
@@ -30,6 +32,11 @@ var hp: int = 0
 var build_time: float = _Constants.TOWER_BUILD_TIME
 # Coin spent on this tower (salvage pays half).
 var total_cost: int = 0
+
+# Pigeon scout training queue: each entry is the remaining train time.
+var _pigeon_queue: Array = []
+
+@export var unit_scene: PackedScene
 
 var _build_progress: float = 0.0
 var _is_built: bool = false
@@ -137,6 +144,8 @@ func _process(delta: float) -> void:
 			construction_complete.emit(self)
 		queue_redraw()
 		return
+	# Pigeon scout training: advance queue and spawn when ready.
+	_process_pigeon_queue(delta)
 	queue_redraw()
 	_attack_timer -= delta
 	_scan_timer -= delta
@@ -159,9 +168,11 @@ func _update_scan_angle() -> void:
 		_scan_angle = 0.0 if team == GameManager.Team.PLAYER else PI
 
 
-## Target priority per the guide: fighters > miners > buildings. Only what
+## Target priority: flying scouts > fighters > miners > buildings. Only what
 ## the team can currently see (Fog of War), surface targets only.
 func _pick_target() -> Node2D:
+	var best_scout: Unit = null
+	var best_scout_d2: float = INF
 	var best_fighter: Unit = null
 	var best_fighter_d2: float = INF
 	var best_miner: Unit = null
@@ -175,12 +186,17 @@ func _pick_target() -> Node2D:
 		var d2: float = global_position.distance_squared_to(unit.get_combat_position())
 		if d2 > range_sq:
 			continue
-		if unit.data.is_fighter and d2 < best_fighter_d2:
+		if unit.data.is_scout and d2 < best_scout_d2:
+			best_scout_d2 = d2
+			best_scout = unit
+		elif unit.data.is_fighter and d2 < best_fighter_d2:
 			best_fighter_d2 = d2
 			best_fighter = unit
 		elif unit.data.is_miner and d2 < best_miner_d2:
 			best_miner_d2 = d2
 			best_miner = unit
+	if best_scout != null:
+		return best_scout
 	if best_fighter != null:
 		return best_fighter
 	if best_miner != null:
@@ -260,6 +276,76 @@ func _destroy() -> void:
 		pickup.set("coin_value", salvage)
 		get_tree().current_scene.add_child(pickup)
 	queue_free()
+
+
+## Train a pigeon scout from this tower. Returns true if the order was accepted.
+func queue_pigeon() -> bool:
+	if not _is_built:
+		return false
+	var team_pigeons: int = _count_team_pigeons()
+	if team_pigeons >= _Constants.PIGEON_MAX_COUNT:
+		DebugLog.log_reject("Tower %d" % get_instance_id(), "queue_pigeon", "max pigeons reached")
+		return false
+	if not EconomyManager.can_add_population(team, _PIGEON_DATA.population):
+		DebugLog.log_reject("Tower %d" % get_instance_id(), "queue_pigeon", "population cap")
+		return false
+	var cost: int = FactionManager.get_unit_cost(team, "pigeon")
+	if not EconomyManager.can_afford(team, cost):
+		DebugLog.log_reject("Tower %d" % get_instance_id(), "queue_pigeon", "cannot afford")
+		return false
+	if not EconomyManager.spend_coin(team, cost):
+		return false
+	_pigeon_queue.append(_Constants.TRAIN_TIMES["pigeon"])
+	DebugLog.log_command("Tower %d" % get_instance_id(), "queue_pigeon", "count=%d" % _pigeon_queue.size())
+	return true
+
+
+func get_pigeon_queue_count() -> int:
+	return _pigeon_queue.size()
+
+
+func _process_pigeon_queue(delta: float) -> void:
+	if _pigeon_queue.is_empty():
+		return
+	_pigeon_queue[0] -= delta
+	if _pigeon_queue[0] <= 0.0:
+		_pigeon_queue.pop_front()
+		_spawn_pigeon()
+
+
+func _spawn_pigeon() -> void:
+	if not EconomyManager.can_add_population(team, _PIGEON_DATA.population):
+		# Population cap reached: refund the cost and drop the order.
+		var cost: int = FactionManager.get_unit_cost(team, "pigeon")
+		EconomyManager.add_coin(team, cost)
+		return
+	EconomyManager.add_population(team, _PIGEON_DATA.population)
+	EconomyManager.train_unit(team)
+	var pigeon: Node2D = unit_scene.instantiate()
+	var data_copy: UnitData = _PIGEON_DATA.duplicate(true)
+	pigeon.set("data", data_copy)
+	pigeon.set("team", team)
+	pigeon.position = _spawn_position()
+	get_node("/root/Main/Units").add_child(pigeon)
+	DebugLog.log_command("Tower %d" % get_instance_id(), "spawn_pigeon", "unit=%d" % pigeon.get_instance_id())
+
+
+func _spawn_position() -> Vector2:
+	var dir: float = 1.0 if team == GameManager.Team.PLAYER else -1.0
+	return global_position + Vector2(dir * 24.0, 0.0) + Vector2(randf_range(-8, 8), randf_range(-6, 6))
+
+
+func _count_team_pigeons() -> int:
+	var n: int = 0
+	for u in get_tree().get_nodes_in_group("units"):
+		if u.team == team and u.data != null and u.data.is_scout and u.get("_state") != null and u.get("_state") != Unit.State.DEAD:
+			n += 1
+	# Count pigeons already queued at any friendly tower so the cap is not
+	# exceeded by simultaneous production.
+	for tower in get_tree().get_nodes_in_group("towers"):
+		if tower.team == team:
+			n += tower.call("get_pigeon_queue_count")
+	return n
 
 
 ## Interaction rect for unit.attack_building(): a zero-height strip at the

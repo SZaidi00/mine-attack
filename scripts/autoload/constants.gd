@@ -17,6 +17,7 @@ const COSTS: Dictionary = {
 	"archer": 150,
 	"wizard": 250,
 	"dragon": 400,
+	"pigeon": 100,
 }
 
 # ─── TRAIN TIMES (seconds) ───
@@ -26,6 +27,7 @@ const TRAIN_TIMES: Dictionary = {
 	"archer": 6.0,
 	"wizard": 10.0,
 	"dragon": 14.0,
+	"pigeon": 8.0,
 }
 
 # ─── UNIT STATS ───
@@ -100,6 +102,7 @@ const VISION_SWORDSMAN: int = 8
 const VISION_ARCHER: int = 12
 const VISION_WIZARD: int = 10
 const VISION_DRAGON: int = 14
+const VISION_PIGEON: int = 2
 const VISION_BUILDING: int = 6
 const FOG_MEMORY_DURATION: float = 10.0
 const FOG_COLOR: Color = Color("#05070a")
@@ -160,6 +163,13 @@ const STRUCTURE_SALVAGE_RATIO: float = 0.5
 # Player-initiated demolition of own towers/walls/lanterns/traps refunds this
 # share of the structure's total spent cost directly as coin (no pickup).
 const STRUCTURE_DEMOLISH_REFUND_RATIO: float = 0.25
+
+# ─── PIGEON SCOUT ───
+# Flying scouts trained from sentry towers. They provide vision but are fragile
+# and only vulnerable to anti-air attackers (archers, wizards, dragons, towers).
+const PIGEON_MAX_COUNT: int = 2
+const PIGEON_LINGER_ENEMY_TIME: float = 12.0
+const PIGEON_LINGER_HOME_TIME: float = 5.0
 
 # ─── DYNAMIC TERRAIN & EVENTS (Revamp Phase 4) ───
 # Lava rising: every LAVA_MIN/MAX_INTERVAL seconds of match time (random,
@@ -784,6 +794,7 @@ const INPUT_TRAIN_SWORDSMAN: StringName = &"train_swordsman"
 const INPUT_TRAIN_ARCHER: StringName = &"train_archer"
 const INPUT_TRAIN_WIZARD: StringName = &"train_wizard"
 const INPUT_TRAIN_DRAGON: StringName = &"train_dragon"
+const INPUT_TRAIN_PIGEON: StringName = &"train_pigeon"
 const INPUT_TOGGLE_VIEW: StringName = &"toggle_view"
 const INPUT_TOGGLE_RESEARCH: StringName = &"toggle_research"
 const INPUT_KILL_UNITS: StringName = &"kill_units"

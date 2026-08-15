@@ -9,8 +9,7 @@ const _ICON_LANTERN: Texture2D = preload("res://frost_mines_assets/props/lantern
 const _ICON_MINE_LANTERN: Texture2D = preload("res://frost_mines_assets/props/lantern_underground.png")
 const _ICON_TOWER: Texture2D = preload("res://frost_mines_assets/props/tower_player.png")
 const _ICON_WALL: Texture2D = preload("res://frost_mines_assets/props/wall_player.png")
-const _RADIAL_BUTTON_SIZE: Vector2 = Vector2(96, 74)
-const _RADIAL_RADIUS: float = 150.0
+const _GRID_BUTTON_SIZE: Vector2 = Vector2(200, 110)
 
 func _init(h: HUD) -> void:
 	hud = h
@@ -89,38 +88,98 @@ func _add_pause_button(parent: Control, text: String, callback: Callable) -> voi
 	parent.add_child(btn)
 
 
-## Radial build menu (Revamp Phase 7): the options fan out in an arc above
-## the Build button instead of a list. Picking one hands placement mode to the
+## Build menu modal (Revamp Phase 7): a centered popup panel like the
+## research tree. Picking an option hands placement mode to the
 ## PlayerController, which shows the ghost and handles confirm/cancel clicks.
 func _build_build_menu() -> void:
 	hud._build_menu = Control.new()
 	hud._build_menu.name = "BuildMenu"
 	hud._build_menu.visible = false
 	hud._build_menu.set_anchors_preset(Control.PRESET_FULL_RECT)
-	# Clicks pass through the container; only the option buttons take input.
-	hud._build_menu.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud._build_lantern_button = _add_build_option(hud._build_menu, "lantern", _ICON_LANTERN)
-	hud._build_mine_lantern_button = _add_build_option(hud._build_menu, "underground_lantern", _ICON_MINE_LANTERN)
-	hud._build_tower_button = _add_build_option(hud._build_menu, "tower", _ICON_TOWER)
-	hud._build_wall_button = _add_build_option(hud._build_menu, "wall", _ICON_WALL)
-	_trap_button = _add_build_option(hud._build_menu, "trap", null)
+	hud._build_menu.mouse_filter = Control.MOUSE_FILTER_STOP
+	hud._build_menu.z_index = 10
+
+	# Dim the game behind the menu; clicking the dim closes the popup.
+	var dim := ColorRect.new()
+	dim.color = Color(0.02, 0.03, 0.06, 0.75)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventMouseButton and event.pressed:
+			hud._build_menu.visible = false
+	)
+	hud._build_menu.add_child(dim)
+
+	# Centered card, styled like the research-tree panel.
+	var card := PanelContainer.new()
+	card.name = "BuildMenuCard"
+	card.set_anchors_preset(Control.PRESET_CENTER)
+	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	card.grow_vertical = Control.GROW_DIRECTION_BOTH
+	card.custom_minimum_size = Vector2(720, 420)
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	hud._styling._style_panel(card)
+	hud._build_menu.add_child(card)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_top", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_bottom", 16)
+	card.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	margin.add_child(vbox)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
+	vbox.add_child(header)
+	var title := Label.new()
+	title.text = "Build"
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", Color("#e2e8f0"))
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+	var close_button := Button.new()
+	close_button.text = "Close"
+	close_button.add_theme_font_size_override("font_size", 12)
+	close_button.add_theme_stylebox_override("normal", hud._styling._make_flat_style(hud._styling._COL_BTN_NORMAL, hud._styling._COL_BTN_BORDER))
+	close_button.add_theme_stylebox_override("hover", hud._styling._make_flat_style(hud._styling._COL_BTN_HOVER, hud._styling._COL_BTN_HOVER_BORDER))
+	close_button.add_theme_stylebox_override("pressed", hud._styling._make_flat_style(hud._styling._COL_BTN_PRESSED, hud._styling._COL_BTN_BORDER))
+	close_button.pressed.connect(func() -> void: hud._build_menu.visible = false)
+	header.add_child(close_button)
+
+	var grid := GridContainer.new()
+	grid.name = "BuildMenuGrid"
+	grid.columns = 3
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 12)
+	grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(grid)
+
+	hud._build_lantern_button = _add_build_option(grid, "lantern", _ICON_LANTERN)
+	hud._build_mine_lantern_button = _add_build_option(grid, "underground_lantern", _ICON_MINE_LANTERN)
+	hud._build_tower_button = _add_build_option(grid, "tower", _ICON_TOWER)
+	hud._build_wall_button = _add_build_option(grid, "wall", _ICON_WALL)
+	_trap_button = _add_build_option(grid, "trap", null)
+	hud._build_pigeon_button = _add_build_option(grid, "pigeon", null)
+
 	hud.add_child(hud._build_menu)
 
 
 func _add_build_option(parent: Control, kind: String, icon: Texture2D) -> Button:
 	var btn: Button = Button.new()
-	btn.custom_minimum_size = _RADIAL_BUTTON_SIZE
-	btn.size = _RADIAL_BUTTON_SIZE
-	btn.add_theme_font_size_override("font_size", 11)
+	btn.custom_minimum_size = _GRID_BUTTON_SIZE
+	btn.add_theme_font_size_override("font_size", 13)
 	btn.add_theme_color_override("font_color", Color("#e2e8f0"))
 	if icon != null:
-		btn.icon = _scaled_icon(icon, 30)
+		btn.icon = _scaled_icon(icon, 40)
 		btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-	btn.add_theme_stylebox_override("normal", hud._styling._make_flat_style(hud._styling._COL_BTN_NORMAL, hud._styling._COL_BTN_BORDER))
-	btn.add_theme_stylebox_override("hover", hud._styling._make_flat_style(hud._styling._COL_BTN_HOVER, hud._styling._COL_BTN_HOVER_BORDER))
-	btn.add_theme_stylebox_override("pressed", hud._styling._make_flat_style(hud._styling._COL_TAB_ACTIVE, hud._styling._COL_TAB_ACTIVE_BORDER))
-	btn.add_theme_stylebox_override("disabled", hud._styling._make_flat_style(hud._styling._COL_BTN_DISABLED))
+	btn.add_theme_stylebox_override("normal", hud._styling._make_flat_style(hud._styling._COL_BTN_NORMAL, hud._styling._COL_BTN_BORDER, 8, 8))
+	btn.add_theme_stylebox_override("hover", hud._styling._make_flat_style(hud._styling._COL_BTN_HOVER, hud._styling._COL_BTN_HOVER_BORDER, 8, 8))
+	btn.add_theme_stylebox_override("pressed", hud._styling._make_flat_style(hud._styling._COL_TAB_ACTIVE, hud._styling._COL_TAB_ACTIVE_BORDER, 8, 8))
+	btn.add_theme_stylebox_override("disabled", hud._styling._make_flat_style(hud._styling._COL_BTN_DISABLED, Color(0, 0, 0, 0), 8, 8))
 	btn.pressed.connect(func(): AudioManager.play("click"))
 	btn.pressed.connect(_on_build_option.bind(kind))
 	parent.add_child(btn)
@@ -139,36 +198,17 @@ func _scaled_icon(texture: Texture2D, max_height: int) -> ImageTexture:
 func _toggle_build_menu() -> void:
 	hud._build_menu.visible = not hud._build_menu.visible
 	if hud._build_menu.visible:
-		_layout_radial_menu()
-
-
-## Fans the visible options in an arc above the Build button. Re-run on every
-## open (and whenever the trap option appears) so positions stay correct.
-func _layout_radial_menu() -> void:
-	# Apply the trap's research gate here too — _update_build_menu only runs
-	# once the menu is visible, so a fresh menu would flash a stale trap.
-	_trap_button.visible = ResearchManager.has_branch(GameManager.Team.PLAYER, "guerrilla")
-	var options: Array[Button] = []
-	for btn: Button in [hud._build_lantern_button, hud._build_mine_lantern_button, hud._build_tower_button, hud._build_wall_button, _trap_button]:
-		if btn.visible:
-			options.append(btn)
-	var build_rect: Rect2 = hud._build_button.get_global_rect()
-	var pivot: Vector2 = Vector2(build_rect.get_center().x, build_rect.position.y)
-	var count: int = options.size()
-	var viewport_size: Vector2 = hud.get_viewport().get_visible_rect().size
-	for i in count:
-		var t: float = 0.5 if count == 1 else i / float(count - 1)
-		var angle: float = lerpf(deg_to_rad(-165.0), deg_to_rad(-15.0), t)
-		var pos: Vector2 = pivot + Vector2(cos(angle), sin(angle)) * _RADIAL_RADIUS - _RADIAL_BUTTON_SIZE * 0.5
-		pos.x = clampf(pos.x, 4.0, viewport_size.x - _RADIAL_BUTTON_SIZE.x - 4.0)
-		pos.y = clampf(pos.y, 4.0, viewport_size.y - _RADIAL_BUTTON_SIZE.y - 4.0)
-		options[i].position = pos
+		_update_build_menu()
 
 
 func _on_build_option(kind: String) -> void:
 	hud._build_menu.visible = false
 	var pc: PlayerController = hud._get_player_controller()
-	if pc:
+	if pc == null:
+		return
+	if kind == "pigeon":
+		pc.train_unit("pigeon")
+	else:
 		pc.start_build_placement(kind)
 
 
@@ -215,14 +255,13 @@ func _update_build_menu() -> void:
 	hud._build_wall_button.disabled = wall_count >= wall_max \
 		or not EconomyManager.can_afford(team, wall_cost)
 	hud._build_wall_button.tooltip_text = "A barrier segment that blocks movement and projectiles (%d HP). Surface only, on your half." % hud._Constants.PLACED_WALL_HP
-	# Trap (Revamp Phase 6): only offered once the Guerrilla Tactics branch is
-	# researched; _update_build_menu runs every frame while the menu is open,
-	# so the button appears as soon as the research completes.
+	# Trap (Revamp Phase 6): shown locked until Guerrilla Tactics is researched.
 	var trap_unlocked: bool = ResearchManager.has_branch(team, "guerrilla")
-	if _trap_button.visible != trap_unlocked:
-		_trap_button.visible = trap_unlocked
-		_layout_radial_menu()
-	if trap_unlocked:
+	if not trap_unlocked:
+		_trap_button.text = "Trap\n(locked)"
+		_trap_button.disabled = true
+		_trap_button.tooltip_text = "Research Guerrilla Tactics to unlock traps"
+	else:
 		var trap_count: int = 0
 		for trap in hud.get_tree().get_nodes_in_group("traps"):
 			if trap.team == team:
@@ -231,7 +270,42 @@ func _update_build_menu() -> void:
 		_trap_button.disabled = trap_count >= hud._Constants.TRAP_MAX_COUNT \
 			or not EconomyManager.can_afford(team, hud._Constants.TRAP_COST)
 		_trap_button.tooltip_text = "Hidden spike trap: %d damage to the first enemy unit that steps on it, then consumed. Any walkable cell. Enemies cannot see it in the fog." % roundi(hud._Constants.TRAP_DAMAGE)
+	# Pigeon scout: trained from sentry towers.
+	var pigeon_count: int = _count_team_pigeons()
+	var pigeon_cost: int = FactionManager.get_unit_cost(team, "pigeon")
+	var has_tower: bool = _player_has_built_tower()
+	hud._build_pigeon_button.text = "Pigeon\n%dg (%d/%d)" % [pigeon_cost, pigeon_count, hud._Constants.PIGEON_MAX_COUNT]
+	hud._build_pigeon_button.disabled = not has_tower or pigeon_count >= hud._Constants.PIGEON_MAX_COUNT \
+		or not EconomyManager.can_afford(team, pigeon_cost) \
+		or not EconomyManager.can_add_population(team, 1)
+	if not has_tower:
+		hud._build_pigeon_button.tooltip_text = "Requires a built sentry tower to train pigeons"
+	elif pigeon_count >= hud._Constants.PIGEON_MAX_COUNT:
+		hud._build_pigeon_button.tooltip_text = "Max pigeon scouts reached (%d)" % hud._Constants.PIGEON_MAX_COUNT
+	elif hud._build_pigeon_button.disabled:
+		hud._build_pigeon_button.tooltip_text = "Not enough coin or population cap reached"
+	else:
+		hud._build_pigeon_button.tooltip_text = "Flying scout trained at a sentry tower. Auto-patrols the enemy side and returns. Only archers, wizards, dragons, and towers can shoot it."
 	# Grayed out when unaffordable or at max count (Revamp Phase 7): the
 	# disabled stylebox only recolors text, so dim the whole button + icon.
-	for btn: Button in [hud._build_lantern_button, hud._build_mine_lantern_button, hud._build_tower_button, hud._build_wall_button, _trap_button]:
+	for btn: Button in [hud._build_lantern_button, hud._build_mine_lantern_button, hud._build_tower_button, hud._build_wall_button, _trap_button, hud._build_pigeon_button]:
 		btn.modulate = Color(0.45, 0.45, 0.5) if btn.disabled else Color.WHITE
+
+
+func _count_team_pigeons() -> int:
+	var n: int = 0
+	var team: GameManager.Team = GameManager.Team.PLAYER
+	for u in hud.get_tree().get_nodes_in_group("units"):
+		if u.team == team and u.data != null and u.data.is_scout and u.get("_state") != null and u.get("_state") != Unit.State.DEAD:
+			n += 1
+	for tower in hud.get_tree().get_nodes_in_group("towers"):
+		if tower.team == team:
+			n += tower.call("get_pigeon_queue_count")
+	return n
+
+
+func _player_has_built_tower() -> bool:
+	for tower in hud.get_tree().get_nodes_in_group("towers"):
+		if tower.team == GameManager.Team.PLAYER and tower.is_built():
+			return true
+	return false

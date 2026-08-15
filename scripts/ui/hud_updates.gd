@@ -126,7 +126,7 @@ func _total_demolish_refund(structures: Array) -> int:
 
 
 func _update_unit_breakdown() -> void:
-	var counts: Dictionary = { "Miner": 0, "Swordsman": 0, "Archer": 0, "Wizard": 0, "Dragon": 0 }
+	var counts: Dictionary = { "Miner": 0, "Swordsman": 0, "Archer": 0, "Wizard": 0, "Dragon": 0, "Pigeon": 0 }
 	for unit in hud.get_tree().get_nodes_in_group("player"):
 		var data = unit.get("data")
 		if data == null:
@@ -135,7 +135,7 @@ func _update_unit_breakdown() -> void:
 		if counts.has(unit_name):
 			counts[unit_name] += 1
 	for unit_name: String in hud._unit_count_labels:
-		hud._unit_count_labels[unit_name].text = "%d" % counts[unit_name]
+		hud._unit_count_labels[unit_name].text = "%d" % counts.get(unit_name, 0)
 
 
 func _update_upgrade_button() -> void:

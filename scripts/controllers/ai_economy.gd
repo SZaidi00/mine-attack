@@ -110,6 +110,9 @@ func _run_economy() -> void:
 			if pick != "":
 				building.call("queue_unit", pick)
 
+	# Pigeon scouts: train from towers when affordable and under the cap.
+	_try_train_pigeon(reserve)
+
 
 ## Picks the fighter type furthest below its target share of the army that the
 ## budget affords, so the AI trains a combined-arms force per _ARMY_MIX.
@@ -258,3 +261,29 @@ func _count_fighters() -> int:
 		if unit.data.is_fighter and unit._state != Unit.State.DEAD:
 			n += 1
 	return n
+
+
+func _count_pigeons() -> int:
+	var n: int = 0
+	for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
+		if unit.data.is_scout and unit._state != Unit.State.DEAD:
+			n += 1
+	for tower in ai.get_tree().get_nodes_in_group("towers"):
+		if tower.team == ai.team:
+			n += tower.call("get_pigeon_queue_count")
+	return n
+
+
+func _try_train_pigeon(reserve: int) -> void:
+	var pigeons: int = _count_pigeons()
+	if pigeons >= _Constants.PIGEON_MAX_COUNT:
+		return
+	var cost: int = FactionManager.get_unit_cost(ai.team, "pigeon")
+	if EconomyManager.get_coin(ai.team) - reserve < cost:
+		return
+	if not EconomyManager.can_add_population(ai.team, 1):
+		return
+	for tower in ai.get_tree().get_nodes_in_group("towers"):
+		if tower.team == ai.team and tower.is_built():
+			if tower.call("queue_pigeon"):
+				return
