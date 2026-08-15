@@ -85,6 +85,11 @@ var _base_attack_cooldown: float = 0.0
 # Captured after _apply_faction_bonuses() in _ready (faction adds its HP
 # terms at spawn); miner/fighter upgrades mirror their max_hp gains into it.
 var _base_max_hp: int = 0
+# Dragon damage is set by faction bonuses and then multiplied by research.
+var _base_dragon_damage: float = 0.0
+# Fighter damage (swordsman/archer/wizard) after faction/upgrade bonuses;
+# research bonuses recompute from this base.
+var _base_fighter_damage: float = 0.0
 # Out-of-combat regen: counts down after each hit taken; HP accrues once it
 # reaches zero (see _process).
 var _regen_delay: float = 0.0
@@ -261,7 +266,6 @@ func _process(delta: float) -> void:
 				_navigation._follow_path(delta)
 		return
 
-	_apply_research_bonuses()
 	# Guerrilla (Phase 6): lone-unit speed flag, refreshed on a timer.
 	_guerrilla_timer -= delta
 	if _guerrilla_timer <= 0.0:
@@ -309,6 +313,7 @@ func _process(delta: float) -> void:
 			if _rally_scan_timer <= 0.0:
 				_rally_scan_timer = 0.25
 				_idle._engage_rally_target_if_any()
+	_apply_research_bonuses()
 	# Keep the selection ring pulsing and the lantern glow flickering.
 	if selected or (data.is_miner and is_underground) or get_flight_altitude() > 0.0:
 		queue_redraw()
@@ -703,6 +708,7 @@ func _apply_fighter_upgrade() -> void:
 	# Keep the research recompute base authoritative (unit_hp_mult rides on top).
 	_base_max_hp = new_max_hp
 	data.damage_per_hit = stats.damage * dmg_mult
+	_base_fighter_damage = data.damage_per_hit
 	hp += hp_gain
 	_fighter_level_applied = level
 	queue_redraw()
@@ -754,7 +760,8 @@ func _apply_research_bonuses() -> void:
 	# delta; a respec shrinking the max clamps current HP instead.
 	if _base_max_hp > 0:
 		var miner_hp_bonus: int = int(ResearchManager.get_stat_bonus(team, "miner_hp")) if data.is_miner else 0
-		var new_max_hp: int = roundi(_base_max_hp * (1.0 + ResearchManager.get_stat_bonus(team, "unit_hp_mult")) + miner_hp_bonus)
+		var dragon_hp_bonus: float = ResearchManager.get_stat_bonus(team, "dragon_hp_mult") if data.unit_name.to_lower() == "dragon" else 0.0
+		var new_max_hp: int = roundi(_base_max_hp * (1.0 + ResearchManager.get_stat_bonus(team, "unit_hp_mult") + dragon_hp_bonus) + miner_hp_bonus)
 		if new_max_hp != data.max_hp:
 			var hp_delta: int = new_max_hp - data.max_hp
 			data.max_hp = new_max_hp
@@ -777,17 +784,23 @@ func _apply_research_bonuses() -> void:
 			"swordsman":
 				# Rapid Fire speed bonus; Swarm (Industrial) composes on top.
 				data.speed = _base_speed * (1.0 + ResearchManager.get_stat_bonus(team, "swordsman_speed")) * (1.15 if _swarm_active else 1.0)
+				data.damage_per_hit = _base_fighter_damage * (1.0 + ResearchManager.get_stat_bonus(team, "fighter_dmg_mult"))
 			"archer":
 				data.attack_range = _base_attack_range + ResearchManager.get_stat_bonus(team, "archer_range")
+				data.damage_per_hit = _base_fighter_damage * (1.0 + ResearchManager.get_stat_bonus(team, "fighter_dmg_mult"))
 			"wizard":
 				var aoe_mult: float = 1.0
 				# Fortify (Brute): fireballs splash 30% wider.
 				if _faction != null and _faction.wizard_fortify:
 					aoe_mult += 0.3
 				data.aoe_radius = _base_aoe_radius * aoe_mult
-				var fighter_level: int = EconomyManager.get_fighter_level(team, "wizard")
-				var wizard_dmg_mult: float = _faction.wizard_dmg_mult if _faction != null else 1.0
-				data.damage_per_hit = Constants.FIGHTER_UPGRADES["wizard"][fighter_level].damage * (1.0 + ResearchManager.get_stat_bonus(team, "wizard_damage_mult")) * wizard_dmg_mult
+				data.damage_per_hit = _base_fighter_damage * (1.0 + ResearchManager.get_stat_bonus(team, "wizard_damage_mult") + ResearchManager.get_stat_bonus(team, "fighter_dmg_mult"))
+			"dragon":
+				data.damage_per_hit = _base_dragon_damage * (1.0 + ResearchManager.get_stat_bonus(team, "dragon_dmg_mult") + ResearchManager.get_stat_bonus(team, "fighter_dmg_mult"))
+				# Tempest Wings: dragons move faster and ignore snowstorm penalties
+				# (the weather-immunity part is handled in WeatherManager).
+				if ResearchManager.has_branch(team, "tempest_wings"):
+					data.speed = _base_speed * (1.0 + Constants.TEMPEST_WINGS_SPEED_MULT)
 
 
 ## Revamp Phase 2: one-shot faction stat modifiers at spawn. Fields that are
@@ -809,11 +822,16 @@ func _apply_faction_bonuses() -> void:
 					data.damage_per_hit *= _faction.archer_dmg_mult
 				"wizard":
 					data.max_hp = roundi(data.max_hp * _faction.wizard_hp_mult)
+					data.damage_per_hit *= _faction.wizard_dmg_mult
 				"dragon":
 					data.max_hp = roundi(data.max_hp * _faction.dragon_hp_mult)
 					data.damage_per_hit *= _faction.dragon_dmg_mult
 	_base_speed = data.speed
 	_base_max_hp = data.max_hp
+	if data.is_fighter and data.unit_name.to_lower() != "dragon":
+		_base_fighter_damage = data.damage_per_hit
+	if data.unit_name.to_lower() == "dragon":
+		_base_dragon_damage = data.damage_per_hit
 
 
 ## Guerrilla (Revamp Phase 6): active while the team has the branch and no

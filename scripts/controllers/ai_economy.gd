@@ -5,6 +5,38 @@ const _Constants = preload("res://scripts/autoload/constants.gd")
 
 var ai: AIController
 
+# Research purchase order for the expanded Phase 6+ tree. Tier-2 siblings are
+# not mutually exclusive, but the plan prioritises each faction's signature
+# capstone as soon as its first tier-2 prerequisite is available and backfills
+# the sibling later. Cross-path capstones are attempted after the plan.
+const _RESEARCH_PLANS: Dictionary = {
+	"arcane": [
+		"deep_delve", "arctic_training",
+		"ore_sonar", "crystal_forge", "reinforced_pack",
+		"fortification", "stone_masonry", "sentry_network", "citadel",
+		"dragon_mastery", "broodmother", "sky_raiders", "inferno",
+		"weather_alert", "storm_scout", "stormcaller",
+		"deep_fortress", "total_war", "storm_dragon", "pathfinder", "artillery",
+	],
+	"brute": [
+		"surface_war", "arctic_training",
+		"longbow", "siege_master", "rapid_fire",
+		"fortification", "stone_masonry", "sentry_network", "artillery",
+		"dragon_mastery", "broodmother", "sky_raiders", "inferno",
+		"weather_alert", "storm_scout", "stormcaller",
+		"total_war", "deep_fortress", "storm_dragon", "pathfinder", "citadel",
+	],
+	"industrial": [
+		"surface_war", "arctic_training",
+		"longbow", "guerrilla", "rapid_fire",
+		"fortification", "stone_masonry", "sentry_network", "citadel",
+		"dragon_mastery", "broodmother", "sky_raiders", "tempest_wings",
+		"weather_alert", "storm_scout", "pathfinder",
+		"total_war", "deep_fortress", "storm_dragon", "stormcaller", "artillery", "siege_master",
+	],
+}
+const _CROSS_PATH_CAPSTONES: Array[String] = ["deep_fortress", "total_war", "storm_dragon"]
+
 func _init(a: AIController) -> void:
 	ai = a
 
@@ -147,52 +179,48 @@ func _effective_army_mix() -> Dictionary:
 	return mix
 
 
-## Next research to buy in the branch tree: faction strategy picks the tier-1
-## side (Revamp Phase 8 — Arcane climbs to Crystal Forge, Brute to Siege
-## Master, Industrial to Guerrilla Tactics); a factionless AI commits by army
-## composition (fighter-majority → surface_war, miner-heavy → deep_delve).
-## After committing to a side the AI picks Arctic Training for storm mobility,
-## then climbs that side tier by tier in a deterministic preference order.
-## Alternatives lock permanently once researched, so _research_open gates
-## every pick on is_locked. Returns "" when nothing on the side is pickable.
+## Next research to buy in the expanded branch tree (Revamp Phase 6+):
+## faction strategy follows a deterministic purchase order across the five
+## discipline roots and their tier-2/capstone children. Tier-2 siblings are not
+## mutually exclusive, so the plan grabs a faction's signature capstone as soon
+## as its first tier-2 prerequisite is available and backfills the sibling
+## later. After the faction plan is exhausted the AI tries cross-path tier-4
+## capstones. Returns "" when nothing is pickable.
 func _pick_research() -> String:
-	var deep_side: bool = ResearchManager.has_branch(ai.team, "deep_delve")
-	var war_side: bool = ResearchManager.has_branch(ai.team, "surface_war")
 	var faction: FactionData = FactionManager.get_faction(ai.team)
 	var faction_id: String = faction.faction_id if faction != null else ""
-	if not deep_side and not war_side:
-		match faction_id:
-			"arcane":
-				return "deep_delve"
-			"brute", "industrial":
-				return "surface_war"
-		return "surface_war" if _count_fighters() > _count_miners() else "deep_delve"
-	# Optional survival pick: Arctic Training counters the heavier snowstorm
-	# slowdown on higher difficulties. Grab it after committing to a main branch.
-	if not ResearchManager.has_branch(ai.team, "arctic_training") and _research_open("arctic_training"):
-		return "arctic_training"
+	var plan: Array = _RESEARCH_PLANS.get(faction_id, [])
 
-	var tier2: Array[String]
-	if deep_side:
-		tier2 = ["ore_sonar", "reinforced_pack"]
-	else:
-		tier2 = ["longbow", "rapid_fire"]
-	if not ResearchManager.has_branch(ai.team, tier2[0]) and not ResearchManager.has_branch(ai.team, tier2[1]):
-		for tech in tier2:
-			if _research_open(tech):
-				return tech
-		return ""
-	var tier3: Array[String]
-	if deep_side:
-		tier3 = ["crystal_forge", "earth_shield"]
-	else:
-		tier3 = ["siege_master", "guerrilla"]
-	# Industrial swarms win by ambush, not siege: traps before tower discounts.
-	if not deep_side and faction_id == "industrial":
-		tier3 = ["guerrilla", "siege_master"]
-	for tech in tier3:
-		if _research_open(tech):
-			return tech
+	# Factionless AIs must commit to Deep Delve or Surface War first.
+	if plan.is_empty():
+		var has_deep: bool = ResearchManager.has_branch(ai.team, "deep_delve")
+		var has_war: bool = ResearchManager.has_branch(ai.team, "surface_war")
+		if not has_deep and not has_war:
+			return "surface_war" if _count_fighters() > _count_miners() else "deep_delve"
+		# Build a generic plan now that a side is committed.
+		if has_war:
+			plan = [
+				"arctic_training", "longbow", "rapid_fire", "siege_master", "guerrilla",
+				"fortification", "stone_masonry", "sentry_network", "citadel", "artillery",
+				"dragon_mastery", "broodmother", "sky_raiders", "inferno", "tempest_wings",
+				"weather_alert", "storm_scout", "stormcaller", "pathfinder",
+			]
+		else:
+			plan = [
+				"arctic_training", "ore_sonar", "reinforced_pack", "crystal_forge", "earth_shield",
+				"fortification", "stone_masonry", "sentry_network", "citadel", "artillery",
+				"dragon_mastery", "broodmother", "sky_raiders", "inferno", "tempest_wings",
+				"weather_alert", "storm_scout", "stormcaller", "pathfinder",
+			]
+
+	for tech_id in plan:
+		if _research_open(tech_id):
+			return tech_id
+
+	for tech_id in _CROSS_PATH_CAPSTONES:
+		if _research_open(tech_id):
+			return tech_id
+
 	return ""
 
 

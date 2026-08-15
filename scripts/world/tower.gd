@@ -44,9 +44,13 @@ var _target: Node2D = null
 # Scan-beam angle (purely cosmetic). Idle towers point outward; when they
 # have a target the beam snaps to face it, so it can aim behind the building.
 var _scan_angle: float = 0.0
-# Post-faction attack range; the Surface Warfare branch bonus multiplies this
-# base so recomputing on research changes never compounds.
+# Post-faction base stats; research bonuses recompute from these so already-
+# placed towers update on research changes without compounding.
 var _base_attack_range: float = 0.0
+var _base_max_hp: int = 0
+var _base_damage: int = 0
+var _base_attack_cooldown: float = 0.0
+var _base_build_time: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -62,7 +66,11 @@ func _ready() -> void:
 		build_time = _Constants.TOWER_BUILD_TIME * faction.tower_build_time_mult
 	hp = max_hp
 	_base_attack_range = attack_range
-	_apply_branch_range()
+	_base_max_hp = max_hp
+	_base_damage = damage
+	_base_attack_cooldown = attack_cooldown
+	_base_build_time = build_time
+	_apply_research_bonuses()
 	if not ResearchManager.research_completed.is_connected(_on_research_completed):
 		ResearchManager.research_completed.connect(_on_research_completed)
 	if not ResearchManager.research_changed.is_connected(_on_research_changed):
@@ -73,20 +81,46 @@ func _ready() -> void:
 
 func _on_research_completed(completed_team: GameManager.Team, _tech_id: String) -> void:
 	if completed_team == team:
-		_apply_branch_range()
+		_apply_research_bonuses()
 
 
 func _on_research_changed(changed_team: GameManager.Team) -> void:
 	if changed_team == team:
-		_apply_branch_range()
+		_apply_research_bonuses()
 
 
-## Phase 6: the Surface Warfare branch widens tower range; respec reverts it.
-## Recomputed from the post-faction base so already-placed towers update.
-func _apply_branch_range() -> void:
-	attack_range = _base_attack_range
+## Apply all research-derived bonuses (Surface War range, Fortification HP/damage/
+## build-time/cooldown, Artillery splash). Recomputed from post-faction bases so
+## respecs and new research update already-placed towers.
+func _apply_research_bonuses() -> void:
+	# Range: Surface War + Sentry Network stack multiplicatively.
+	var range_mult: float = 1.0
 	if ResearchManager.has_branch(team, "surface_war"):
-		attack_range = _base_attack_range * _Constants.SURFACE_WAR_TOWER_RANGE_MULT
+		range_mult *= _Constants.SURFACE_WAR_TOWER_RANGE_MULT
+	range_mult *= (1.0 + ResearchManager.get_stat_bonus(team, "tower_range_mult"))
+	attack_range = _base_attack_range * range_mult
+
+	# Max HP: Fortification root + structure_hp_mult.
+	var hp_mult: float = 1.0 + ResearchManager.get_stat_bonus(team, "structure_hp_mult")
+	var new_max: int = roundi(_base_max_hp * hp_mult)
+	if new_max != max_hp:
+		var hp_delta: int = new_max - max_hp
+		max_hp = new_max
+		if hp_delta > 0:
+			hp += hp_delta
+		else:
+			hp = clampi(hp, 0, max_hp)
+		hp_changed.emit(hp, max_hp)
+
+	# Damage: Artillery tower damage mult.
+	damage = roundi(_base_damage * (1.0 + ResearchManager.get_stat_bonus(team, "tower_damage_mult")))
+
+	# Attack cooldown / scan cadence: Sentry Network target-acquisition mult.
+	attack_cooldown = _base_attack_cooldown * (1.0 - ResearchManager.get_stat_bonus(team, "tower_target_acquisition_mult"))
+
+	# Build time: Fortification root build-time reduction.
+	build_time = _base_build_time * maxf(0.1, 1.0 - ResearchManager.get_stat_bonus(team, "structure_build_time_mult"))
+	queue_redraw()
 
 
 func is_built() -> bool:
@@ -171,6 +205,11 @@ func _fire_at(target: Node2D) -> void:
 	proj.set("damage", damage)
 	proj.set("speed", 300.0)
 	proj.set("source", self)
+	# Artillery: tower shots splash in a radius.
+	var splash_radius: float = ResearchManager.get_stat_bonus(team, "tower_splash_radius_cells") * GridWorld.CELL_SIZE
+	if splash_radius > 0.0:
+		proj.set("splash_radius", splash_radius)
+		proj.set("splash_damage_pct", _Constants.ARTILLERY_SPLASH_DAMAGE_PCT)
 	var aim: Vector2 = target.global_position
 	if target.has_method("get_combat_position"):
 		aim = target.get_combat_position()

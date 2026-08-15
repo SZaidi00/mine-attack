@@ -18,6 +18,10 @@ const _BURNING_GROUND_SCENE: PackedScene = preload("res://scenes/effects/burning
 var pierce: bool = false
 ## Color multiplier for the sprite (Arcane tower magic missiles).
 var tint: Color = Color.WHITE
+## Artillery (Fortification capstone): splash radius and damage fraction for
+## tower shots. Zero means no splash.
+var splash_radius: float = 0.0
+var splash_damage_pct: float = 0.0
 
 var target_position: Vector2 = Vector2.ZERO
 var homing_target: Node2D = null
@@ -134,6 +138,20 @@ func _impact() -> void:
 				best = unit
 		if best != null:
 			best.take_damage(damage, source)
+	# Artillery splash: tower shots (and fireballs by default) damage enemies in
+	# a radius around the impact. Splash does not apply source faction debuffs.
+	if splash_radius > 0.0:
+		var splash_damage: int = maxi(1, roundi(damage * splash_damage_pct))
+		for unit in get_tree().get_nodes_in_group("units"):
+			if unit.get("team") == team:
+				continue
+			var hit_pos: Vector2 = unit.global_position
+			if unit.has_method("get_combat_position"):
+				hit_pos = unit.get_combat_position()
+			if hit_pos.distance_to(pos) <= splash_radius and not unit in hit_units:
+				unit.take_damage(splash_damage, source)
+				hit_units.append(unit)
+
 	if not is_fireball:
 		return
 	# Splash also damages buildings within the same area.
@@ -150,6 +168,24 @@ func _impact() -> void:
 		patch.set("radius", aoe_radius)
 		patch.global_position = pos
 		get_node("/root/Main/Projectiles").add_child(patch)
+	# Inferno (Dragon Mastery capstone): dragon breath leaves burning ground.
+	if is_dragon_flame and ResearchManager.has_branch(team, "inferno"):
+		var patch: Node2D = _BURNING_GROUND_SCENE.instantiate()
+		patch.set("team", team)
+		patch.set("radius", aoe_radius)
+		patch.set("dps", Constants.INFERNO_BURNING_GROUND_DPS)
+		patch.set("duration", Constants.INFERNO_BURNING_GROUND_DURATION)
+		patch.global_position = pos
+		get_node("/root/Main/Projectiles").add_child(patch)
+	# Storm Dragon (cross-path capstone): dragon breath extinguishes enemy
+	# surface lanterns in a small radius.
+	if is_dragon_flame and ResearchManager.has_branch(team, "storm_dragon"):
+		var extinguish_radius: float = Constants.STORM_DRAGON_LANTERN_EXTINGUISH_RADIUS_CELLS * GridWorld.CELL_SIZE
+		for lantern in get_tree().get_nodes_in_group("lanterns"):
+			if lantern.team == team or lantern.is_underground_lantern or not lantern.is_built():
+				continue
+			if lantern.global_position.distance_to(pos) <= extinguish_radius:
+				lantern.take_damage(lantern.max_hp)
 
 
 func _draw() -> void:

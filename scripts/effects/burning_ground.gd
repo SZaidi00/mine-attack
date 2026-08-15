@@ -10,6 +10,8 @@ const TICK_INTERVAL: float = 0.5
 
 var team: GameManager.Team = GameManager.Team.PLAYER
 var radius: float = 40.0
+var dps: float = Constants.BURNING_GROUND_DPS
+var duration: float = Constants.BURNING_GROUND_DURATION
 
 var _elapsed: float = 0.0
 var _tick_timer: float = 0.0
@@ -31,7 +33,7 @@ func _process(delta: float) -> void:
 		return
 	_elapsed += delta
 	_flicker += delta
-	if _elapsed >= Constants.BURNING_GROUND_DURATION:
+	if _elapsed >= duration:
 		queue_free()
 		return
 	_tick_timer -= delta
@@ -42,7 +44,7 @@ func _process(delta: float) -> void:
 
 
 func _tick_damage() -> void:
-	var damage: int = maxi(1, roundi(Constants.BURNING_GROUND_DPS * TICK_INTERVAL))
+	var damage: int = maxi(1, roundi(dps * TICK_INTERVAL))
 	for unit in get_tree().get_nodes_in_group("units"):
 		if unit.team == team or unit._state == Unit.State.DEAD:
 			continue
@@ -53,7 +55,7 @@ func _tick_damage() -> void:
 
 
 func _draw() -> void:
-	var life_left: float = clampf(1.0 - _elapsed / Constants.BURNING_GROUND_DURATION, 0.0, 1.0)
+	var life_left: float = clampf(1.0 - _elapsed / duration, 0.0, 1.0)
 	var pulse: float = 0.75 + 0.25 * sin(_flicker * 9.0)
 	# Outer glow, mid flame, hot core — alpha pulses and fades with lifetime.
 	draw_circle(Vector2.ZERO, radius, Color(0.9, 0.3, 0.05, 0.10 * pulse * life_left))

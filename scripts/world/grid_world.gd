@@ -9,6 +9,7 @@ signal cells_revealed(cells: Array)
 signal lava_warning_started(seconds: float, layers: int)
 signal lava_risen(layers: int)
 signal lava_receded()
+signal cave_in_warning(seconds: float, center: Vector2i)
 signal cave_in_occurred(center: Vector2i)
 
 # Revamp Phase 4: LAVA is indestructible/impassable while the flood is up;

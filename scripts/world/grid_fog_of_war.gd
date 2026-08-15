@@ -73,10 +73,10 @@ func _update_vision(team: GameManager.Team) -> void:
 ## buildings keep their full radius.
 func _get_vision_sources(team: GameManager.Team) -> Array:
 	var sources: Array = []
-	var weather_mult: float = WeatherManager.get_vision_multiplier()
 	for unit in grid.get_tree().get_nodes_in_group("units"):
 		if unit.team != team or unit._state == Unit.State.DEAD:
 			continue
+		var weather_mult: float = WeatherManager.get_unit_vision_multiplier(unit)
 		var radius: int = maxi(1, roundi(unit.get_vision_radius() * weather_mult))
 		if radius > 0:
 			sources.append([grid.world_to_grid(unit.global_position), radius, unit.get_vision_layer()])
@@ -86,7 +86,12 @@ func _get_vision_sources(team: GameManager.Team) -> Array:
 	for lantern in grid.get_tree().get_nodes_in_group("lanterns"):
 		if lantern.team == team and lantern.is_built():
 			var layer: int = GridWorld.VISION_LAYER_UNDERGROUND if lantern.is_underground_lantern else GridWorld.VISION_LAYER_SURFACE
-			sources.append([grid.world_to_grid(lantern.global_position), maxi(1, roundi(lantern.vision_radius * weather_mult)), layer])
+			var weather_mult: float = WeatherManager.get_lantern_vision_multiplier(team)
+			var radius_cells: int = lantern.vision_radius
+			# Deep Fortress: underground lanterns reveal a larger area.
+			if lantern.is_underground_lantern and ResearchManager.has_branch(team, "deep_fortress"):
+				radius_cells += grid._Constants.DEEP_FORTRESS_LANTERN_VISION_BONUS
+			sources.append([grid.world_to_grid(lantern.global_position), maxi(1, roundi(radius_cells * weather_mult)), layer])
 	return sources
 
 

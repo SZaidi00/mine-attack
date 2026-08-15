@@ -130,7 +130,7 @@ func _structure_at_cell(cell: Vector2i) -> Node2D:
 
 
 ## Tower rules (Revamp Phase 3): own half's surface row, not within 2 cells of
-## a building or mine entry, max TOWER_MAX_COUNT per team.
+## a building or mine entry, max TOWER_MAX_COUNT per team plus research bonuses.
 func _tower_placement_error(cell: Vector2i) -> String:
 	if cell.y != 0:
 		return "must be placed on the surface"
@@ -145,18 +145,19 @@ func _tower_placement_error(cell: Vector2i) -> String:
 		var entry_cell: Vector2i = pc._grid.world_to_grid(entry.global_position)
 		if Vector2(entry_cell - cell).length() < pc._Constants.TOWER_MIN_BUILDING_DISTANCE:
 			return "too close to the mine entry"
+	var team: GameManager.Team = GameManager.Team.PLAYER
 	var count: int = 0
 	for tower in pc.get_tree().get_nodes_in_group("towers"):
-		if tower.team == GameManager.Team.PLAYER:
+		if tower.team == team:
 			count += 1
-	if count >= pc._Constants.TOWER_MAX_COUNT:
+	var max_count: int = pc._Constants.TOWER_MAX_COUNT + int(ResearchManager.get_stat_bonus(team, "tower_max_count_bonus"))
+	if count >= max_count:
 		return "max towers reached"
 	return ""
 
 
 ## Wall rules (Revamp Phase 3): own half's surface row, unoccupied cell, at
-## most a couple of segments per team (faction-modified). The guide's chain
-## placement was dropped — with a 2-segment cap there is nothing to chain.
+## most a couple of segments per team (faction-modified) plus research bonuses.
 func _wall_placement_error(cell: Vector2i) -> String:
 	if cell.y != 0:
 		return "must be placed on the surface"
@@ -169,7 +170,8 @@ func _wall_placement_error(cell: Vector2i) -> String:
 	for wall in pc.get_tree().get_nodes_in_group("walls"):
 		if wall.team == team:
 			count += 1
-	if count >= FactionManager.get_wall_max_count(team):
+	var max_count: int = FactionManager.get_wall_max_count(team) + int(ResearchManager.get_stat_bonus(team, "wall_max_count_bonus"))
+	if count >= max_count:
 		return "max walls reached"
 	return ""
 
@@ -216,6 +218,9 @@ func try_place_structure(kind: String, world_pos: Vector2) -> bool:
 			scene = _TOWER_SCENE
 		"wall":
 			cost = FactionManager.get_wall_cost(team)
+			# Stone Masonry (Fortification branch): walls cost less.
+			var wall_cost_mult: float = maxf(0.1, 1.0 - ResearchManager.get_stat_bonus(team, "wall_cost_mult"))
+			cost = maxi(1, roundi(cost * wall_cost_mult))
 			scene = _WALL_SCENE
 		_:
 			cost = pc._Constants.TRAP_COST

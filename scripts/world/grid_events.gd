@@ -31,6 +31,8 @@ var _lava_original_cells: Dictionary = {}
 var _cavein_next_at: float = 0.0
 var _cave_in_cells: Dictionary = {}
 var _cavein_restore_left: float = 0.0
+var _cavein_warning_left: float = 0.0
+var _cavein_warning_center: Vector2i = Vector2i(-9999, -9999)
 
 # Ore vein respawn schedule.
 var _ore_respawn_next_at: float = 0.0
@@ -72,13 +74,20 @@ func _process_events(delta: float) -> void:
 	elif events_enabled and _clock >= _lava_next_at:
 		_start_lava_warning()
 
-	# Cave-in: the rock restore always ticks; only new random cave-ins are
-	# gated by events_enabled.
-	if _cavein_restore_left > 0.0:
+	# Cave-in: warning → collapse → rock restore. The restore always ticks;
+	# only new random cave-ins are gated by events_enabled.
+	if _cavein_warning_left > 0.0:
+		_cavein_warning_left -= delta
+		if _cavein_warning_left <= 0.0:
+			_cavein_warning_left = 0.0
+			_trigger_cave_in(_cavein_warning_center)
+	elif _cavein_restore_left > 0.0:
 		_cavein_restore_left -= delta
 		if _cavein_restore_left <= 0.0:
 			_cavein_restore_left = 0.0
 			_restore_cave_in()
+	elif events_enabled and _clock >= _cavein_next_at - _get_cavein_warning_time():
+		_start_cavein_warning()
 	elif events_enabled and _clock >= _cavein_next_at:
 		_trigger_cave_in(_pick_cave_in_center())
 
@@ -243,6 +252,29 @@ func _pick_cave_in_center() -> Vector2i:
 			continue
 		return Vector2i(x, randi_range(2, grid.Y_MAX - 1))
 	return Vector2i(-20, 10)
+
+
+## Weather Alert (Revamp Phase 6+): seconds of heads-up before a random cave-in.
+## Zero when neither team has researched the tech.
+func _get_cavein_warning_time() -> float:
+	var bonus: float = maxf(0.0, maxf(
+		ResearchManager.get_stat_bonus(GameManager.Team.PLAYER, "weather_warning_bonus"),
+		ResearchManager.get_stat_bonus(GameManager.Team.ENEMY, "weather_warning_bonus")))
+	if bonus <= 0.0:
+		return 0.0
+	return _Constants.WEATHER_ALERT_CAVEIN_WARNING
+
+
+## Start the cave-in warning phase: emit a signal and subtle audio, then the
+## collapse triggers after WEATHER_ALERT_CAVEIN_WARNING seconds.
+func _start_cavein_warning() -> void:
+	if _cavein_warning_left > 0.0:
+		return
+	_cavein_warning_center = _pick_cave_in_center()
+	_cavein_warning_left = _Constants.WEATHER_ALERT_CAVEIN_WARNING
+	DebugLog.log_command("GridEvents", "cave_in_warning", "center=%s warning=%.0fs" % [str(_cavein_warning_center), _cavein_warning_left])
+	AudioManager.play("rumble", Vector2.INF, -12.0)
+	grid.cave_in_warning.emit(_cavein_warning_left, _cavein_warning_center)
 
 
 func _trigger_cave_in(center: Vector2i) -> void:

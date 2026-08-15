@@ -31,9 +31,9 @@ const _COL_TEXT_DIM: Color = Color("#94a3b8")
 const _COL_EDGE_LOCKED: Color = Color(1, 1, 1, 0.15)
 const _COL_EDGE_OPEN: Color = Color("#8a6d1f")
 
-const _NODE_SIZE: Vector2 = Vector2(240, 78)
-const _COL_PITCH: float = 310.0
-const _ROW_PITCH: float = 96.0
+const _NODE_SIZE: Vector2 = Vector2(200, 64)
+const _COL_PITCH: float = 260.0
+const _ROW_PITCH: float = 76.0
 const _TREE_ORIGIN: Vector2 = Vector2(10, 10)
 
 const _TECH_ICONS: Dictionary = {
@@ -48,6 +48,28 @@ const _TECH_ICONS: Dictionary = {
 	"earth_shield": preload("res://frost_mines_assets/icons/icon_hp.png"),
 	"siege_master": preload("res://improvements/mine_attack_sprites/tech_siege_master.png"),
 	"guerrilla": preload("res://frost_mines_assets/icons/icon_swordsman.png"),
+	# New discipline roots.
+	"fortification": preload("res://frost_mines_assets/icons/icon_building.png"),
+	"dragon_mastery": preload("res://frost_mines_assets/icons/icon_dragon.png"),
+	# New Fortification branch.
+	"stone_masonry": preload("res://frost_mines_assets/icons/button_build_wall.png"),
+	"sentry_network": preload("res://frost_mines_assets/icons/button_build_tower.png"),
+	"citadel": preload("res://frost_mines_assets/icons/icon_building.png"),
+	"artillery": preload("res://frost_mines_assets/icons/button_build_tower.png"),
+	# New Dragon Mastery branch.
+	"broodmother": preload("res://frost_mines_assets/icons/icon_dragon.png"),
+	"sky_raiders": preload("res://frost_mines_assets/icons/icon_dragon.png"),
+	"inferno": preload("res://frost_mines_assets/icons/icon_dragon.png"),
+	"tempest_wings": preload("res://frost_mines_assets/icons/icon_dragon.png"),
+	# New Weather branch.
+	"weather_alert": preload("res://frost_mines_assets/icons/icon_weather_alert.png"),
+	"storm_scout": preload("res://frost_mines_assets/icons/icon_snowstorm.png"),
+	"stormcaller": preload("res://frost_mines_assets/icons/icon_snowstorm.png"),
+	"pathfinder": preload("res://frost_mines_assets/icons/icon_snowstorm.png"),
+	# Cross-path capstones.
+	"deep_fortress": preload("res://frost_mines_assets/icons/icon_building.png"),
+	"total_war": preload("res://frost_mines_assets/icons/icon_attack.png"),
+	"storm_dragon": preload("res://frost_mines_assets/icons/icon_dragon.png"),
 }
 
 
@@ -158,7 +180,7 @@ func _build_ui() -> void:
 	# off-screen — grow both ways so it stays centered on its anchor.
 	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	card.grow_vertical = Control.GROW_DIRECTION_BOTH
-	card.custom_minimum_size = Vector2(660, 860)
+	card.custom_minimum_size = Vector2(1040, 900)
 	var card_style := StyleBoxFlat.new()
 	card_style.bg_color = Color(0.047, 0.066, 0.106, 0.97)
 	card_style.border_color = Color(1, 1, 1, 0.08)
@@ -211,14 +233,25 @@ func _build_ui() -> void:
 	_canvas = TreeCanvas.new()
 	_canvas.col_open = _COL_EDGE_OPEN
 	_canvas.col_locked = _COL_EDGE_LOCKED
-	# Three tier columns × up to four branch rows (3-4-4 layout): origin
-	# margin + two inter-column pitches + one node wide; origin margin +
-	# three inter-row pitches + one node tall.
+	# Four tier columns (0-3) plus rows for five disciplines and cross-path
+	# capstones. The canvas is placed inside a ScrollContainer so the tree can
+	# be taller than the card without pushing the footer off-screen.
+	var max_col: int = 0
+	var max_row: int = 0
+	for tech_id in _Constants.RESEARCH_TECHS:
+		var pos: Vector2i = _Constants.RESEARCH_TECHS[tech_id].tree_pos
+		max_col = maxi(max_col, pos.x)
+		max_row = maxi(max_row, pos.y)
 	_canvas.custom_minimum_size = Vector2(
-		_TREE_ORIGIN.x * 2 + _COL_PITCH * 2 + _NODE_SIZE.x,
-		_TREE_ORIGIN.y * 2 + _ROW_PITCH * 3 + _NODE_SIZE.y)
-	_canvas.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(_canvas)
+		_TREE_ORIGIN.x * 2 + _COL_PITCH * max_col + _NODE_SIZE.x,
+		_TREE_ORIGIN.y * 2 + _ROW_PITCH * max_row + _NODE_SIZE.y)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.custom_minimum_size = Vector2(0, 520)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+	scroll.add_child(_canvas)
 
 	for tech_id in _Constants.RESEARCH_TECHS:
 		var tech: Dictionary = _Constants.RESEARCH_TECHS[tech_id]
@@ -231,7 +264,7 @@ func _build_ui() -> void:
 		btn.icon = _TECH_ICONS.get(tech_id)
 		btn.position = rect.position
 		btn.size = rect.size
-		btn.add_theme_font_size_override("font_size", 13)
+		btn.add_theme_font_size_override("font_size", 12)
 		_style_button(btn)
 		btn.pressed.connect(_start_research.bind(tech_id))
 		btn.mouse_entered.connect(func() -> void: AudioManager.play("click", Vector2.INF, -14.0))

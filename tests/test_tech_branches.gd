@@ -47,8 +47,12 @@ func before_each() -> void:
 	# Structures placed by a test must not leak into the next.
 	for tower in get_tree().get_nodes_in_group("towers"):
 		tower.free()
+	for wall in get_tree().get_nodes_in_group("walls"):
+		wall.free()
 	for trap in get_tree().get_nodes_in_group("traps"):
 		trap.free()
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		lantern.free()
 	# Settle any forced cave-in so later tests see clean terrain.
 	if _grid._events._cavein_restore_left > 0.0:
 		_grid._events._cavein_restore_left = 0.0
@@ -319,3 +323,148 @@ func test_surface_war_extends_tower_range() -> void:
 	ResearchManager._levels[PLAYER]["surface_war"] = 0
 	ResearchManager.research_changed.emit(PLAYER)
 	assert_almost_eq(tower.attack_range, base, 0.001, "losing the branch reverts the range")
+
+
+# ─── Fortification discipline ───
+
+func test_fortification_raises_building_hp() -> void:
+	var building: Node2D = _building_for(PLAYER)
+	var base_max: int = building.get("max_hp")
+	ResearchManager._levels[PLAYER]["fortification"] = 1
+	ResearchManager.research_changed.emit(PLAYER)
+	assert_eq(building.get("max_hp"), roundi(base_max * 1.1), "fortification adds +10% building HP")
+	assert_eq(building.get("_hp"), building.get("max_hp"), "the HP delta heals")
+
+
+func test_fortification_buffs_tower_hp_and_build_speed() -> void:
+	var tower: Node2D = load("res://scenes/tower.tscn").instantiate()
+	tower.team = PLAYER
+	_main.get_node("Structures").add_child(tower)
+	autofree(tower)
+	var base_hp: int = tower.max_hp
+	var base_build: float = tower.build_time
+	ResearchManager._levels[PLAYER]["fortification"] = 1
+	ResearchManager.research_changed.emit(PLAYER)
+	assert_eq(tower.max_hp, roundi(base_hp * 1.15), "fortification adds +15% tower HP")
+	assert_almost_eq(tower.build_time, base_build * 0.8, 0.001, "fortification builds 20% faster")
+
+
+func test_stone_masonry_buffs_walls() -> void:
+	EconomyManager.add_coin(PLAYER, 1000)
+	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-20, 0))), "baseline wall places")
+	var wall: Node2D = get_tree().get_nodes_in_group("walls")[0]
+	var base_hp: int = wall.max_hp
+	ResearchManager._levels[PLAYER]["stone_masonry"] = 1
+	ResearchManager.research_changed.emit(PLAYER)
+	assert_eq(wall.max_hp, roundi(base_hp * (1.0 + Constants.STONE_MASONRY_WALL_HP_MULT)), "stone_masonry adds +30% wall HP on top of fortification")
+	EconomyManager.add_coin(PLAYER, 1000)
+	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-22, 0))), "second wall places")
+	var wall2: Node2D = get_tree().get_nodes_in_group("walls")[1]
+	var expected_cost: int = roundi(Constants.PLACED_WALL_COST * (1.0 - Constants.STONE_MASONRY_WALL_COST_MULT))
+	assert_eq(wall2.total_cost, expected_cost, "stone_masonry discounts wall cost")
+
+
+func test_sentry_network_extends_tower_range_and_max_count() -> void:
+	EconomyManager.add_coin(PLAYER, 3000)
+	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0))), "tower 1 places")
+	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
+	var base_range: float = tower.attack_range
+	ResearchManager._levels[PLAYER]["sentry_network"] = 1
+	ResearchManager.research_changed.emit(PLAYER)
+	assert_almost_eq(tower.attack_range, base_range * (1.0 + Constants.SENTRY_NETWORK_TOWER_RANGE_MULT), 0.001, "sentry_network extends tower range")
+	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-22, 0))), "tower 2 places")
+	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-38, 0))), "tower 3 places with +1 max count")
+
+
+# ─── Dragon Mastery discipline ───
+
+func test_dragon_mastery_buffs_dragon_stats() -> void:
+	var dragon: Node2D = _spawn_unit("res://scripts/resources/units/dragon.tres", PLAYER, Vector2(0, 16))
+	var base_hp: int = dragon.get("data").max_hp
+	var base_dmg: float = dragon.get("data").damage_per_hit
+	ResearchManager._levels[PLAYER]["dragon_mastery"] = 1
+	dragon.call("_apply_research_bonuses")
+	assert_eq(dragon.get("data").max_hp, roundi(base_hp * (1.0 + Constants.DRAGON_MASTERY_HP_MULT)))
+	assert_almost_eq(dragon.get("data").damage_per_hit, base_dmg * (1.0 + Constants.DRAGON_MASTERY_DMG_MULT), 0.001)
+
+
+func test_broodmother_discounts_dragon_cost_and_train_time() -> void:
+	ResearchManager._levels[PLAYER]["dragon_mastery"] = 1
+	ResearchManager._levels[PLAYER]["broodmother"] = 1
+	EconomyManager.add_coin(PLAYER, 10000)
+	var building: Node2D = _building_for(PLAYER)
+	building.call("queue_unit", "dragon")
+	var entry: Dictionary = building.call("get_queue")[0]
+	var expected_cost: int = roundi(Constants.COSTS["dragon"] * (1.0 - Constants.BROODMOTHER_COST_MULT))
+	var expected_time: float = Constants.TRAIN_TIMES["dragon"] * (1.0 - Constants.DRAGON_MASTERY_TRAIN_TIME_MULT - Constants.BROODMOTHER_TRAIN_TIME_MULT)
+	assert_eq(entry.cost, expected_cost)
+	assert_almost_eq(entry.train_time, expected_time, 0.001)
+
+
+# ─── Weather discipline ───
+
+func test_weather_alert_extends_snowstorm_warning() -> void:
+	ResearchManager._levels[PLAYER]["weather_alert"] = 1
+	WeatherManager.force_snowstorm_warning()
+	assert_almost_eq(WeatherManager.get_snowstorm_warning_remaining(), Constants.SNOWSTORM_WARNING_TIME + Constants.WEATHER_ALERT_WARNING_BONUS, 0.1)
+
+
+func test_storm_scout_improves_unit_vision_in_storm() -> void:
+	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(0, 16))
+	WeatherManager.force_snowstorm_start()
+	assert_almost_eq(WeatherManager.get_unit_vision_multiplier(swordsman), Constants.SNOWSTORM_VISION_MULT, 0.001)
+	ResearchManager._levels[PLAYER]["storm_scout"] = 1
+	assert_almost_eq(WeatherManager.get_unit_vision_multiplier(swordsman), Constants.SNOWSTORM_VISION_MULT + Constants.STORM_SCOUT_VISION_MULT, 0.001)
+	WeatherManager.force_snowstorm_end()
+
+
+func test_pathfinder_improves_lantern_vision_in_storm() -> void:
+	ResearchManager._levels[PLAYER]["pathfinder"] = 1
+	WeatherManager.force_snowstorm_start()
+	assert_almost_eq(WeatherManager.get_lantern_vision_multiplier(PLAYER), Constants.SNOWSTORM_VISION_MULT + Constants.PATHFINDER_VISION_MULT, 0.001)
+	WeatherManager.force_snowstorm_end()
+
+
+# ─── Cross-path capstones ───
+
+func test_total_war_raises_fighter_damage_and_structure_counts() -> void:
+	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(0, 16))
+	var base_dmg: float = swordsman.get("data").damage_per_hit
+	ResearchManager._levels[PLAYER]["total_war"] = 1
+	swordsman.call("_apply_research_bonuses")
+	assert_almost_eq(swordsman.get("data").damage_per_hit, base_dmg * (1.0 + Constants.TOTAL_WAR_FIGHTER_DMG_MULT), 0.001)
+	EconomyManager.add_coin(PLAYER, 3000)
+	# Default max is 2; Total War grants +1 tower and +1 wall.
+	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0))), "tower 1")
+	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-22, 0))), "tower 2")
+	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-38, 0))), "tower 3 with total_war bonus")
+	EconomyManager.add_coin(PLAYER, 1000)
+	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-24, 0))), "wall 1")
+	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-26, 0))), "wall 2")
+	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-28, 0))), "wall 3 with total_war bonus")
+
+
+func test_deep_fortress_extends_underground_lantern_vision() -> void:
+	EconomyManager.add_coin(PLAYER, 1000)
+	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-15, 3))), "underground lantern places")
+	var lantern: Node2D = get_tree().get_nodes_in_group("lanterns")[0]
+	lantern._build_progress = 999.0
+	lantern._process(0.1)
+	ResearchManager._levels[PLAYER]["deep_fortress"] = 1
+	var found: bool = false
+	for source in _grid._get_vision_sources(PLAYER):
+		if source[0] == Vector2i(-15, 3):
+			found = true
+			assert_eq(source[1], Constants.UNDERGROUND_LANTERN_VISION + Constants.DEEP_FORTRESS_LANTERN_VISION_BONUS)
+	assert_true(found, "underground lantern is a vision source")
+
+
+func test_storm_dragon_makes_dragons_weather_immune() -> void:
+	var dragon: Node2D = _spawn_unit("res://scripts/resources/units/dragon.tres", PLAYER, Vector2(0, 16))
+	WeatherManager.force_snowstorm_start()
+	assert_lt(WeatherManager.get_speed_multiplier(dragon), 1.0, "normal dragon is slowed by the storm")
+	assert_almost_eq(WeatherManager.get_unit_vision_multiplier(dragon), Constants.SNOWSTORM_VISION_MULT, 0.001)
+	ResearchManager._levels[PLAYER]["storm_dragon"] = 1
+	assert_eq(WeatherManager.get_speed_multiplier(dragon), 1.0, "storm dragon ignores storm speed penalty")
+	assert_eq(WeatherManager.get_unit_vision_multiplier(dragon), 1.0, "storm dragon ignores storm vision penalty")
+	WeatherManager.force_snowstorm_end()

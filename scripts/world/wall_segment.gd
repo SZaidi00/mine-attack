@@ -30,6 +30,10 @@ var total_cost: int = 0
 var _build_progress: float = 0.0
 var _is_built: bool = false
 var _cell: Vector2i = Vector2i(-9999, -9999)
+# Post-spawn base stats; research bonuses recompute from these so already-
+# placed walls update on research changes without compounding.
+var _base_max_hp: int = 0
+var _base_build_time: float = 0.0
 
 # Selection highlight (set by PlayerController when the player clicks this
 # structure; drawn as a gold outline around the segment).
@@ -41,11 +45,45 @@ var selected: bool = false
 func _ready() -> void:
 	add_to_group("walls")
 	hp = max_hp
+	_base_max_hp = max_hp
+	_base_build_time = build_time
 	_cell = _grid.world_to_grid(global_position)
+	_apply_research_bonuses()
 	# A cell dug out beneath the finished wall stays blocked — the wall seals
 	# its whole column, so enemies can't tunnel underneath it.
 	if not _grid.cell_destroyed.is_connected(_on_cell_destroyed):
 		_grid.cell_destroyed.connect(_on_cell_destroyed)
+	if not ResearchManager.research_completed.is_connected(_on_research_completed):
+		ResearchManager.research_completed.connect(_on_research_completed)
+	if not ResearchManager.research_changed.is_connected(_on_research_changed):
+		ResearchManager.research_changed.connect(_on_research_changed)
+	queue_redraw()
+
+
+func _on_research_completed(completed_team: GameManager.Team, _tech_id: String) -> void:
+	if completed_team == team:
+		_apply_research_bonuses()
+
+
+func _on_research_changed(changed_team: GameManager.Team) -> void:
+	if changed_team == team:
+		_apply_research_bonuses()
+
+
+## Fortification / Stone Masonry research: HP and build-time bonuses.
+func _apply_research_bonuses() -> void:
+	var hp_mult: float = (1.0 + ResearchManager.get_stat_bonus(team, "structure_hp_mult")) \
+		* (1.0 + ResearchManager.get_stat_bonus(team, "wall_hp_mult"))
+	var new_max: int = roundi(_base_max_hp * hp_mult)
+	if new_max != max_hp:
+		var hp_delta: int = new_max - max_hp
+		max_hp = new_max
+		if hp_delta > 0:
+			hp += hp_delta
+		else:
+			hp = clampi(hp, 0, max_hp)
+		hp_changed.emit(hp, max_hp)
+	build_time = _base_build_time * maxf(0.1, 1.0 - ResearchManager.get_stat_bonus(team, "structure_build_time_mult"))
 	queue_redraw()
 
 

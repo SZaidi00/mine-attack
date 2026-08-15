@@ -70,14 +70,15 @@ func _on_research_changed(changed_team: GameManager.Team) -> void:
 	_recompute_max_hp(changed_team)
 
 
-## Earth Shield research (`building_hp` bonus): raises max HP on top of the
-## base value and heals the delta, so the upgrade is immediately visible in
-## the HP bar. On respec the bonus shrinks back — no negative heal, the
-## current HP is just clamped to the new max.
+## Earth Shield / Citadel / Fortification research: flat and multiplier
+## building HP bonuses raise max HP on top of the base value and heal the
+## delta, so upgrades are immediately visible in the HP bar. On respec the
+## bonus shrinks back — no negative heal, current HP is clamped to the new max.
 func _recompute_max_hp(changed_team: GameManager.Team) -> void:
 	if changed_team != team or _destroyed:
 		return
-	var new_max: int = _base_max_hp + int(ResearchManager.get_stat_bonus(team, "building_hp"))
+	var mult: float = 1.0 + ResearchManager.get_stat_bonus(team, "building_hp_mult")
+	var new_max: int = roundi(_base_max_hp * mult) + int(ResearchManager.get_stat_bonus(team, "building_hp"))
 	var delta: int = new_max - max_hp
 	if delta == 0:
 		return
@@ -86,6 +87,19 @@ func _recompute_max_hp(changed_team: GameManager.Team) -> void:
 		_hp += delta
 	else:
 		_hp = mini(_hp, max_hp)
+	hp_changed.emit(_hp, max_hp)
+	queue_redraw()
+
+
+## Citadel / Deep Fortress building regen: only while the building is not
+## under attack and the match is active.
+func _apply_regen(delta: float) -> void:
+	if _destroyed or is_under_attack():
+		return
+	var regen: float = ResearchManager.get_stat_bonus(team, "building_regen_hp_per_sec")
+	if regen <= 0.0 or _hp >= max_hp:
+		return
+	_hp = mini(max_hp, _hp + int(roundf(regen * delta)))
 	hp_changed.emit(_hp, max_hp)
 	queue_redraw()
 
@@ -178,6 +192,7 @@ func _process(delta: float) -> void:
 			_check_faction_identified()
 	if not GameManager.game_active:
 		return
+	_apply_regen(delta)
 	if _queue.is_empty():
 		return
 	var current = _queue[0]
@@ -193,7 +208,7 @@ func _process(delta: float) -> void:
 	current.remaining -= delta / train_time_mult
 	if current.remaining <= 0.0:
 		DebugLog.log_command("Building %d" % get_instance_id(), "training_complete", current.id)
-		_spawn_front(current.id, current.data)
+		_spawn_front(current.id, current.data, current.get("cost", FactionManager.get_unit_cost(team, current.id)))
 		_queue.pop_front()
 		queue_changed.emit(_queue)
 
@@ -205,6 +220,10 @@ func queue_unit(unit_id: String) -> bool:
 	var data: UnitData = _resources[unit_id]
 	# Faction-modified price (Revamp Phase 2); base price when factionless.
 	var cost: int = FactionManager.get_unit_cost(team, unit_id)
+	# Dragon Mastery / Broodmother discounts for dragon training.
+	if unit_id == "dragon":
+		var dragon_cost_mult: float = maxf(0.1, 1.0 - ResearchManager.get_stat_bonus(team, "dragon_cost_mult"))
+		cost = maxi(1, roundi(cost * dragon_cost_mult))
 	if not EconomyManager.can_afford(team, cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "cannot afford " + unit_id)
 		return false
@@ -214,16 +233,22 @@ func queue_unit(unit_id: String) -> bool:
 	if not EconomyManager.spend_coin(team, cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "spend failed " + unit_id)
 		return false
-	_queue.append({ "id": unit_id, "data": data, "cost": cost, "remaining": data.train_time })
+	var train_time: float = data.train_time
+	if unit_id == "dragon":
+		var dragon_time_mult: float = maxf(0.1, 1.0 - ResearchManager.get_stat_bonus(team, "dragon_train_time_mult"))
+		train_time *= dragon_time_mult
+	_queue.append({ "id": unit_id, "data": data, "cost": cost, "remaining": train_time, "train_time": train_time })
 	DebugLog.log_command("Building %d" % get_instance_id(), "queue_unit", unit_id)
 	queue_changed.emit(_queue)
 	return true
 
 
-func _spawn_front(_unit_id: String, data: UnitData) -> void:
+func _spawn_front(_unit_id: String, data: UnitData, paid_cost: int = -1) -> void:
+	if paid_cost < 0:
+		paid_cost = FactionManager.get_unit_cost(team, _unit_id)
 	if not EconomyManager.can_add_population(team, data.population):
-		# Refund if cap reached.
-		EconomyManager.add_coin(team, FactionManager.get_unit_cost(team, _unit_id))
+		# Refund if cap reached (the actual price paid, including discounts).
+		EconomyManager.add_coin(team, paid_cost)
 		return
 	EconomyManager.add_population(team, data.population)
 	EconomyManager.train_unit(team)

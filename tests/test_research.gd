@@ -235,6 +235,7 @@ func test_tier_two_rejected_until_tier_one_researched() -> void:
 	assert_false(ResearchManager.are_prerequisites_met(PLAYER, "ore_sonar"))
 	assert_false(ResearchManager.start_research(PLAYER, "ore_sonar"), "needs Deep Delve first")
 	ResearchManager._levels[PLAYER]["deep_delve"] = 1
+	EconomyManager.add_coin(PLAYER, 1000)
 	assert_true(ResearchManager.are_prerequisites_met(PLAYER, "ore_sonar"))
 	assert_true(ResearchManager.start_research(PLAYER, "ore_sonar"))
 

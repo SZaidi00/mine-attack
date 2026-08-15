@@ -100,7 +100,7 @@ const VISION_SWORDSMAN: int = 8
 const VISION_ARCHER: int = 12
 const VISION_WIZARD: int = 10
 const VISION_DRAGON: int = 14
-const VISION_BUILDING: int = 10
+const VISION_BUILDING: int = 6
 const FOG_MEMORY_DURATION: float = 10.0
 const FOG_COLOR: Color = Color("#05070a")
 # Alpha of the fog overlay on remembered tiles (revealed tiles draw none).
@@ -115,9 +115,9 @@ const FOG_MEMORY_ALPHA: float = 0.7
 const LANTERN_T1_COST: int = 200
 const LANTERN_T2_COST: int = 600
 const LANTERN_T3_COST: int = 1000
-const LANTERN_T1_VISION: int = 5
-const LANTERN_T2_VISION: int = 9
-const LANTERN_T3_VISION: int = 14
+const LANTERN_T1_VISION: int = 4
+const LANTERN_T2_VISION: int = 7
+const LANTERN_T3_VISION: int = 10
 const LANTERN_HP: int = 500
 const LANTERN_BUILD_TIME: float = 5.0
 const LANTERN_MAX_COUNT: int = 5
@@ -126,7 +126,7 @@ const LANTERN_MIN_DISTANCE: int = 3  # cells between surface lanterns
 # reveal buried ore in their radius for the owning team (like an Ore Sonar
 # scan that never expires).
 const UNDERGROUND_LANTERN_COST: int = 100
-const UNDERGROUND_LANTERN_VISION: int = 6
+const UNDERGROUND_LANTERN_VISION: int = 5
 const UNDERGROUND_LANTERN_HP: int = 200
 const UNDERGROUND_LANTERN_BUILD_TIME: float = 3.0
 const UNDERGROUND_LANTERN_MAX_COUNT: int = 5
@@ -226,34 +226,60 @@ const SNOWSTORM_WARNING_TIME: float = 5.0
 const SNOWSTORM_VISION_MULT: float = 0.5
 const SNOWSTORM_DAMAGE_PER_SEC: float = 2.0
 
-# ─── RESEARCH TREE (Revamp Phase 6) ───
-# Mutually-exclusive branch techs: timed research bought with coin through the
-# ResearchManager (one active research per team, up to RESEARCH_QUEUE_MAX queued
-# behind it, 100% refund on cancel). Completing a tech permanently locks its
-# "locks" alternative for the team (branch_locked signal); a one-time respec
-# (BRANCH_RESPEC_COST) resets the team's choices. These coexist with the instant
-# miner/fighter upgrades above.
+# ─── RESEARCH TREE (Revamp Phase 6+) ───
+# Timed research bought through ResearchManager (one active research per team,
+# up to RESEARCH_QUEUE_MAX queued behind it, 100% refund on cancel). The tree
+# has multiple independent discipline roots; within each discipline, tier-2
+# techs can both be researched, but tier-3 capstones are mutually exclusive.
+# Cross-path capstones at tier 4 require tier-3 techs from two disciplines.
+# Completing a tech with a "locks" field permanently locks that alternative for
+# the team (branch_locked signal); a one-time respec (BRANCH_RESPEC_COST) resets
+# the team's choices. These coexist with the instant miner/fighter upgrades.
 # Each tech: name, optional unit branch, tree_pos (column = tier, row =
 # branch) for the research overlay, "locks" (alternative tech id locked on
 # completion), optional requires (ALL prerequisite tech ids → level) or
 # requires_any (AT LEAST ONE listed tech id at level ≥ 1), and per-level
 # cost/time/effects/desc (desc feeds the hover tooltip).
 # Effect keys are read through ResearchManager.get_stat_bonus():
-#   miner_carry        → flat carry-capacity bonus
-#   miner_hp           → flat max-HP bonus for miners
-#   archer_range       → flat attack-range bonus
-#   fighter_cdr        → attack-cooldown reduction for all fighters (0.2 = 20% faster)
-#   swordsman_speed    → swordsman move-speed multiplier bonus (0.1 = +10%)
-#   wizard_damage_mult → wizard damage multiplier bonus (0.4 = +40%)
-#   unit_hp_mult       → max-HP multiplier bonus for all units (0.15 = +15%)
-#   building_hp        → flat max-HP added to the team's building (heals the delta)
-#   snowstorm_speed    → added to the difficulty-scaled snowstorm movement multiplier
-# Techs without effect keys (deep_delve, surface_war, ore_sonar,
-# siege_master, guerrilla) are read through ResearchManager.has_branch() by
+#   miner_carry              → flat carry-capacity bonus
+#   miner_hp                 → flat max-HP bonus for miners
+#   archer_range             → flat attack-range bonus
+#   fighter_cdr              → attack-cooldown reduction for all fighters (0.2 = 20% faster)
+#   swordsman_speed          → swordsman move-speed multiplier bonus (0.1 = +10%)
+#   wizard_damage_mult       → wizard damage multiplier bonus (0.4 = +40%)
+#   unit_hp_mult             → max-HP multiplier bonus for all units (0.15 = +15%)
+#   building_hp              → flat max-HP added to the team's building (heals the delta)
+#   building_hp_mult         → max-HP multiplier bonus for the team's building
+#   structure_hp_mult        → max-HP multiplier bonus for towers/walls
+#   structure_build_time_mult→ build-time reduction multiplier for structures
+#   wall_hp_mult             → wall max-HP multiplier bonus
+#   wall_cost_mult           → wall cost reduction multiplier
+#   wall_max_count_bonus     → flat bonus to max placed-wall count
+#   tower_range_mult         → tower attack-range multiplier bonus
+#   tower_max_count_bonus    → flat bonus to max tower count
+#   tower_target_acquisition_mult → target-acquisition/cooldown reduction multiplier
+#   tower_damage_mult        → tower damage multiplier bonus
+#   tower_splash_radius_cells→ splash radius added to tower shots (cells)
+#   tower_splash_damage_pct  → splash damage fraction dealt by tower shots
+#   dragon_hp_mult           → dragon max-HP multiplier bonus
+#   dragon_dmg_mult          → dragon damage multiplier bonus
+#   dragon_train_time_mult   → dragon train-time reduction multiplier
+#   dragon_cost_mult         → dragon cost reduction multiplier
+#   snowstorm_speed          → added to the difficulty-scaled snowstorm movement multiplier
+#   weather_warning_bonus    → seconds added to snowstorm/lava warning timers
+#   vision_in_storm_mult     → vision multiplier bonus during snowstorms
+#   storm_exposure_enemy_mult→ enemy snowstorm exposure damage multiplier bonus
+#   storm_duration_bonus     → seconds added to snowstorm duration
+#   building_regen_hp_per_sec→ building HP regenerated per second out of combat
+# Techs without effect keys are read through ResearchManager.has_branch() by
 # the systems that implement their hard-coded effects.
 const RESEARCH_QUEUE_MAX: int = 3
 const RESEARCH_TECHS: Dictionary = {
-	# ── Tier 1: the branch root ──
+	# ═══════════════════════════════════════════════════════════════════════
+	# Tier 1 roots
+	# ═══════════════════════════════════════════════════════════════════════
+
+	# ── Deep Delve discipline (rows 0-4) ──
 	"deep_delve": {
 		"name": "Deep Delve",
 		"unit": "miner",
@@ -263,105 +289,282 @@ const RESEARCH_TECHS: Dictionary = {
 			1: { "cost": 400, "time": 20.0, "desc": "Miners reach layers 5-7 immediately; miners +10% underground move speed" },
 		},
 	},
+	# ── Surface War discipline (rows 5-9) ──
 	"surface_war": {
 		"name": "Surface War",
 		"unit": "fighter",
-		"tree_pos": Vector2i(0, 1),
+		"tree_pos": Vector2i(0, 5),
 		"locks": "deep_delve",
 		"levels": {
 			1: { "cost": 400, "time": 20.0, "desc": "Fighters +15% speed & damage on the surface; miners capped at layer 4; towers +20% range" },
 		},
 	},
+	# ── Fortification discipline (rows 10-14) ──
+	"fortification": {
+		"name": "Fortification",
+		"unit": "",
+		"tree_pos": Vector2i(0, 10),
+		"levels": {
+			1: { "cost": 500, "time": 25.0, "building_hp_mult": 0.1, "structure_hp_mult": 0.15, "structure_build_time_mult": 0.2, "desc": "Buildings +10% max HP; towers/walls +15% max HP; structures build 20% faster" },
+		},
+	},
+	# ── Dragon Mastery discipline (rows 15-19) ──
+	"dragon_mastery": {
+		"name": "Dragon Mastery",
+		"unit": "dragon",
+		"tree_pos": Vector2i(0, 15),
+		"levels": {
+			1: { "cost": 600, "time": 30.0, "dragon_hp_mult": 0.2, "dragon_dmg_mult": 0.2, "dragon_train_time_mult": 0.2, "desc": "Dragons +20% HP and damage; dragon train time -20%" },
+		},
+	},
+	# ── Weather discipline (rows 20-24) ──
 	"arctic_training": {
 		"name": "Arctic Training",
 		"unit": "",
-		"tree_pos": Vector2i(0, 2),
+		"tree_pos": Vector2i(0, 20),
 		"levels": {
 			1: { "cost": 400, "time": 20.0, "snowstorm_speed": 0.2, "desc": "Units move 20% faster during snowstorms" },
 		},
 	},
-	# ── Tier 2: Deep Delve side ──
+
+	# ═══════════════════════════════════════════════════════════════════════
+	# Tier 2 branches (both purchasable within the same discipline)
+	# ═══════════════════════════════════════════════════════════════════════
+
+	# ── Deep Delve tier 2 (rows 1-2) ──
 	"ore_sonar": {
 		"name": "Ore Sonar",
 		"unit": "",
-		"tree_pos": Vector2i(1, 0),
+		"tree_pos": Vector2i(1, 1),
 		"requires": { "deep_delve": 1 },
-		"locks": "reinforced_pack",
 		"levels": {
-			1: { "cost": 500, "time": 20.0, "desc": "Unlock Scan: reveal buried ore (incl. Fresh Ore) within 12 cells of the mine (40s cooldown)" },
+			1: { "cost": 700, "time": 25.0, "desc": "Unlock Scan: reveal buried ore (incl. Fresh Ore) within 12 cells of the mine (40s cooldown)" },
 		},
 	},
 	"reinforced_pack": {
 		"name": "Reinforced Pack",
 		"unit": "miner",
-		"tree_pos": Vector2i(1, 1),
+		"tree_pos": Vector2i(1, 2),
 		"requires": { "deep_delve": 1 },
-		"locks": "ore_sonar",
 		"levels": {
-			1: { "cost": 600, "time": 25.0, "miner_carry": 20, "miner_hp": 10, "desc": "Miners +20 carry capacity, +10 HP, immune to cave-in push" },
+			1: { "cost": 800, "time": 25.0, "miner_carry": 20, "miner_hp": 10, "desc": "Miners +20 carry capacity, +10 HP, immune to cave-in push" },
 		},
 	},
-	# ── Tier 2: Surface War side ──
+	# ── Surface War tier 2 (rows 6-7) ──
 	"longbow": {
 		"name": "Longbow",
 		"unit": "archer",
-		"tree_pos": Vector2i(1, 2),
+		"tree_pos": Vector2i(1, 6),
 		"requires": { "surface_war": 1 },
-		"locks": "rapid_fire",
 		"levels": {
-			1: { "cost": 600, "time": 25.0, "archer_range": 25, "desc": "Archers +25 attack range and can blind-fire into the fog" },
+			1: { "cost": 800, "time": 25.0, "archer_range": 25, "desc": "Archers +25 attack range and can blind-fire into the fog" },
 		},
 	},
 	"rapid_fire": {
 		"name": "Rapid Fire",
 		"unit": "fighter",
-		"tree_pos": Vector2i(1, 3),
+		"tree_pos": Vector2i(1, 7),
 		"requires": { "surface_war": 1 },
-		"locks": "longbow",
 		"levels": {
-			1: { "cost": 700, "time": 25.0, "fighter_cdr": 0.2, "swordsman_speed": 0.1, "desc": "All fighters attack 20% faster; swordsmen +10% move speed" },
+			1: { "cost": 900, "time": 25.0, "fighter_cdr": 0.2, "swordsman_speed": 0.1, "desc": "All fighters attack 20% faster; swordsmen +10% move speed" },
 		},
 	},
-	# ── Tier 3: Deep Delve side ──
+	# ── Fortification tier 2 (rows 11-12) ──
+	"stone_masonry": {
+		"name": "Stone Masonry",
+		"unit": "",
+		"tree_pos": Vector2i(1, 11),
+		"requires": { "fortification": 1 },
+		"levels": {
+			1: { "cost": 700, "time": 25.0, "wall_hp_mult": 0.3, "wall_cost_mult": 0.2, "wall_max_count_bonus": 1, "desc": "Walls +30% HP, -20% cost, +1 max wall count" },
+		},
+	},
+	"sentry_network": {
+		"name": "Sentry Network",
+		"unit": "",
+		"tree_pos": Vector2i(1, 12),
+		"requires": { "fortification": 1 },
+		"levels": {
+			1: { "cost": 800, "time": 25.0, "tower_range_mult": 0.25, "tower_max_count_bonus": 1, "tower_target_acquisition_mult": 0.25, "desc": "Towers +25% range, +1 max tower count, acquire targets 25% faster" },
+		},
+	},
+	# ── Dragon Mastery tier 2 (rows 16-17) ──
+	"broodmother": {
+		"name": "Broodmother",
+		"unit": "dragon",
+		"tree_pos": Vector2i(1, 16),
+		"requires": { "dragon_mastery": 1 },
+		"levels": {
+			1: { "cost": 900, "time": 30.0, "dragon_train_time_mult": 0.3, "dragon_cost_mult": 0.15, "desc": "Dragons train 30% faster and cost 15% less" },
+		},
+	},
+	"sky_raiders": {
+		"name": "Sky Raiders",
+		"unit": "dragon",
+		"tree_pos": Vector2i(1, 17),
+		"requires": { "dragon_mastery": 1 },
+		"levels": {
+			1: { "cost": 1000, "time": 30.0, "dragon_hp_mult": 0.25, "desc": "Dragons +25% HP; breath applies faction debuffs consistently" },
+		},
+	},
+	# ── Weather tier 2 (rows 21-22) ──
+	"weather_alert": {
+		"name": "Weather Alert",
+		"unit": "",
+		"tree_pos": Vector2i(1, 21),
+		"requires": { "arctic_training": 1 },
+		"levels": {
+			1: { "cost": 600, "time": 25.0, "weather_warning_bonus": 7.0, "desc": "Snowstorm/lava warnings last 12s; cave-ins give a 3s heads-up" },
+		},
+	},
+	"storm_scout": {
+		"name": "Storm Scout",
+		"unit": "",
+		"tree_pos": Vector2i(1, 22),
+		"requires": { "arctic_training": 1 },
+		"levels": {
+			1: { "cost": 700, "time": 25.0, "vision_in_storm_mult": 0.25, "desc": "+25% vision radius during snowstorms; faction identification range +50%" },
+		},
+	},
+
+	# ═══════════════════════════════════════════════════════════════════════
+	# Tier 3 capstones (binary choice within each discipline)
+	# ═══════════════════════════════════════════════════════════════════════
+
+	# ── Deep Delve tier 3 (rows 3-4) ──
 	"crystal_forge": {
 		"name": "Crystal Forge",
 		"unit": "wizard",
-		"tree_pos": Vector2i(2, 0),
+		"tree_pos": Vector2i(2, 3),
 		"requires_any": ["ore_sonar", "reinforced_pack"],
 		"locks": "earth_shield",
 		"levels": {
-			1: { "cost": 1000, "time": 30.0, "wizard_damage_mult": 0.4, "desc": "Wizards +40% damage; fireballs leave burning ground (5 DPS for 3s)" },
+			1: { "cost": 1500, "time": 35.0, "wizard_damage_mult": 0.4, "desc": "Wizards +40% damage; fireballs leave burning ground (5 DPS for 3s)" },
 		},
 	},
 	"earth_shield": {
 		"name": "Earth Shield",
 		"unit": "",
-		"tree_pos": Vector2i(2, 1),
+		"tree_pos": Vector2i(2, 4),
 		"requires_any": ["ore_sonar", "reinforced_pack"],
 		"locks": "crystal_forge",
 		"levels": {
-			1: { "cost": 900, "time": 30.0, "unit_hp_mult": 0.15, "building_hp": 1000, "desc": "All units +15% max HP; building +1000 max HP (heals the difference)" },
+			1: { "cost": 1400, "time": 35.0, "unit_hp_mult": 0.15, "building_hp": 1000, "desc": "All units +15% max HP; building +1000 max HP (heals the difference)" },
 		},
 	},
-	# ── Tier 3: Surface War side ──
+	# ── Surface War tier 3 (rows 8-9) ──
 	"siege_master": {
 		"name": "Siege Master",
 		"unit": "swordsman",
-		"tree_pos": Vector2i(2, 2),
+		"tree_pos": Vector2i(2, 8),
 		"requires_any": ["longbow", "rapid_fire"],
 		"locks": "guerrilla",
 		"levels": {
-			1: { "cost": 1000, "time": 30.0, "desc": "Swordsmen +30% damage vs buildings; towers cost 50% less" },
+			1: { "cost": 1600, "time": 35.0, "desc": "Swordsmen +30% damage vs buildings; towers cost 50% less" },
 		},
 	},
 	"guerrilla": {
 		"name": "Guerrilla",
 		"unit": "",
-		"tree_pos": Vector2i(2, 3),
+		"tree_pos": Vector2i(2, 9),
 		"requires_any": ["longbow", "rapid_fire"],
 		"locks": "siege_master",
 		"levels": {
-			1: { "cost": 800, "time": 30.0, "desc": "Units +20% speed with no ally within 6 cells; miners can place traps (50 damage)" },
+			1: { "cost": 1300, "time": 35.0, "desc": "Units +20% speed with no ally within 6 cells; miners can place traps (50 damage)" },
+		},
+	},
+	# ── Fortification tier 3 (rows 13-14) ──
+	"citadel": {
+		"name": "Citadel",
+		"unit": "",
+		"tree_pos": Vector2i(2, 13),
+		"requires_any": ["stone_masonry", "sentry_network"],
+		"locks": "artillery",
+		"levels": {
+			1: { "cost": 1600, "time": 40.0, "building_hp": 1500, "building_regen_hp_per_sec": 5.0, "desc": "Building +1500 max HP; slowly repairs itself out of combat" },
+		},
+	},
+	"artillery": {
+		"name": "Artillery",
+		"unit": "",
+		"tree_pos": Vector2i(2, 14),
+		"requires_any": ["stone_masonry", "sentry_network"],
+		"locks": "citadel",
+		"levels": {
+			1: { "cost": 1500, "time": 40.0, "tower_damage_mult": 0.25, "tower_splash_radius_cells": 1.5, "tower_splash_damage_pct": 0.4, "desc": "Towers deal +25% damage and 40% splash in 1.5 cells" },
+		},
+	},
+	# ── Dragon Mastery tier 3 (rows 18-19) ──
+	"inferno": {
+		"name": "Inferno",
+		"unit": "dragon",
+		"tree_pos": Vector2i(2, 18),
+		"requires_any": ["broodmother", "sky_raiders"],
+		"locks": "tempest_wings",
+		"levels": {
+			1: { "cost": 1700, "time": 40.0, "desc": "Dragon breath leaves burning ground (8 DPS for 4s)" },
+		},
+	},
+	"tempest_wings": {
+		"name": "Tempest Wings",
+		"unit": "dragon",
+		"tree_pos": Vector2i(2, 19),
+		"requires_any": ["broodmother", "sky_raiders"],
+		"locks": "inferno",
+		"levels": {
+			1: { "cost": 1500, "time": 40.0, "desc": "Dragons ignore snowstorm penalties and move 15% faster" },
+		},
+	},
+	# ── Weather tier 3 (rows 23-24) ──
+	"stormcaller": {
+		"name": "Stormcaller",
+		"unit": "",
+		"tree_pos": Vector2i(2, 23),
+		"requires_any": ["weather_alert", "storm_scout"],
+		"locks": "pathfinder",
+		"levels": {
+			1: { "cost": 1400, "time": 35.0, "storm_exposure_enemy_mult": 0.5, "storm_duration_bonus": 5.0, "desc": "Enemy units take +50% snowstorm exposure damage; storms last +5s" },
+		},
+	},
+	"pathfinder": {
+		"name": "Pathfinder",
+		"unit": "",
+		"tree_pos": Vector2i(2, 24),
+		"requires_any": ["weather_alert", "storm_scout"],
+		"locks": "stormcaller",
+		"levels": {
+			1: { "cost": 1200, "time": 35.0, "vision_in_storm_mult": 0.3, "desc": "Friendly units +30% vision during storms; miners auto-recall on storm warning" },
+		},
+	},
+
+	# ═══════════════════════════════════════════════════════════════════════
+	# Tier 4 cross-path capstones
+	# ═══════════════════════════════════════════════════════════════════════
+	"deep_fortress": {
+		"name": "Deep Fortress",
+		"unit": "",
+		"tree_pos": Vector2i(3, 8),
+		"requires": { "earth_shield": 1, "citadel": 1 },
+		"levels": {
+			1: { "cost": 2800, "time": 50.0, "building_hp": 1000, "building_regen_hp_per_sec": 5.0, "desc": "Buildings +1000 HP; walls/towers self-repair 5 HP/s; underground lanterns +3 vision" },
+		},
+	},
+	"total_war": {
+		"name": "Total War",
+		"unit": "",
+		"tree_pos": Vector2i(3, 11),
+		"requires": { "siege_master": 1, "artillery": 1 },
+		"levels": {
+			1: { "cost": 3000, "time": 50.0, "fighter_dmg_mult": 0.1, "tower_max_count_bonus": 1, "wall_max_count_bonus": 1, "desc": "All fighters +10% damage; towers +1 max count, walls +1 max count" },
+		},
+	},
+	"storm_dragon": {
+		"name": "Storm Dragon",
+		"unit": "dragon",
+		"tree_pos": Vector2i(3, 21),
+		"requires_any": ["tempest_wings", "stormcaller"],
+		"levels": {
+			1: { "cost": 3200, "time": 55.0, "desc": "Dragons ignore all weather penalties; breath extinguishes enemy lanterns" },
 		},
 	},
 }
@@ -372,9 +575,9 @@ const RESEARCH_TECHS: Dictionary = {
 const SONAR_RADIUS: Dictionary = { 1: 12 }
 const SONAR_COOLDOWN: Dictionary = { 1: 40.0 }
 
-# ─── RESEARCH BRANCH EFFECTS (Revamp Phase 6) ───
-# Hard-coded branch effects read through ResearchManager.has_branch().
-# One-time respec cost: resets the team's researched branches and locks.
+# ─── RESEARCH BRANCH EFFECTS (Revamp Phase 6+) ───
+# Hard-coded branch effects read through ResearchManager.has_branch() or
+# ResearchManager.get_stat_bonus(). One-time respec cost resets branches/locks.
 const BRANCH_RESPEC_COST: int = 500
 # deep_delve: underground miner speed multiplier.
 const DEEP_DELVE_UG_SPEED_MULT: float = 1.1
@@ -395,6 +598,62 @@ const GUERRILLA_ALLY_RADIUS_CELLS: int = 6
 # siege_master: swordsman damage vs buildings and tower cost discount.
 const SIEGE_MASTER_BUILDING_DMG_MULT: float = 1.3
 const SIEGE_MASTER_TOWER_COST_MULT: float = 0.5
+
+# fortification root: building and structure HP multipliers / build-time reduction.
+const FORTIFICATION_BUILDING_HP_MULT: float = 0.1
+const FORTIFICATION_STRUCTURE_HP_MULT: float = 0.15
+const FORTIFICATION_BUILD_TIME_MULT: float = 0.2
+# stone_masonry: wall upgrades.
+const STONE_MASONRY_WALL_HP_MULT: float = 0.3
+const STONE_MASONRY_WALL_COST_MULT: float = 0.2
+const STONE_MASONRY_WALL_MAX_BONUS: int = 1
+# sentry_network: tower upgrades.
+const SENTRY_NETWORK_TOWER_RANGE_MULT: float = 0.25
+const SENTRY_NETWORK_TOWER_MAX_BONUS: int = 1
+const SENTRY_NETWORK_TARGET_ACQUISITION_MULT: float = 0.25
+# citadel: building regen and HP.
+const CITADEL_BUILDING_HP_BONUS: int = 1500
+const CITADEL_REGEN_HP_PER_SEC: float = 5.0
+# artillery: tower splash damage.
+const ARTILLERY_TOWER_DAMAGE_MULT: float = 0.25
+const ARTILLERY_SPLASH_RADIUS_CELLS: float = 1.5
+const ARTILLERY_SPLASH_DAMAGE_PCT: float = 0.4
+
+# dragon_mastery root: dragon stat/train-time bonuses.
+const DRAGON_MASTERY_HP_MULT: float = 0.2
+const DRAGON_MASTERY_DMG_MULT: float = 0.2
+const DRAGON_MASTERY_TRAIN_TIME_MULT: float = 0.2
+# broodmother: dragon production bonuses.
+const BROODMOTHER_TRAIN_TIME_MULT: float = 0.3
+const BROODMOTHER_COST_MULT: float = 0.15
+# sky_raiders: dragon HP bonus.
+const SKY_RAIDER_HP_MULT: float = 0.25
+# inferno: dragon breath burning ground.
+const INFERNO_BURNING_GROUND_DPS: float = 8.0
+const INFERNO_BURNING_GROUND_DURATION: float = 4.0
+# tempest_wings: dragon weather immunity and speed.
+const TEMPEST_WINGS_SPEED_MULT: float = 0.15
+
+# weather_alert: warning extension (added to base 5s) and cave-in heads-up.
+const WEATHER_ALERT_WARNING_BONUS: float = 7.0
+const WEATHER_ALERT_CAVEIN_WARNING: float = 3.0
+# storm_scout: vision and identification range during storms.
+const STORM_SCOUT_VISION_MULT: float = 0.25
+const STORM_SCOUT_IDENTIFY_RANGE_MULT: float = 0.5
+# stormcaller: enemy exposure damage and storm duration.
+const STORMCALLER_EXPOSURE_MULT: float = 0.5
+const STORMCALLER_DURATION_BONUS: float = 5.0
+# pathfinder: friendly vision during storms.
+const PATHFINDER_VISION_MULT: float = 0.3
+
+# Cross-path capstones.
+const DEEP_FORTRESS_BUILDING_HP_BONUS: int = 1000
+const DEEP_FORTRESS_REGEN_HP_PER_SEC: float = 5.0
+const DEEP_FORTRESS_LANTERN_VISION_BONUS: int = 3
+const TOTAL_WAR_FIGHTER_DMG_MULT: float = 0.1
+const TOTAL_WAR_TOWER_MAX_BONUS: int = 1
+const TOTAL_WAR_WALL_MAX_BONUS: int = 1
+const STORM_DRAGON_LANTERN_EXTINGUISH_RADIUS_CELLS: int = 2
 
 # ─── OUT-OF-COMBAT REGEN ───
 # Units that avoid damage for this long slowly recover HP. Slow on purpose:

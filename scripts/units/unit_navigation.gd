@@ -61,7 +61,7 @@ func _follow_path(delta: float) -> void:
 func _weather_speed_mult() -> float:
 	if unit.is_underground:
 		return 1.0
-	return WeatherManager.get_speed_multiplier(unit.team)
+	return WeatherManager.get_speed_multiplier(unit)
 
 
 ## Revamp Phase 6 branch speed bonuses: Deep Delve speeds miners up
