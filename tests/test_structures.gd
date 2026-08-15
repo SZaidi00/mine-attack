@@ -32,6 +32,8 @@ func before_each() -> void:
 	# Tests place structures at fixed cells — start each test with a clean map.
 	for tower in get_tree().get_nodes_in_group("towers"):
 		tower.free()
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		lantern.free()
 	for wall in get_tree().get_nodes_in_group("walls"):
 		if wall.is_built():
 			# Free the whole sealed column (surface cell + dug cells beneath;
@@ -273,3 +275,74 @@ func test_own_wall_never_blocks_its_team() -> void:
 	enemy_unit.call("move_to", _grid.grid_to_world(Vector2i(-25, 0)))
 	for p in enemy_unit.get("_path"):
 		assert_ne(_grid.world_to_grid(p), Vector2i(-20, 0), "the enemy can never path through the wall")
+
+
+func test_sealed_base_path_redirects_to_wall_breach() -> void:
+	# A built player wall seals column -20 completely, so the enemy can no
+	# longer path to the player building. The siege order must redirect to the
+	# blocking wall instead of freezing the unit (the wave-stall bug).
+	_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-20, 0)))
+	var wall: Node2D = get_tree().get_nodes_in_group("walls")[0]
+	await _finish_construction(wall)
+	var attacker: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, _grid.grid_to_world(Vector2i(-17, 0)))
+	attacker.call("attack_building", _player_building())
+	assert_eq(attacker.get("_target_building"), wall, "unreachable base redirects to a wall breach")
+	assert_eq(attacker.get("_state"), Unit.State.ATTACK, "the unit sieges instead of going idle")
+	await wait_seconds(2.5)
+	assert_lt(wall.hp, wall.max_hp, "the breach actually damages the wall")
+
+
+func test_sieging_unit_retaliates_against_tower() -> void:
+	# Tower fire must peel a sieging unit onto the tower — a tower is not a
+	# Unit, so the normal retaliation pick can never return it.
+	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0)))
+	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
+	tower.team = ENEMY  # pretend the enemy built it
+	await _finish_construction(tower)
+	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, _grid.grid_to_world(Vector2i(-20, 0)))
+	var enemy_building: Node2D = null
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.team == ENEMY:
+			enemy_building = b
+	swordsman.call("attack_building", enemy_building)
+	assert_eq(swordsman.get("_state"), Unit.State.ATTACK, "siege order accepted")
+	swordsman.call("take_damage", 5, tower)
+	assert_eq(swordsman.get("_target_building"), tower, "tower fire peels the sieger onto the tower")
+
+
+func test_fighters_target_remembered_structure_through_fog() -> void:
+	# Static structures stay targetable on remembered intel — fog must not
+	# grant a tower free invulnerability once live vision moves on.
+	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0)))
+	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
+	tower.team = ENEMY  # pretend the enemy built it
+	await _finish_construction(tower)
+	# See it once so the team remembers it...
+	var scout: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, tower.global_position + Vector2(-96, 16))
+	await wait_seconds(0.2)
+	assert_true(_grid.is_remembered_by(PLAYER, tower.global_position), "tower seen and remembered")
+	# ...then lose live vision: the tower stays a valid target.
+	scout.position = _grid.grid_to_world(Vector2i(-28, 0))
+	await wait_seconds(0.2)
+	assert_false(_grid.is_visible_to(PLAYER, tower.global_position), "setup: tower is back in fog")
+	var pick = scout.call("_nearest_visible_enemy_structure")
+	assert_eq(pick, tower, "remembered structures stay targetable")
+
+
+func test_wave_peels_fighters_onto_remembered_structures() -> void:
+	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0)))
+	_pc.try_place_structure("lantern", _grid.grid_to_world(Vector2i(-10, 0)))
+	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
+	var lantern: Node2D = get_tree().get_nodes_in_group("lanterns")[0]
+	await _finish_construction(tower)
+	await _finish_construction(lantern)
+	var ai: Node = _main.get_node("AIController")
+	_grid.set_reveal_all(ENEMY, true)  # stand-in for scouted intel
+	var result: Dictionary = ai._combat._wave_structure_assignments(8)
+	var small: Dictionary = ai._combat._wave_structure_assignments(2)
+	_grid.set_reveal_all(ENEMY, false)
+	var structures: Array = result["structures"]
+	assert_eq(structures.size(), 2, "both remembered structures are wave targets")
+	assert_eq(structures[0], lantern, "nearest to the enemy base is hit first")
+	assert_eq(result["peel_count"], 4, "2 fighters per structure")
+	assert_eq(small["peel_count"], 1, "the peel is capped at half the wave")

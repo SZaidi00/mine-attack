@@ -60,6 +60,11 @@ func attack_building(target: Node2D) -> void:
 	unit._clear_target()
 	unit._navigation._repath(stand)
 	if unit._path.is_empty():
+		# A built enemy wall seals its whole column, so no route to the real
+		# target may exist. Siege the wall instead of freezing: breaking it
+		# reopens the path (the column unseals when the wall is destroyed).
+		if _breach_nearest_enemy_wall(target):
+			return
 		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "attack_building", "no path to building")
 		unit._spawn_reject_popup(target.global_position)
 		unit._set_state(Unit.State.IDLE, "building unreachable")
@@ -68,6 +73,19 @@ func attack_building(target: Node2D) -> void:
 	unit._target_building = target
 	unit._hold_post = false
 	unit._set_state(Unit.State.ATTACK, "attack_building command")
+
+
+## Fallback for a sealed route: retarget to the nearest built enemy wall.
+## Returns true only if the breach order was accepted (a path to the wall
+## exists). current_target guards the recursion when even the wall is
+## unreachable.
+func _breach_nearest_enemy_wall(current_target: Node2D) -> bool:
+	var wall: Node2D = unit._vision._nearest_enemy_wall()
+	if wall == null or wall == current_target:
+		return false
+	DebugLog.log_command("Unit %d" % unit.get_instance_id(), "attack_building", "path sealed, breaching wall %d" % wall.get_instance_id())
+	attack_building(wall)
+	return unit._state == Unit.State.ATTACK and unit._target_building == wall
 
 
 func mine_cell(grid_pos: Vector2i) -> void:

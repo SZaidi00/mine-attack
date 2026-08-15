@@ -43,8 +43,39 @@ func _launch_wave_if_ready(threshold_override: int = -1) -> void:
 		var hp_ratio: float = float(target.get("_hp")) / maxf(1.0, float(target.get("max_hp")))
 		if hp_ratio >= 0.25 and ai._smart._simulate_combat() < 0.6:
 			return
-	for unit in free_fighters:
-		unit.attack_building(target)
+	# Peel a vanguard onto remembered enemy towers/lanterns (see
+	# _wave_structure_assignments); the rest march on the base.
+	var assignments: Dictionary = _wave_structure_assignments(free_fighters.size())
+	var structures: Array = assignments["structures"]
+	var peel_count: int = assignments["peel_count"]
+	for i in range(free_fighters.size()):
+		var unit: Unit = free_fighters[i]
+		if i < peel_count:
+			unit.attack_building(structures[i % structures.size()])
+		else:
+			unit.attack_building(target)
+
+
+## Strategic structure targeting: enemy towers and lanterns the team
+## remembers (Fog of War intel), sorted nearest-to-our-base first so the wave
+## cleans up the front line before pushing deeper. Waves peel up to half
+## their fighters (2 per structure) onto these; the rest march on the base.
+func _wave_structure_assignments(free_count: int) -> Dictionary:
+	var structures: Array = []
+	var home: Node2D = _get_building()
+	for group: String in ["towers", "lanterns"]:
+		for s in ai.get_tree().get_nodes_in_group(group):
+			if s.get("team") == ai.team or not s.is_built():
+				continue
+			if not ai._grid.is_remembered_by(ai.team, s.global_position):
+				continue
+			structures.append(s)
+	if home != null:
+		var home_pos: Vector2 = home.global_position
+		structures.sort_custom(func(a: Node2D, b: Node2D) -> bool:
+			return home_pos.distance_squared_to(a.global_position) < home_pos.distance_squared_to(b.global_position))
+	var peel_count: int = mini(structures.size() * 2, free_count / 2)
+	return { "structures": structures, "peel_count": peel_count }
 
 
 ## Minimum army size before a wave launches, by aggression level, scaled by

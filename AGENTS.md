@@ -78,7 +78,7 @@ The controllers are split into thin main classes plus `RefCounted` helper module
 - `ai_controller.gd` — tick fields, aggression state, scout memory; delegates to helpers.
   - `ai_economy.gd` — economy decisions, training (faction-flavored army mix, Phase 8), upgrades, research (faction branch preferences), miner culling.
   - `ai_mining.gd` — miner task assignment and ore selection (skips miners under shelter orders).
-  - `ai_combat.gd` — attack waves, base defense, wall breach.
+  - `ai_combat.gd` — attack waves, base defense, wall breach. Waves peel up to half their fighters (2 per structure) onto remembered enemy towers/lanterns before marching on the base (`_wave_structure_assignments`).
   - `ai_smart_behaviors.gd` — focus fire, wounded retreat, harassment, bait, combat predictor, aggression (Brute pushes on a slimmer lead).
   - `ai_awareness.gd` — Phase 8: faction scouting (swordsman at 1:00, 30s retry after it dies), defensive lantern placement/upgrades, snowstorm miner recall and lava evacuation (signal-driven, same warnings as the player; sheltered miners hold via `unit.shelter_in_place`).
 
@@ -99,12 +99,12 @@ The controllers are split into thin main classes plus `RefCounted` helper module
 ### `scripts/units/`
 
 - `unit.gd` — state enum, exported data, `_ready`/`_process`/`_draw`, public command/combat API; delegates to helpers.
-  - `unit_commands.gd` — move, attack, mine, deposit, climb, stop, kill, garrison, rally commands.
-  - `unit_combat.gd` — damage, retaliation, projectiles, DPS window.
+  - `unit_commands.gd` — move, attack, mine, deposit, climb, stop, kill, garrison, rally commands. A siege order whose path is sealed by an enemy wall redirects to breaching the nearest wall (`_breach_nearest_enemy_wall`), so a player wall can't stall the AI forever.
+  - `unit_combat.gd` — damage, retaliation, projectiles, DPS window. Sieging units retaliate against towers shooting them (structures aren't Units, so the normal pick skips them).
   - `unit_mining.gd` — idle miner handling, ore seeking, exhausted/blacklist logic.
   - `unit_navigation.gd` — path following, repathing, separation, kiting, flee, walkability.
   - `unit_abilities.gd` — faction abilities (blink, volley, swarm, rune blade, berserk, arcane shot, heavy bolt, crush, mana burn, miner reveal, supply drop, fight back).
-  - `unit_vision_targeting.gd` — vision radii, auto-attack target selection, splash targeting.
+  - `unit_vision_targeting.gd` — vision radii, auto-attack target selection, splash targeting. Static structures (lanterns/towers, like buildings) are targetable on remembered intel, not just live vision.
   - `unit_rendering.gd` — sprites, pickaxe animation, HP bar, cargo, selection ring.
   - `unit_idle.gd` — idle fighter/miner behavior, rally hunt, patrol, return-to-post.
 - `projectile.gd` — arrows/fireballs.

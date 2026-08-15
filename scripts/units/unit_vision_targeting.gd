@@ -107,8 +107,10 @@ func _find_auto_attack_target():
 				return best
 
 	# 3. Enemy building in sight range (a static target counts if the team
-	# remembers it), and enemy lanterns/towers (which must be currently
-	# visible). Walls are only attacked on explicit orders.
+	# remembers it), and enemy lanterns/towers (also valid on remembered
+	# intel — structures don't move). Walls are only attacked on explicit
+	# orders or the sealed-path breach fallback
+	# (UnitCommands._breach_nearest_enemy_wall).
 	var enemy_building: Node2D = unit._get_enemy_building()
 	if enemy_building != null and unit._grid.is_remembered_by(unit.team, enemy_building.global_position):
 		if leashed and unit._post_point.distance_squared_to(enemy_building.global_position) > leash_d2:
@@ -175,8 +177,27 @@ func _find_rally_target() -> Unit:
 	return best
 
 
-## Nearest built enemy lantern or tower the team can currently see (Fog of
-## War target scan helper — static but destructible defense/vision sources).
+## Nearest built enemy wall segment, at any distance and regardless of fog —
+## a wall sealing the route is a physical fact the unit has just discovered by
+## failing to path. Used to turn an unreachable siege target into a wall
+## breach instead of freezing (breaking the wall unseals its column).
+func _nearest_enemy_wall() -> Node2D:
+	var best: Node2D = null
+	var best_d2: float = INF
+	for wall in unit.get_tree().get_nodes_in_group("walls"):
+		if wall.team == unit.team or not wall.is_built():
+			continue
+		var d2: float = unit.global_position.distance_squared_to(wall.global_position)
+		if d2 < best_d2:
+			best_d2 = d2
+			best = wall
+	return best
+
+
+## Nearest built enemy lantern or tower the team remembers seeing (Fog of War
+## target scan helper). Structures are static, so remembered intel stays
+## actionable — fog no longer grants them free invulnerability the moment live
+## vision moves on.
 func _nearest_visible_enemy_structure() -> Node2D:
 	var best: Node2D = null
 	var best_dist: float = INF
@@ -184,7 +205,7 @@ func _nearest_visible_enemy_structure() -> Node2D:
 		for structure in unit.get_tree().get_nodes_in_group(group):
 			if structure.team == unit.team or not structure.is_built():
 				continue
-			if not _team_can_see(structure.global_position):
+			if not unit._grid.is_remembered_by(unit.team, structure.global_position):
 				continue
 			var d: float = unit.get_combat_position().distance_squared_to(structure.global_position)
 			if d < best_dist:

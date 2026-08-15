@@ -105,6 +105,14 @@ func _maybe_retaliate(attacker: Node2D) -> void:
 	if target != null:
 		DebugLog.log_command("Unit %d" % unit.get_instance_id(), "retaliate", "target=%d" % target.get_instance_id())
 		unit._commands.attack_unit(target)
+		return
+	# Structures shoot too: a tower is not a Unit, so the normal pick never
+	# returns it and sieging units would eat tower fire forever without
+	# reacting. Peel off and attack the tower itself.
+	if attacker != null and is_instance_valid(attacker) and attacker.is_in_group("towers") \
+			and attacker.has_method("is_built") and attacker.is_built():
+		DebugLog.log_command("Unit %d" % unit.get_instance_id(), "retaliate", "tower=%d" % attacker.get_instance_id())
+		unit._commands.attack_building(attacker)
 
 
 ## Best unit to fight back against: the attacker itself when it is a reachable
@@ -212,6 +220,10 @@ func _process_attack(delta: float) -> void:
 		if unit._path.is_empty() or unit._path[unit._path.size() - 1].distance_to(path_pos) > GridWorld.CELL_SIZE * 0.75:
 			unit._navigation._repath(path_pos)
 		if unit._path.is_empty():
+			# A wall finished mid-march seals the route to a building target:
+			# breach the wall instead of freezing. Unit chases just drop.
+			if unit._target_building != null and unit._commands._breach_nearest_enemy_wall(unit._target_building):
+				return
 			unit._set_state(Unit.State.IDLE, "attack target unreachable")
 			return
 		unit._navigation._follow_path(delta)
