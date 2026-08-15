@@ -198,10 +198,14 @@ func _set_frosted(unit: Unit, frosted: bool) -> void:
 
 func _clear_frost() -> void:
 	for id in _frosted_units:
+		# Units that died mid-storm linger here as freed instances. The
+		# validity check must come before any typed assignment — assigning a
+		# freed instance to a typed variable is itself an error.
+		if not is_instance_valid(_frosted_units[id]):
+			continue
 		var unit: Unit = _frosted_units[id]
-		if is_instance_valid(unit):
-			unit._frosted = false
-			unit.queue_redraw()
+		unit._frosted = false
+		unit.queue_redraw()
 	_frosted_units.clear()
 
 

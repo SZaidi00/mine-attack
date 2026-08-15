@@ -168,3 +168,19 @@ func test_storm_damage_does_not_make_miners_flee() -> void:
 	assert_eq(miner._flee_timer, 0.0, "storm damage never triggers the flee reflex")
 	assert_false(miner._state == Unit.State.MOVE and miner._flee_target != Vector2.ZERO, "miner keeps its orders during the storm")
 	WeatherManager.force_snowstorm_end()
+
+
+func test_dead_frosted_units_dont_break_storm_end() -> void:
+	# Regression: a unit that died while frosted lingered in _frosted_units as
+	# a freed instance. _clear_frost assigned it to a typed variable, which
+	# errored and aborted the function before the dictionary was cleared (in
+	# the editor the autoload error then killed the game).
+	var unit: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, _grid.grid_to_world(Vector2i(-20, 0)))
+	unit.stop()
+	WeatherManager.force_snowstorm_start()
+	await wait_seconds(0.6)
+	assert_true(unit._frosted, "setup: unit is frosted")
+	unit.take_damage(9999)
+	await wait_seconds(1.3)  # let the 1s corpse fade finish and the free happen
+	WeatherManager.force_snowstorm_end()
+	assert_true(WeatherManager._frosted_units.is_empty(), "frost registry clears even with dead entries")
