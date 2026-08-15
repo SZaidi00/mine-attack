@@ -85,6 +85,7 @@ var _tech_rects: Dictionary = {}    # tech_id -> Rect2 (tree canvas space)
 var _canvas: TreeCanvas
 var _active_label: Label
 var _progress_bar: ProgressBar
+var _queue_container: VBoxContainer
 var _cancel_button: Button
 var _respec_button: Button
 var _scan_button: Button
@@ -122,6 +123,7 @@ func _sync_pause() -> void:
 func _ready() -> void:
 	_build_ui()
 	ResearchManager.research_changed.connect(_on_research_changed)
+	ResearchManager.research_queue_changed.connect(_on_research_queue_changed)
 	ResearchManager.branch_locked.connect(_on_branch_locked)
 	EconomyManager.coin_changed.connect(_on_economy_changed)
 	_refresh()
@@ -249,6 +251,10 @@ func _build_ui() -> void:
 	_style_progress_bar()
 	vbox.add_child(_progress_bar)
 
+	_queue_container = VBoxContainer.new()
+	_queue_container.add_theme_constant_override("separation", 4)
+	vbox.add_child(_queue_container)
+
 	var footer := HBoxContainer.new()
 	footer.add_theme_constant_override("separation", 8)
 	footer.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -284,10 +290,11 @@ func _refresh() -> void:
 		_refresh_node(tech_id, busy)
 	_cancel_button.visible = busy
 	_update_respec_button()
+	_refresh_queue()
 	_rebuild_edges()
 
 
-func _refresh_node(tech_id: String, busy: bool) -> void:
+func _refresh_node(tech_id: String, _busy: bool) -> void:
 	var btn: Button = _tech_buttons[tech_id]
 	var tech: Dictionary = _Constants.RESEARCH_TECHS[tech_id]
 	var level: int = ResearchManager.get_level(_TEAM, tech_id)
@@ -307,13 +314,17 @@ func _refresh_node(tech_id: String, busy: bool) -> void:
 	else:
 		# Re-apply the base style: a respec can un-max/unlock a node.
 		_style_button(btn)
-		var line: String = "Lv %d/%d — %dg / %ds" % [level, max_level, next.cost, int(next.time)]
-		if not ResearchManager.are_prerequisites_met(_TEAM, tech_id):
-			line = "Lv %d/%d — locked" % [level, max_level]
+		var is_pending: bool = _is_tech_pending(tech_id)
+		var line: String
+		if is_pending:
+			line = "Queued"
+		else:
+			line = "Lv %d/%d — %dg / %ds" % [level, max_level, next.cost, int(next.time)]
+			if not ResearchManager.are_prerequisites_met(_TEAM, tech_id):
+				line = "Lv %d/%d — needs prereq" % [level, max_level]
 		btn.text = "%s\n%s" % [tech.name, line]
-		btn.disabled = busy \
-			or not ResearchManager.are_prerequisites_met(_TEAM, tech_id) \
-			or not EconomyManager.can_afford(_TEAM, next.cost)
+		var queue_full: bool = ResearchManager.get_queue_size(_TEAM) >= _Constants.RESEARCH_QUEUE_MAX
+		btn.disabled = queue_full or is_pending or not EconomyManager.can_afford(_TEAM, next.cost)
 
 
 func _build_tooltip(tech_id: String) -> String:
@@ -348,6 +359,16 @@ func _build_tooltip(tech_id: String) -> String:
 	return "\n".join(lines)
 
 
+func _is_tech_pending(tech_id: String) -> bool:
+	var active: Dictionary = ResearchManager.get_active(_TEAM)
+	if not active.is_empty() and active.tech_id == tech_id:
+		return true
+	for entry in ResearchManager.get_queue(_TEAM):
+		if entry.tech_id == tech_id:
+			return true
+	return false
+
+
 func _rebuild_edges() -> void:
 	_canvas.edges.clear()
 	for tech_id in _Constants.RESEARCH_TECHS:
@@ -370,6 +391,33 @@ func _add_edge(prereq_id: String, to_rect: Rect2, unlocked: bool, either: bool) 
 		"unlocked": unlocked,
 		"either": either,
 	})
+
+
+func _refresh_queue() -> void:
+	# Rebuild the queue list rather than trying to sync existing rows — the
+	# queue is small (≤ RESEARCH_QUEUE_MAX) and this keeps the code simple.
+	for child in _queue_container.get_children():
+		child.queue_free()
+	var queue: Array = ResearchManager.get_queue(_TEAM)
+	for i in range(queue.size()):
+		var entry: Dictionary = queue[i]
+		var tech_name: String = _Constants.RESEARCH_TECHS[entry.tech_id].name
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		var label := Label.new()
+		label.text = "%d. %s — %ds" % [i + 1, tech_name, int(entry.time)]
+		label.add_theme_font_size_override("font_size", 12)
+		label.add_theme_color_override("font_color", _COL_TEXT_DIM)
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(label)
+		var remove_button := Button.new()
+		remove_button.text = "×"
+		remove_button.tooltip_text = "Cancel queued research (100% refund)"
+		remove_button.add_theme_font_size_override("font_size", 12)
+		_style_button(remove_button)
+		remove_button.pressed.connect(_cancel_queue_entry.bind(i))
+		row.add_child(remove_button)
+		_queue_container.add_child(row)
 
 
 func _update_researching_node() -> void:
@@ -429,6 +477,12 @@ func _cancel_research() -> void:
 	_refresh()
 
 
+func _cancel_queue_entry(index: int) -> void:
+	if ResearchManager.cancel_research_queue_entry(_TEAM, index):
+		AudioManager.play("click")
+	_refresh()
+
+
 func _respec() -> void:
 	if ResearchManager.respec(_TEAM):
 		AudioManager.play("click")
@@ -441,6 +495,10 @@ func _scan() -> void:
 
 
 func _on_research_changed(_team: GameManager.Team) -> void:
+	_refresh()
+
+
+func _on_research_queue_changed(_team: GameManager.Team) -> void:
 	_refresh()
 
 

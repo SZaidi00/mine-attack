@@ -41,10 +41,10 @@ func _run_economy() -> void:
 			EconomyManager.upgrade_fighter(ai.team, unit_id)
 			coin -= upgrade_cost
 
-	# Research tree: one timed slot per team, bought with the same reserve
-	# rule as fighter upgrades. Research time is not difficulty-scaled — the
-	# difficulty multipliers already speed up the income that pays for it.
-	if not ResearchManager.is_researching(ai.team):
+	# Research tree: one timed slot per team plus a FIFO queue, bought with the
+	# same reserve rule as fighter upgrades. Research time is not difficulty-scaled
+	# — the difficulty multipliers already speed up the income that pays for it.
+	if ResearchManager.get_queue_size(ai.team) < _Constants.RESEARCH_QUEUE_MAX:
 		var tech: String = _pick_research()
 		if tech != "":
 			var data: Dictionary = ResearchManager.get_next_level_data(ai.team, tech)

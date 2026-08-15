@@ -75,9 +75,17 @@ func test_start_research_rejects_unknown_tech() -> void:
 	assert_false(ResearchManager.start_research(PLAYER, "time_travel"))
 
 
-func test_start_research_rejects_busy_slot() -> void:
+func test_start_research_queues_when_busy() -> void:
+	EconomyManager.add_coin(PLAYER, 1000)
 	assert_true(ResearchManager.start_research(PLAYER, "deep_delve"))
-	assert_false(ResearchManager.start_research(PLAYER, "surface_war"), "one active research per team")
+	assert_true(ResearchManager.start_research(PLAYER, "surface_war"), "second order queues while active research runs")
+	assert_eq(ResearchManager.get_queue_size(PLAYER), 1)
+	assert_eq(ResearchManager.get_queue(PLAYER)[0].tech_id, "surface_war")
+
+
+func test_start_research_rejects_duplicate_pending() -> void:
+	assert_true(ResearchManager.start_research(PLAYER, "deep_delve"))
+	assert_false(ResearchManager.start_research(PLAYER, "deep_delve"), "cannot queue the same tech twice")
 
 
 func test_start_research_rejects_unaffordable() -> void:
@@ -120,6 +128,79 @@ func test_cancel_refunds_100_percent() -> void:
 	assert_true(ResearchManager.cancel_research(PLAYER))
 	assert_eq(EconomyManager.get_coin(PLAYER), before, "full refund even mid-research")
 	assert_eq(ResearchManager.get_level(PLAYER, "deep_delve"), 0, "no level granted on cancel")
+
+
+# ─── Research queue ───
+
+func test_queued_research_starts_after_active_completes() -> void:
+	EconomyManager.add_coin(PLAYER, 1000)
+	watch_signals(ResearchManager)
+	assert_true(ResearchManager.start_research(PLAYER, "deep_delve"))
+	assert_true(ResearchManager.start_research(PLAYER, "ore_sonar"))
+	var total: float = ResearchManager.get_active(PLAYER).total
+	ResearchManager._process(total + 0.1)
+	assert_eq(ResearchManager.get_level(PLAYER, "deep_delve"), 1, "active research finishes")
+	assert_true(ResearchManager.is_researching(PLAYER), "queued research is now active")
+	assert_eq(ResearchManager.get_active(PLAYER).tech_id, "ore_sonar")
+	assert_signal_emitted_with_parameters(ResearchManager, "research_completed", [PLAYER, "deep_delve"])
+
+
+func test_queued_research_awaits_prerequisites() -> void:
+	EconomyManager.add_coin(PLAYER, 1000)
+	assert_true(ResearchManager.start_research(PLAYER, "deep_delve"))
+	assert_true(ResearchManager.start_research(PLAYER, "longbow"))
+	# longbow is queued but requires surface_war, which is never researched, so
+	# it is refunded and skipped when deep_delve completes.
+	ResearchManager._process(ResearchManager.get_active(PLAYER).total + 0.1)
+	assert_eq(ResearchManager.get_level(PLAYER, "deep_delve"), 1, "active research finishes")
+	assert_false(ResearchManager.is_researching(PLAYER), "invalid front item skipped")
+	assert_eq(ResearchManager.get_queue_size(PLAYER), 0, "invalid front item removed from queue")
+
+
+func test_queue_respects_max_size() -> void:
+	EconomyManager.add_coin(PLAYER, 3000)
+	assert_true(ResearchManager.start_research(PLAYER, "deep_delve"))
+	assert_true(ResearchManager.start_research(PLAYER, "surface_war"))
+	assert_true(ResearchManager.start_research(PLAYER, "longbow"))
+	assert_true(ResearchManager.start_research(PLAYER, "rapid_fire"))
+	assert_eq(ResearchManager.get_queue_size(PLAYER), Constants.RESEARCH_QUEUE_MAX)
+	assert_false(ResearchManager.start_research(PLAYER, "guerrilla"), "queue rejects over max")
+
+
+func test_cancel_queued_entry_refunds() -> void:
+	EconomyManager.add_coin(PLAYER, 1000)
+	var before: int = EconomyManager.get_coin(PLAYER)
+	assert_true(ResearchManager.start_research(PLAYER, "deep_delve"))
+	assert_true(ResearchManager.start_research(PLAYER, "surface_war"))
+	assert_true(ResearchManager.cancel_research_queue_entry(PLAYER, 0))
+	assert_eq(ResearchManager.get_queue_size(PLAYER), 0)
+	assert_eq(EconomyManager.get_coin(PLAYER), before - Constants.RESEARCH_TECHS["deep_delve"].levels[1].cost)
+
+
+func test_clear_queue_refunds_all() -> void:
+	EconomyManager.add_coin(PLAYER, 3000)
+	var before: int = EconomyManager.get_coin(PLAYER)
+	assert_true(ResearchManager.start_research(PLAYER, "deep_delve"))
+	assert_true(ResearchManager.start_research(PLAYER, "surface_war"))
+	assert_true(ResearchManager.start_research(PLAYER, "longbow"))
+	assert_true(ResearchManager.start_research(PLAYER, "rapid_fire"))
+	var refund: int = ResearchManager.clear_research_queue(PLAYER)
+	assert_gt(refund, 0)
+	assert_eq(ResearchManager.get_queue_size(PLAYER), 0)
+	assert_eq(EconomyManager.get_coin(PLAYER), before - Constants.RESEARCH_TECHS["deep_delve"].levels[1].cost)
+
+
+func test_queue_item_refunded_when_locked_by_completion() -> void:
+	EconomyManager.add_coin(PLAYER, 1000)
+	assert_true(ResearchManager.start_research(PLAYER, "deep_delve"))
+	assert_true(ResearchManager.start_research(PLAYER, "surface_war"))
+	# Completing deep_delve locks surface_war, so the queued surface_war is
+	# refunded and discarded.
+	var before: int = EconomyManager.get_coin(PLAYER)
+	ResearchManager._process(ResearchManager.get_active(PLAYER).total + 0.1)
+	assert_true(ResearchManager.is_locked(PLAYER, "surface_war"))
+	assert_eq(ResearchManager.get_queue_size(PLAYER), 0)
+	assert_eq(EconomyManager.get_coin(PLAYER), before + Constants.RESEARCH_TECHS["surface_war"].levels[1].cost)
 
 
 # ─── Branch locking ───
@@ -341,13 +422,15 @@ func test_overlay_pause_toggle_pauses_and_resumes() -> void:
 
 
 # ─── Reset ───
-func test_reset_clears_levels_locks_active_and_cooldowns() -> void:
+func test_reset_clears_levels_locks_active_queue_and_cooldowns() -> void:
 	ResearchManager._levels[PLAYER]["ore_sonar"] = 1
 	ResearchManager._locked[PLAYER].append("reinforced_pack")
 	ResearchManager.scan(PLAYER)
 	ResearchManager.start_research(PLAYER, "deep_delve")
+	ResearchManager.start_research(PLAYER, "surface_war")
 	ResearchManager.reset()
 	assert_eq(ResearchManager.get_level(PLAYER, "ore_sonar"), 0)
 	assert_false(ResearchManager.is_locked(PLAYER, "reinforced_pack"))
 	assert_false(ResearchManager.is_researching(PLAYER))
+	assert_eq(ResearchManager.get_queue_size(PLAYER), 0)
 	assert_eq(ResearchManager.get_scan_cooldown_remaining(PLAYER), 0.0)

@@ -213,10 +213,11 @@ const SNOWSTORM_DAMAGE_PER_SEC: float = 2.0
 
 # ─── RESEARCH TREE (Revamp Phase 6) ───
 # Mutually-exclusive branch techs: timed research bought with coin through the
-# ResearchManager (one active research per team, 100% refund on cancel).
-# Completing a tech permanently locks its "locks" alternative for the team
-# (branch_locked signal); a one-time respec (BRANCH_RESPEC_COST) resets the
-# team's choices. These coexist with the instant miner/fighter upgrades above.
+# ResearchManager (one active research per team, up to RESEARCH_QUEUE_MAX queued
+# behind it, 100% refund on cancel). Completing a tech permanently locks its
+# "locks" alternative for the team (branch_locked signal); a one-time respec
+# (BRANCH_RESPEC_COST) resets the team's choices. These coexist with the instant
+# miner/fighter upgrades above.
 # Each tech: name, optional unit branch, tree_pos (column = tier, row =
 # branch) for the research overlay, "locks" (alternative tech id locked on
 # completion), optional requires (ALL prerequisite tech ids → level) or
@@ -234,6 +235,7 @@ const SNOWSTORM_DAMAGE_PER_SEC: float = 2.0
 # Techs without effect keys (deep_delve, surface_war, ore_sonar,
 # siege_master, guerrilla) are read through ResearchManager.has_branch() by
 # the systems that implement their hard-coded effects.
+const RESEARCH_QUEUE_MAX: int = 3
 const RESEARCH_TECHS: Dictionary = {
 	# ── Tier 1: the branch root ──
 	"deep_delve": {
