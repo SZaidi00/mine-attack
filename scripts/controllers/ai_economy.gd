@@ -67,6 +67,10 @@ func _run_economy() -> void:
 	if queue_size < 3 and population < _Constants.MAX_UNITS:
 		coin = EconomyManager.get_coin(ai.team)
 		var miner_target: int = 5 + level * 2
+		# Industrial (Revamp Phase 8): fast expand — a bigger mining crew.
+		var faction: FactionData = FactionManager.get_faction(ai.team)
+		if faction != null and faction.faction_id == "industrial":
+			miner_target += 2
 		if miners < miner_target and coin >= FactionManager.get_unit_cost(ai.team, "miner"):
 			building.call("queue_unit", "miner")
 		else:
@@ -79,7 +83,7 @@ func _run_economy() -> void:
 ## budget affords, so the AI trains a combined-arms force per _ARMY_MIX.
 ## Smarts tier 3 counter-picks the player's composition (_effective_army_mix).
 func _pick_fighter_to_train(budget: int) -> String:
-	var mix: Dictionary = _effective_army_mix() if GameManager.get_ai_smarts() >= 3 else ai._ARMY_MIX
+	var mix: Dictionary = _effective_army_mix() if GameManager.get_ai_smarts() >= 3 else _faction_army_mix()
 	var counts: Dictionary = {}
 	for unit_id in mix:
 		counts[unit_id] = 0
@@ -105,6 +109,23 @@ func _pick_fighter_to_train(budget: int) -> String:
 	return best
 
 
+## Faction-flavored target composition (Revamp Phase 8, revamp.md 9.2):
+## Arcane rushes wizards, Brute masses swordsmen, Industrial floods cheap
+## bodies. Factionless AIs (tests, sandbox) keep the balanced default mix.
+func _faction_army_mix() -> Dictionary:
+	var faction: FactionData = FactionManager.get_faction(ai.team)
+	if faction == null:
+		return ai._ARMY_MIX
+	match faction.faction_id:
+		"arcane":
+			return { "swordsman": 0.25, "archer": 0.2, "wizard": 0.45, "dragon": 0.1 }
+		"brute":
+			return { "swordsman": 0.6, "archer": 0.2, "wizard": 0.1, "dragon": 0.1 }
+		"industrial":
+			return { "swordsman": 0.4, "archer": 0.35, "wizard": 0.15, "dragon": 0.1 }
+	return ai._ARMY_MIX
+
+
 ## Army mix for training, counter-picked against the player's composition
 ## (smarts tier 3 only): dragons punish an army light on archers/wizards
 ## (the only units that can hurt flyers), and ranged units punish a
@@ -112,37 +133,57 @@ func _pick_fighter_to_train(budget: int) -> String:
 ## (_sample_player_composition) rather than the live count, so production
 ## counters the remembered army and doesn't jitter mid-fight.
 func _effective_army_mix() -> Dictionary:
-	var mix: Dictionary = ai._ARMY_MIX.duplicate()
+	var mix: Dictionary = _faction_army_mix().duplicate()
 	if ai._player_comp_memory.is_empty():
 		return mix  # no scouting data yet
 	var anti_air_share: float = float(ai._player_comp_memory.get("archer", 0.0)) \
 		+ float(ai._player_comp_memory.get("wizard", 0.0))
 	if anti_air_share < 0.3:
-		mix["dragon"] = ai._ARMY_MIX["dragon"] * 3.0
+		mix["dragon"] = float(mix["dragon"]) * 3.0
 	if float(ai._player_comp_memory.get("swordsman", 0.0)) > 0.6:
-		mix["swordsman"] = ai._ARMY_MIX["swordsman"] - 0.15
-		mix["archer"] = ai._ARMY_MIX["archer"] + 0.1
-		mix["wizard"] = ai._ARMY_MIX["wizard"] + 0.05
+		mix["swordsman"] = float(mix["swordsman"]) - 0.15
+		mix["archer"] = float(mix["archer"]) + 0.1
+		mix["wizard"] = float(mix["wizard"]) + 0.05
 	return mix
 
 
-## Next research to buy in the branch tree: commit to a tier-1 side by army
-## composition (fighter-majority army → surface_war, miner-heavy → deep_delve),
-## then climb that side tier by tier in a deterministic preference order.
+## Next research to buy in the branch tree: faction strategy picks the tier-1
+## side (Revamp Phase 8 — Arcane climbs to Crystal Forge, Brute to Siege
+## Master, Industrial to Guerrilla Tactics); a factionless AI commits by army
+## composition (fighter-majority → surface_war, miner-heavy → deep_delve).
+## Then it climbs that side tier by tier in a deterministic preference order.
 ## Alternatives lock permanently once researched, so _research_open gates
 ## every pick on is_locked. Returns "" when nothing on the side is pickable.
 func _pick_research() -> String:
 	var deep_side: bool = ResearchManager.has_branch(ai.team, "deep_delve")
 	var war_side: bool = ResearchManager.has_branch(ai.team, "surface_war")
+	var faction: FactionData = FactionManager.get_faction(ai.team)
+	var faction_id: String = faction.faction_id if faction != null else ""
 	if not deep_side and not war_side:
+		match faction_id:
+			"arcane":
+				return "deep_delve"
+			"brute", "industrial":
+				return "surface_war"
 		return "surface_war" if _count_fighters() > _count_miners() else "deep_delve"
-	var tier2: Array[String] = ["ore_sonar", "reinforced_pack"] if deep_side else ["longbow", "rapid_fire"]
+	var tier2: Array[String]
+	if deep_side:
+		tier2 = ["ore_sonar", "reinforced_pack"]
+	else:
+		tier2 = ["longbow", "rapid_fire"]
 	if not ResearchManager.has_branch(ai.team, tier2[0]) and not ResearchManager.has_branch(ai.team, tier2[1]):
 		for tech in tier2:
 			if _research_open(tech):
 				return tech
 		return ""
-	var tier3: Array[String] = ["crystal_forge", "earth_shield"] if deep_side else ["siege_master", "guerrilla"]
+	var tier3: Array[String]
+	if deep_side:
+		tier3 = ["crystal_forge", "earth_shield"]
+	else:
+		tier3 = ["siege_master", "guerrilla"]
+	# Industrial swarms win by ambush, not siege: traps before tower discounts.
+	if not deep_side and faction_id == "industrial":
+		tier3 = ["guerrilla", "siege_master"]
 	for tech in tier3:
 		if _research_open(tech):
 			return tech

@@ -168,13 +168,14 @@ func _process(delta: float) -> void:
 			modulate = Color(0.3, 0.3, 0.33, 1.0)
 		else:
 			visible = false
-		# Revamp Phase 2: a player unit within 8 cells identifies the enemy's
-		# hidden faction (icon appears next to the HP bar and in the HUD).
-		if not FactionManager.is_faction_identified(team):
-			_identify_accum += delta
-			if _identify_accum >= 0.5:
-				_identify_accum = 0.0
-				_check_faction_identified()
+	# Revamp Phase 2/8: an opposing unit within 8 cells identifies this
+	# building's hidden faction — player scouts reveal the enemy faction, AI
+	# scouts reveal the player's (icon appears next to the HP bar and HUD).
+	if not FactionManager.is_faction_identified(team):
+		_identify_accum += delta
+		if _identify_accum >= 0.5:
+			_identify_accum = 0.0
+			_check_faction_identified()
 	if not GameManager.game_active:
 		return
 	if _queue.is_empty():
@@ -379,11 +380,13 @@ func cancel_queue(index: int) -> bool:
 	return true
 
 
-## Revamp Phase 2: the enemy faction is hidden until any player unit gets
-## within IDENTIFY_RANGE_CELLS of this building (scouting).
+## Revamp Phase 2/8: a faction stays hidden until any OPPOSING unit gets
+## within IDENTIFY_RANGE_CELLS of this building (scouting works both ways:
+## player units identify the enemy faction, AI units identify the player's).
 func _check_faction_identified() -> void:
 	var range_px: float = FactionManager.IDENTIFY_RANGE_CELLS * GridWorld.CELL_SIZE
-	for unit in get_tree().get_nodes_in_group("player"):
+	var opposing_group: String = "enemy" if team == GameManager.Team.PLAYER else "player"
+	for unit in get_tree().get_nodes_in_group(opposing_group):
 		if unit is Node2D and global_position.distance_to(unit.global_position) <= range_px:
 			FactionManager.identify_faction(team)
 			queue_redraw()

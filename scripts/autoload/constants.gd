@@ -440,6 +440,17 @@ const ENEMY_COMBAT_SIM_DURATION: float = 2.0
 # AI-team miners re-scan for diggable cells this often while waiting at an
 # exhausted mine (player miners keep the shared 5s retry in unit.gd).
 const ENEMY_MINER_RESCAN_INTERVAL: float = 2.0
+# Scouting (Revamp Phase 8): the first swordsman scout marches on the enemy
+# base at the 1:00 mark to identify the hidden faction; a replacement goes
+# out this long after the previous scout dies.
+const ENEMY_SCOUT_TIME: float = 60.0
+const ENEMY_SCOUT_RETRY_DELAY: float = 30.0
+# AI lantern placement (Phase 8): decision cadence and coin buffers kept on
+# top of the miner-upgrade reserve (build T1 early, upgrade to T2 only when
+# the economy is comfortable).
+const ENEMY_LANTERN_INTERVAL: float = 5.0
+const ENEMY_LANTERN_BUFFER: int = 150
+const ENEMY_LANTERN_UPGRADE_BUFFER: int = 400
 
 # ─── UNIT MICRO ───
 # Ranged fighters kite (step back while firing) when an enemy melee threat

@@ -7,6 +7,7 @@ const AIEconomy = preload("res://scripts/controllers/ai_economy.gd")
 const AIMining = preload("res://scripts/controllers/ai_mining.gd")
 const AICombat = preload("res://scripts/controllers/ai_combat.gd")
 const AISmartBehaviors = preload("res://scripts/controllers/ai_smart_behaviors.gd")
+const AIAwareness = preload("res://scripts/controllers/ai_awareness.gd")
 
 ## Target army composition — the economy tick trains whichever type is
 ## furthest below its share, so the AI fields a mixed force (tanky frontline,
@@ -43,6 +44,11 @@ var _ai_income_rate: float = 0.0
 var _last_player_mined: int = -1
 var _last_ai_mined: int = -1
 
+# Awareness (Revamp Phase 8): scouting, lantern placement, weather response.
+var _awareness_tick: float = 0.0
+var _scout: Unit = null
+var _next_scout_time: float = _Constants.ENEMY_SCOUT_TIME
+
 var _aggression_level: String = "balanced"  # "defend", "balanced", "push"
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
@@ -51,6 +57,7 @@ var _economy: AIEconomy
 var _mining: AIMining
 var _combat: AICombat
 var _smart: AISmartBehaviors
+var _awareness: AIAwareness
 
 
 func _init() -> void:
@@ -58,6 +65,7 @@ func _init() -> void:
 	_mining = AIMining.new(self)
 	_combat = AICombat.new(self)
 	_smart = AISmartBehaviors.new(self)
+	_awareness = AIAwareness.new(self)
 
 
 func _ready() -> void:
@@ -65,6 +73,11 @@ func _ready() -> void:
 	# miner level completes instead of waiting out the decision tick.
 	EconomyManager.coin_changed.connect(_on_economy_signal)
 	EconomyManager.miner_level_changed.connect(_on_economy_signal)
+	# Phase 8 weather/terrain response: same warnings the player gets.
+	WeatherManager.weather_warning_started.connect(_awareness._on_snowstorm_warning)
+	WeatherManager.snowstorm_ended.connect(_awareness._on_snowstorm_ended)
+	_grid.lava_warning_started.connect(_awareness._on_lava_warning)
+	_grid.lava_receded.connect(_awareness._on_lava_receded)
 
 
 ## Deferred economy re-tick: miner_level_changed fires from inside
@@ -102,6 +115,11 @@ func _process(delta: float) -> void:
 	if _aggression_tick >= _aggression_interval:
 		_aggression_tick = 0.0
 		_smart._update_aggression_level()
+
+	_awareness_tick += delta
+	if _awareness_tick >= 1.0:
+		_awareness._run_awareness(_awareness_tick)
+		_awareness_tick = 0.0
 
 	var smarts: int = GameManager.get_ai_smarts()
 	if smarts >= 1:
@@ -238,6 +256,18 @@ func _run_harassment() -> void:
 
 func _run_bait() -> void:
 	_smart._run_bait()
+
+
+func _run_awareness(delta: float = 1.0) -> void:
+	_awareness._run_awareness(delta)
+
+
+func _run_scouting() -> void:
+	_awareness._run_scouting()
+
+
+func _run_lantern_placement() -> void:
+	_awareness._run_lantern_placement()
 
 
 func _simulate_combat(duration: float = 2.0) -> float:

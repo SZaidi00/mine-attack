@@ -27,6 +27,9 @@ var carried_coin: int = 0
 var is_underground: bool = false
 var selected: bool = false
 var hovered: bool = false
+# Revamp Phase 8: set by the AI's weather response — a miner under shelter
+# orders (snowstorm/lava) must not wander back to work when it falls IDLE.
+var shelter_in_place: bool = false
 
 var _state: State = State.IDLE
 var _path: PackedVector2Array = PackedVector2Array()
@@ -278,7 +281,7 @@ func _process(delta: float) -> void:
 			_exhausted_retry_timer -= delta
 			if _exhausted_retry_timer <= 0.0:
 				_mine_exhausted = false
-		if _state == State.IDLE:
+		if _state == State.IDLE and not shelter_in_place:
 			_mining._handle_idle_miner()
 	elif data.is_fighter:
 		_apply_fighter_upgrade()

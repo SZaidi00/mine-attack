@@ -13,6 +13,10 @@ func _run_mining() -> void:
 	for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
 		if not unit.data.is_miner:
 			continue
+		# Revamp Phase 8: miners under shelter orders (storm/lava) hold their
+		# position until the awareness module releases them.
+		if unit.shelter_in_place:
+			continue
 		if _is_busy(unit):
 			continue
 		if unit.carried_coin >= unit.data.carry_capacity:

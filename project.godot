@@ -26,6 +26,7 @@ DebugLog="*res://scripts/autoload/debug_log.gd"
 AudioManager="*res://scripts/autoload/audio_manager.gd"
 SettingsManager="*res://scripts/autoload/settings_manager.gd"
 WeatherManager="*res://scripts/autoload/weather_manager.gd"
+AIBeliefSystem="*res://scripts/autoload/ai_belief_system.gd"
 
 [display]
 

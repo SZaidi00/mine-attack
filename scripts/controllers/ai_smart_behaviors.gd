@@ -118,7 +118,13 @@ func _update_aggression_level() -> void:
 	# Difficulty sets the aggression bias: defensive AIs need a bigger lead to
 	# push and give up defense sooner; aggressive ones push on a slim lead.
 	var thresholds: Vector2 = GameManager.get_aggression_thresholds()
-	if my_fighters > their_fighters * thresholds.x:
+	# Brute (Revamp Phase 8): mass-swordsman factions push mid-game on a
+	# slimmer lead than other factions.
+	var push_bias: float = 1.0
+	var faction: FactionData = FactionManager.get_faction(ai.team)
+	if faction != null and faction.faction_id == "brute":
+		push_bias = 0.85
+	if my_fighters > their_fighters * thresholds.x * push_bias:
 		ai._aggression_level = "push"
 	elif my_fighters < their_fighters * thresholds.y:
 		ai._aggression_level = "defend"

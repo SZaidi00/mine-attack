@@ -34,7 +34,7 @@ mine-attack/
 └── improvements/      # revamp.md + new sprites
 ```
 
-**Implemented revamp phases:** Phase 1 (Fog of War & lanterns), Phase 2 (factions), Phase 3 (towers & walls), Phase 4 (dynamic terrain: lava rising, cave-ins, ore depletion), Phase 5 (weather: snowstorms), Phase 6 (tech-tree overhaul: mutually-exclusive research branches, respec, traps, burning ground), Phase 7 (UI & menu updates: faction-select glow + themed particles, enemy-faction "???" top-bar indicator + identified popup, radial build menu, red weather warning). Phase 8 (AI belief system) is **not** implemented.
+**Implemented revamp phases:** Phase 1 (Fog of War & lanterns), Phase 2 (factions), Phase 3 (towers & walls), Phase 4 (dynamic terrain: lava rising, cave-ins, ore depletion), Phase 5 (weather: snowstorms), Phase 6 (tech-tree overhaul: mutually-exclusive research branches, respec, traps, burning ground), Phase 7 (UI & menu updates: faction-select glow + themed particles, enemy-faction "???" top-bar indicator + identified popup, radial build menu, red weather warning), Phase 8 (AI refactor: AIBeliefSystem autoload, faction scouting, AI lantern placement, weather/lava responses, faction-specific strategies).
 
 ## Runtime architecture
 
@@ -48,7 +48,7 @@ mine-attack/
 - `PlayerController` / `AIController` — input and AI.
 - `UI/HUD` — top/bottom bars, queue panel, pause/build menus, game-over panel.
 
-Autoloads (load order): `Constants`, `GameManager`, `FactionManager`, `EconomyManager`, `ResearchManager`, `DebugLog`, `AudioManager`, `SettingsManager`, `WeatherManager`.
+Autoloads (load order): `Constants`, `GameManager`, `FactionManager`, `EconomyManager`, `ResearchManager`, `DebugLog`, `AudioManager`, `SettingsManager`, `WeatherManager`, `AIBeliefSystem`.
 
 ## Code organization
 
@@ -64,6 +64,7 @@ Global singletons.
 - `audio_manager.gd` — synthesized SFX and ambience.
 - `settings_manager.gd` — window resolution persistence (desktop only).
 - `weather_manager.gd` — Phase 5 snowstorms: game-time state machine (warning → storm), vision/speed multipliers, lantern-shelter exposure damage, frost overlay flags, storm wind/ice-crack audio. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` (tests force storms instead).
+- `ai_belief_system.gd` — Phase 8: per-team belief maps (cells/unit sightings/enemy-faction guess) built only from that team's vision; confidence decays on stale intel. `update_belief_from_vision`, `get_believed_enemy_army`, `infer_enemy_faction`. Reset per match via `AIBeliefSystem.reset()` (HUD reset flows).
 
 ### `scripts/controllers/`
 
@@ -75,10 +76,11 @@ The controllers are split into thin main classes plus `RefCounted` helper module
   - `player_camera.gd` — zoom, pan, view bookmarks, screen shake.
   - `player_build_placement.gd` — lantern/tower/wall/trap placement ghost and validation.
 - `ai_controller.gd` — tick fields, aggression state, scout memory; delegates to helpers.
-  - `ai_economy.gd` — economy decisions, training, upgrades, research, miner culling.
-  - `ai_mining.gd` — miner task assignment and ore selection.
+  - `ai_economy.gd` — economy decisions, training (faction-flavored army mix, Phase 8), upgrades, research (faction branch preferences), miner culling.
+  - `ai_mining.gd` — miner task assignment and ore selection (skips miners under shelter orders).
   - `ai_combat.gd` — attack waves, base defense, wall breach.
-  - `ai_smart_behaviors.gd` — focus fire, wounded retreat, harassment, bait, combat predictor, aggression.
+  - `ai_smart_behaviors.gd` — focus fire, wounded retreat, harassment, bait, combat predictor, aggression (Brute pushes on a slimmer lead).
+  - `ai_awareness.gd` — Phase 8: faction scouting (swordsman at 1:00, 30s retry after it dies), defensive lantern placement/upgrades, snowstorm miner recall and lava evacuation (signal-driven, same warnings as the player; sheltered miners hold via `unit.shelter_in_place`).
 
 ### `scripts/world/`
 
@@ -90,7 +92,7 @@ The controllers are split into thin main classes plus `RefCounted` helper module
   - `grid_mining.gd` — cell damage, mining, ore reveal, ore depletion trickle.
   - `grid_ambience.gd` — snow/dust particles, plus the storm snow burst toggled by WeatherManager signals (Phase 5).
   - `grid_events.gd` — Revamp Phase 4 dynamic terrain: lava rising (warning → flood bottom 1–2 layers → recede into magma rock/fresh ore), cave-ins (3×3 SOLID_ROCK for 10s, 50 damage + push — Reinforced Pack miners take the damage but not the push), ore vein respawn. Game-time timers frozen on pause/game-over; random scheduling can be disabled via `GridWorld.set_dynamic_events_enabled(false)` (tests force events instead).
-- `building.gd` — training queue, deposits, building HP/destruction (Earth Shield `building_hp` bonus recomputed on research changes).
+- `building.gd` — training queue, deposits, building HP/destruction (Earth Shield `building_hp` bonus recomputed on research changes), faction identification polling (both directions since Phase 8: opposing units within `IDENTIFY_RANGE_CELLS` identify that building's faction).
 - `mine_entry.gd` — ladder teleport positions.
 - `lantern.gd` / `tower.gd` / `wall_segment.gd` / `trap.gd` — placeable structures.
 
@@ -164,7 +166,7 @@ Export presets: `Web` → `build/MineAttack.html`, `macOS` → `build/MineAttack
 - **Ladders are vertical:** `MineEntry` uses the shaft column center; climb states rely on the ladder column check.
 - **Building footprint writes `_cells` directly:** `building.gd` mutates `GridWorld._cells` and `_astar` directly.
 - **Resources duplicated at spawn:** `building.gd` calls `data.duplicate(true)` so each unit gets mutable `UnitData`.
-- **Autoloads survive scene reload:** `hud.gd` resets `GameManager`, `FactionManager`, `EconomyManager`, `ResearchManager`, `WeatherManager` on restart/quit-to-menu (and `WeatherManager` again in `hud._ready`, since `GameManager.match_time` accumulates through the main menu).
+- **Autoloads survive scene reload:** `hud.gd` resets `GameManager`, `FactionManager`, `EconomyManager`, `ResearchManager`, `WeatherManager`, `AIBeliefSystem` on restart/quit-to-menu (and `WeatherManager` + `AIBeliefSystem` again in `hud._ready`, since `GameManager.match_time` accumulates through the main menu).
 - **Test harness teardown:** free `main.tscn` immediately with `_main.free()` in `after_all`, not `queue_free()`, to avoid node-name collisions.
 - **Web full-bleed:** web export uses custom head include for canvas sizing.
 - **Viewport stretch:** logical UI is 1920×1080; camera base zoom adapts to physical window size.

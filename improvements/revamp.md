@@ -1057,7 +1057,7 @@ See the visual mockup for full sprite specifications. Summary:
 
 ## 9. Phase 8: AI Controller Refactor
 
-> **Current status:** `AIBeliefSystem` is **not yet implemented**. The current AI reads the scene tree directly (with fog-of-war gating mostly in `unit.gd` / `unit_vision_targeting.gd`) and its smart behaviors live in `scripts/controllers/ai_controller.gd` plus `scripts/controllers/ai_smart_behaviors.gd`. The design below describes the intended future autoload.
+> **Current status:** **Implemented.** `AIBeliefSystem` lives in `scripts/autoload/ai_belief_system.gd` (belief cells/units/faction, confidence decay, faction inference). The behavior updates from 9.2 live in `scripts/controllers/ai_awareness.gd` (scouting, lantern placement, weather/lava response) plus faction strategy hooks in `ai_economy.gd` / `ai_smart_behaviors.gd`. Faction identification in `building.gd` works both ways. Note: the AI's combat/economy decisions still read the live scene tree in most places — the belief system currently feeds scouting and faction inference, not every decision.
 
 ### 9.1 AIBeliefSystem
 

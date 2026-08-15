@@ -80,6 +80,8 @@ func _ready() -> void:
 	# accumulating since boot (through the menu), so the weather schedule must
 	# restart here rather than trust any clock that survived the menu.
 	WeatherManager.reset()
+	# Same for the AI's intel: beliefs reference the previous match's units.
+	AIBeliefSystem.reset()
 	_styling._ignore_mouse_recursive($TopBar)
 	_styling._ignore_mouse_recursive($BottomBar)
 	_styling._ignore_mouse_recursive(_game_over_panel)
@@ -184,6 +186,7 @@ func _on_pause_restart() -> void:
 	EconomyManager.reset()
 	ResearchManager.reset()
 	WeatherManager.reset()
+	AIBeliefSystem.reset()
 	get_tree().reload_current_scene()
 
 
@@ -198,6 +201,7 @@ func _quit_to_menu() -> void:
 	EconomyManager.reset()
 	ResearchManager.reset()
 	WeatherManager.reset()
+	AIBeliefSystem.reset()
 	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 
 
@@ -591,4 +595,5 @@ func _play_again() -> void:
 	EconomyManager.reset()
 	ResearchManager.reset()
 	WeatherManager.reset()
+	AIBeliefSystem.reset()
 	get_tree().reload_current_scene()
