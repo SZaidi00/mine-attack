@@ -139,10 +139,15 @@ static func _is_diggable_type(t: GridWorld.CellType) -> bool:
 		or t == GridWorld.CellType.MAGMA_ROCK or t == GridWorld.CellType.FRESH_ORE
 
 
-## Ore Sonar: marks every buried ORE/FRESH_ORE cell within `radius_cells` of
+## Ore Sonar: marks buried ORE/FRESH_ORE cells within `radius_cells` of
 ## `center` as revealed for `team`, so that team's miners treat it as
 ## discovered gold. Returns the number of newly revealed cells.
-func reveal_ore_in_radius(center: Vector2i, radius_cells: int, team: GameManager.Team) -> int:
+##
+## When `only_exposed_or_claimed` is true (underground lanterns), only veins
+## with at least one empty/mined neighbor or a miner already assigned to the
+## cell are revealed. The full Ore Sonar scan keeps the default `false` so it
+## can find buried veins.
+func reveal_ore_in_radius(center: Vector2i, radius_cells: int, team: GameManager.Team, only_exposed_or_claimed: bool = false) -> int:
 	var revealed: Array = []
 	for x in range(center.x - radius_cells, center.x + radius_cells + 1):
 		for y in range(center.y - radius_cells, center.y + radius_cells + 1):
@@ -152,6 +157,8 @@ func reveal_ore_in_radius(center: Vector2i, radius_cells: int, team: GameManager
 			var cell: GridWorld.Cell = grid._cells.get(pos)
 			if cell == null or (cell.type != GridWorld.CellType.ORE and cell.type != GridWorld.CellType.FRESH_ORE):
 				continue
+			if only_exposed_or_claimed and not _is_ore_exposed_or_claimed(pos):
+				continue
 			if cell.sonar_revealed.get(team, false):
 				continue
 			cell.sonar_revealed[team] = true
@@ -160,6 +167,21 @@ func reveal_ore_in_radius(center: Vector2i, radius_cells: int, team: GameManager
 		grid.queue_redraw()
 		grid.cells_revealed.emit(revealed)
 	return revealed.size()
+
+
+## True when an ore cell has been opened to the mine (has an empty/mined
+## neighbor) or a miner has already started working it. Used by underground
+## lanterns so they do not highlight fully buried veins.
+func _is_ore_exposed_or_claimed(grid_pos: Vector2i) -> bool:
+	var cell: GridWorld.Cell = grid._cells.get(grid_pos)
+	if cell == null:
+		return false
+	if cell.claimed_by != 0:
+		return true
+	for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		if not grid.is_solid(grid_pos + off):
+			return true
+	return false
 
 
 func is_ore_revealed(grid_pos: Vector2i, team: GameManager.Team) -> bool:

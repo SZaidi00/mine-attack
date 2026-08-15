@@ -253,14 +253,25 @@ func test_underground_lantern_max_count() -> void:
 	assert_false(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-20, 5))), "6th mine lantern exceeds the max of 5")
 
 
-func test_underground_lantern_reveals_buried_ore() -> void:
+func test_underground_lantern_reveals_exposed_ore_only() -> void:
+	# Place an ore vein directly next to the empty shaft so it is exposed.
+	var ore_pos: Vector2i = Vector2i(-16, 3)
+	_grid._cells[ore_pos] = GridWorld.Cell.new(GridWorld.CellType.ORE, 1, 1, Constants.LAYER_TILE_HP[1], 50)
+	_grid._astar.set_point_solid(ore_pos, true)
+
+	# Place a fully buried ore vein with solid dirt on all sides.
+	var buried_pos: Vector2i = Vector2i(-22, 3)
+	_grid._cells[buried_pos] = GridWorld.Cell.new(GridWorld.CellType.ORE, 1, 1, Constants.LAYER_TILE_HP[1], 50)
+	_grid._astar.set_point_solid(buried_pos, true)
+	for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var n: Vector2i = buried_pos + off
+		if not _grid._cells.has(n):
+			_grid._cells[n] = GridWorld.Cell.new(GridWorld.CellType.DIRT, 1, 1, Constants.LAYER_TILE_HP[1], 0)
+			_grid._astar.set_point_solid(n, true)
+
 	_place_built_lantern("underground_lantern", Vector2i(-15, 3))
-	var revealed: int = 0
-	for x in range(-25, -4):
-		for y in range(1, 14):
-			if _grid.is_ore_revealed(Vector2i(x, y), PLAYER):
-				revealed += 1
-	assert_gt(revealed, 0, "a built mine lantern must permanently reveal buried ore in its radius")
+	assert_true(_grid.is_ore_revealed(ore_pos, PLAYER), "a built mine lantern must reveal exposed ore in its radius")
+	assert_false(_grid.is_ore_revealed(buried_pos, PLAYER), "a built mine lantern must NOT reveal fully buried ore")
 
 
 # ─── Layer-locked vision ───

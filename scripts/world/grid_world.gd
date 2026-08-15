@@ -325,8 +325,8 @@ func damage_cell(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
 	return _mining.damage_cell(grid_pos, damage, miner_level)
 
 
-func reveal_ore_in_radius(center: Vector2i, radius_cells: int, team: GameManager.Team) -> int:
-	return _mining.reveal_ore_in_radius(center, radius_cells, team)
+func reveal_ore_in_radius(center: Vector2i, radius_cells: int, team: GameManager.Team, only_exposed_or_claimed: bool = false) -> int:
+	return _mining.reveal_ore_in_radius(center, radius_cells, team, only_exposed_or_claimed)
 
 
 func is_ore_revealed(grid_pos: Vector2i, team: GameManager.Team) -> bool:

@@ -115,11 +115,12 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
-## Underground lanterns reveal buried ore in their radius permanently (the
-## same sonar_revealed mechanism the Ore Sonar scan uses — it never fades).
+## Underground lanterns reveal exposed ore in their radius permanently. A vein
+## counts as exposed if it has an empty/mined neighbor or a miner has already
+## started mining it, so lanterns do not highlight fully buried ore.
 func _reveal_ore() -> void:
 	if _grid != null:
-		_grid.reveal_ore_in_radius(_grid.world_to_grid(global_position), vision_radius, team)
+		_grid.reveal_ore_in_radius(_grid.world_to_grid(global_position), vision_radius, team, true)
 
 
 func take_damage(amount: int) -> void:
