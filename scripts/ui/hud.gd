@@ -148,6 +148,7 @@ func _ready() -> void:
 	_menus._build_build_menu()
 	_build_lava_banner()
 	_build_weather_banner()
+	_build_volcano_banner()
 	_build_faction_popup()
 	_on_economy_changed(GameManager.Team.PLAYER)
 	_updates._sync_view_buttons()
@@ -173,6 +174,7 @@ func _process(_delta: float) -> void:
 	_updates._update_unit_breakdown()
 	_update_lava_banner()
 	_update_weather_banner()
+	_update_volcano_banner()
 	if _build_menu != null and _build_menu.visible:
 		_menus._update_build_menu()
 	# Keep the pause menu in sync with the tree state (pause is toggled from
@@ -372,6 +374,13 @@ var _weather_banner: HBoxContainer = null
 var _weather_banner_label: Label = null
 var _storm_vignette: TextureRect = null
 
+# Volcano banner + vignette: flashing countdown below the snowstorm banner
+# while a volcano eruption is imminent, and a red/orange edge vignette while
+# the eruption rages.
+var _volcano_banner: HBoxContainer = null
+var _volcano_banner_label: Label = null
+var _volcano_vignette: TextureRect = null
+
 
 func _build_lava_banner() -> void:
 	_lava_banner = HBoxContainer.new()
@@ -510,6 +519,89 @@ func _update_weather_banner() -> void:
 	var storm_on: bool = WeatherManager.is_snowstorm_active() and GameManager.game_active
 	if _storm_vignette != null and _storm_vignette.visible != storm_on:
 		_storm_vignette.visible = storm_on
+
+
+func _build_volcano_banner() -> void:
+	_volcano_banner = HBoxContainer.new()
+	_volcano_banner.name = "VolcanoWarningBanner"
+	_volcano_banner.alignment = BoxContainer.ALIGNMENT_CENTER
+	_volcano_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_volcano_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_volcano_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_volcano_banner.grow_vertical = Control.GROW_DIRECTION_END
+	_volcano_banner.position.y = 170.0
+	var icon: TextureRect = TextureRect.new()
+	icon.texture = _ICON_LAVA
+	icon.custom_minimum_size = Vector2(26, 26)
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.expand_mode = TextureRect.EXPAND_FIT_HEIGHT
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_volcano_banner.add_child(icon)
+	_volcano_banner_label = Label.new()
+	_volcano_banner_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.15))
+	_volcano_banner_label.add_theme_font_size_override("font_size", 28)
+	_volcano_banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_volcano_banner.add_child(_volcano_banner_label)
+	_volcano_banner.visible = false
+	add_child(_volcano_banner)
+
+	# Volcano vignette: red/orange edges closing in while the eruption rages.
+	_volcano_vignette = TextureRect.new()
+	_volcano_vignette.name = "VolcanoVignette"
+	_volcano_vignette.texture = _make_volcano_vignette_texture()
+	_volcano_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_volcano_vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	_volcano_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_volcano_vignette.visible = false
+	add_child(_volcano_vignette)
+
+	WeatherManager.volcano_warning_started.connect(_on_volcano_warning_started)
+	WeatherManager.volcano_started.connect(_on_volcano_started)
+	WeatherManager.volcano_ended.connect(_on_volcano_ended)
+
+
+## Radial gradient: transparent center fading to red/orange at the edges.
+func _make_volcano_vignette_texture() -> Texture2D:
+	var size: int = 256
+	var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var center: float = (size - 1) / 2.0
+	for x in range(size):
+		for y in range(size):
+			var d: float = Vector2(x - center, y - center).length() / center
+			var alpha: float = clampf((d - 0.45) / 0.55, 0.0, 1.0) ** 1.6 * 0.5
+			img.set_pixel(x, y, Color(0.65, 0.15, 0.05, alpha))
+	return ImageTexture.create_from_image(img)
+
+
+func _on_volcano_warning_started(_seconds: float) -> void:
+	_volcano_banner.visible = true
+
+
+func _on_volcano_started() -> void:
+	_volcano_banner.visible = false
+	_volcano_vignette.visible = true
+
+
+func _on_volcano_ended() -> void:
+	_volcano_vignette.visible = false
+
+
+func _update_volcano_banner() -> void:
+	if _volcano_banner == null:
+		return
+	if _volcano_banner.visible:
+		var remaining: float = WeatherManager.get_volcano_warning_remaining()
+		if remaining <= 0.0 or not GameManager.game_active:
+			_volcano_banner.visible = false
+		else:
+			_volcano_banner_label.text = "VOLCANO ERUPTION IN %ds" % ceili(remaining)
+			# Flashing red-orange pulse.
+			var pulse: float = 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0)
+			_volcano_banner.modulate = Color(1.0, 1.0, 1.0, pulse)
+	# The vignette follows the live volcano state.
+	var volcano_on: bool = WeatherManager.is_volcano_active() and GameManager.game_active
+	if _volcano_vignette != null and _volcano_vignette.visible != volcano_on:
+		_volcano_vignette.visible = volcano_on
 
 
 # Faction identified popup (Revamp Phase 7): a brief center-screen banner

@@ -18,6 +18,11 @@ func _draw_surface() -> void:
 	grid.draw_texture_rect(grid._SKY_TEXTURE, Rect2(world_left, -sky_height, world_width, sky_height), true)
 	grid.draw_rect(Rect2(world_left, -grid._BG_PAD, world_width, grid._BG_PAD - sky_height), grid._sky_top_color, true)
 
+	# Draw the decorative background volcano between sky and ground so it sits
+	# behind buildings and units.
+	if grid.volcano_background != null:
+		grid.volcano_background.draw_onto(grid)
+
 	# Surface ground background.
 	var ground_height: float = grid._SURFACE_GROUND_TEXTURE.get_height()
 	grid.draw_texture_rect(grid._SURFACE_GROUND_TEXTURE, Rect2(world_left, 0, world_width, ground_height), true)

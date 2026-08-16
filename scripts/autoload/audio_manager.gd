@@ -95,6 +95,10 @@ func _build_streams() -> void:
 	# a sharp ice crack one-shot.
 	_streams["storm_wind"] = _storm_wind_loop(5.0)
 	_streams["ice_crack"] = _ice_crack()
+	# Volcano event: deep warning alarm, looping eruption rumble, and meteor impacts.
+	_streams["volcano_warning"] = _volcano_warning()
+	_streams["volcano_rumble"] = _volcano_rumble_loop(4.0)
+	_streams["meteor_impact"] = _meteor_impact()
 	# Ambience (looping).
 	_streams["wind"] = _wind_loop(4.0)
 	_streams["drips"] = _drip_loop(5.0)
@@ -225,6 +229,52 @@ func _ice_crack() -> AudioStreamWAV:
 		prev = white
 		phase += lerpf(2400.0, 500.0, t) / _MIX_RATE
 		_write_sample(bytes, i, (high * 0.5 + sin(phase * TAU) * 0.35) * env * 0.6)
+	return _make_stream(frames, bytes)
+
+
+## Volcano warning: a deep, pulsing alarm tone — lower and more menacing than
+## the snowstorm alarm.
+func _volcano_warning() -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * 0.9)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	var phase: float = 0.0
+	for i in range(frames):
+		var t: float = float(i) / frames
+		var pulse: float = 0.5 + 0.5 * sin(t * TAU * 3.0)
+		var env: float = (1.0 - t) * (1.0 - t)
+		phase += lerpf(180.0, 120.0, t) / _MIX_RATE
+		var v: float = sin(phase * TAU) * pulse
+		_write_sample(bytes, i, v * env * 0.55)
+	return _make_stream(frames, bytes)
+
+
+## Volcano rumble: heavier, slower brown noise for the active eruption, looped.
+func _volcano_rumble_loop(duration: float) -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * duration)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	var smoothed: float = 0.0
+	for i in range(frames):
+		smoothed = lerpf(smoothed, randf() * 2.0 - 1.0, 0.005)
+		var t: float = float(i) / frames
+		# Slow, heavy swell so the rumble feels like a vast distant eruption.
+		var swell: float = 0.7 + 0.3 * sin(t * TAU * 1.3)
+		var seam: float = minf(1.0, minf(i, frames - i) / (_MIX_RATE * 0.25))
+		_write_sample(bytes, i, smoothed * swell * 1.0 * seam)
+	var stream: AudioStreamWAV = _make_stream(frames, bytes)
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = frames
+	return stream
+
+
+## Meteor impact: a short, bright explosion burst.
+func _meteor_impact() -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * 0.35)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	for i in range(frames):
+		var t: float = float(i) / frames
+		var env: float = (1.0 - t) * (1.0 - t)
+		_write_sample(bytes, i, (randf() * 2.0 - 1.0) * env * 0.9)
 	return _make_stream(frames, bytes)
 
 

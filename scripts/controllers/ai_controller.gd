@@ -76,6 +76,8 @@ func _ready() -> void:
 	# Phase 8 weather/terrain response: same warnings the player gets.
 	WeatherManager.weather_warning_started.connect(_awareness._on_snowstorm_warning)
 	WeatherManager.snowstorm_ended.connect(_awareness._on_snowstorm_ended)
+	WeatherManager.volcano_warning_started.connect(_awareness._on_volcano_warning)
+	WeatherManager.volcano_ended.connect(_awareness._on_volcano_ended)
 	_grid.lava_warning_started.connect(_awareness._on_lava_warning)
 	_grid.lava_receded.connect(_awareness._on_lava_receded)
 

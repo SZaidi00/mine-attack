@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/effects/volcano_background.gd" id="1_volcano_bg"]
+
+[node name="VolcanoBackground" type="Node2D"]
+position = Vector2(620, 0)
+script = ExtResource("1_volcano_bg")

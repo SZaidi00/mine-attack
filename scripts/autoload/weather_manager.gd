@@ -1,35 +1,47 @@
 extends Node
 
-# WeatherManager — surface weather events (Revamp Phase 5).
+# WeatherManager — surface weather events (Revamp Phase 5 + volcano event).
 #
-# Owns the snowstorm state machine (idle → warning → storm → idle, then
-# rescheduled) and the storm's global effects: vision/speed multipliers read
-# by the fog-of-war and unit-navigation code, and the exposure damage applied
-# to surface units standing outside a friendly lantern's radius.
+# Owns independent snowstorm and volcano state machines (each: idle → warning →
+# active → idle, then rescheduled). The snowstorm applies vision/speed
+# multipliers and exposure damage; the volcano rains meteors across the surface.
+# All three random events (snowstorm, volcano, lava rising) can overlap.
 #
 # Like GridEvents (Phase 4), all timers accumulate game-time delta and the
-# whole node is pausable, so warnings and storms freeze on pause/game-over
-# exactly like units and research. Random scheduling is gated by
-# events_enabled — forced triggers (tests, debug) always work.
+# whole node is pausable, so warnings and active phases freeze on pause/game-over
+# exactly like units and research. Random scheduling is gated by separate
+# events_enabled flags — forced triggers (tests, debug) always work.
 #
 # Like the other autoloads, state survives scene reloads — hud.gd calls
 # reset() on Play Again / Quit to Menu alongside GameManager/EconomyManager.
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
+const _METEOR_SCENE: PackedScene = preload("res://scenes/effects/meteor.tscn")
 
 signal weather_warning_started(seconds: float)
 signal snowstorm_started
 signal snowstorm_ended
+signal volcano_warning_started(seconds: float)
+signal volcano_started
+signal volcano_ended
 
-# Random event scheduling on/off; an in-flight warning or storm always runs
-# to completion either way.
+# Random event scheduling on/off; an in-flight warning or active phase always
+# runs to completion either way.
 var events_enabled: bool = true
+var volcano_events_enabled: bool = true
 
 # Game-time clock driving the schedule (seconds of active match time).
 var _clock: float = 0.0
 var _snow_next_at: float = 0.0
 var _warning_left: float = 0.0
 var _storm_left: float = 0.0
+
+# Volcano schedule/state.
+var _volcano_next_at: float = 0.0
+var _volcano_warning_left: float = 0.0
+var _volcano_active_left: float = 0.0
+var _volcano_meteor_timer: float = 0.0
+var _volcano_rumble_player: AudioStreamPlayer = null
 
 # Exposure damage accrues fractionally and lands in 1-HP chunks; protection
 # is re-evaluated on the same cadence so the frost tint follows movement.
@@ -48,12 +60,17 @@ func _ready() -> void:
 
 func reset() -> void:
 	_end_storm_wind()
+	_end_volcano_rumble()
 	_clear_frost()
 	_clock = 0.0
 	_warning_left = 0.0
 	_storm_left = 0.0
 	_damage_accum.clear()
 	_snow_next_at = _seconds_to_next_snowstorm()
+	_volcano_next_at = _seconds_to_next_volcano()
+	_volcano_warning_left = 0.0
+	_volcano_active_left = 0.0
+	_volcano_meteor_timer = 0.0
 
 
 func _process(delta: float) -> void:
@@ -83,6 +100,25 @@ func _process(delta: float) -> void:
 			_end_snowstorm()
 	elif events_enabled and _clock >= _snow_next_at:
 		_start_snowstorm_warning()
+
+	# Volcano: independent state machine. Can run at the same time as snowstorm
+	# or lava rising.
+	if _volcano_warning_left > 0.0:
+		_volcano_warning_left -= delta
+		if _volcano_warning_left <= 0.0:
+			_volcano_warning_left = 0.0
+			_start_volcano()
+	elif _volcano_active_left > 0.0:
+		_volcano_active_left -= delta
+		_volcano_meteor_timer -= delta
+		if _volcano_meteor_timer <= 0.0:
+			_volcano_meteor_timer = _volcano_meteor_interval()
+			_spawn_meteor()
+		if _volcano_active_left <= 0.0:
+			_volcano_active_left = 0.0
+			_end_volcano()
+	elif volcano_events_enabled and _clock >= _volcano_next_at:
+		_start_volcano_warning()
 
 
 # ─── Snowstorm ───
@@ -192,6 +228,8 @@ func _start_snowstorm() -> void:
 	if _storm_left > 0.0:
 		return
 	_warning_left = 0.0
+	# A snowstorm extinguishes any existing volcano fires.
+	_extinguish_volcano_fires()
 	# Stormcaller extends the storm duration if either team has it.
 	var duration_bonus: float = maxf(0.0, maxf(
 		ResearchManager.get_stat_bonus(GameManager.Team.PLAYER, "storm_duration_bonus"),
@@ -212,6 +250,96 @@ func _end_snowstorm() -> void:
 	_clear_frost()
 	snowstorm_ended.emit()
 	_snow_next_at = _clock + _seconds_to_next_snowstorm()
+
+
+# ─── Volcano ───
+
+func is_volcano_warning() -> bool:
+	return _volcano_warning_left > 0.0
+
+
+func is_volcano_active() -> bool:
+	return _volcano_active_left > 0.0
+
+
+func get_volcano_warning_remaining() -> float:
+	return _volcano_warning_left
+
+
+func get_volcano_remaining() -> float:
+	return _volcano_active_left
+
+
+## Random seconds until the next volcano eruption, scaled by difficulty.
+func _seconds_to_next_volcano() -> float:
+	var interval_mult: float = GameManager.get_volcano_interval_multiplier()
+	return randf_range(_Constants.VOLCANO_MIN_INTERVAL, _Constants.VOLCANO_MAX_INTERVAL) * interval_mult
+
+
+## Seconds between meteors during an eruption, scaled by difficulty.
+func _volcano_meteor_interval() -> float:
+	var rate_mult: float = GameManager.get_volcano_meteor_rate_multiplier()
+	return _Constants.VOLCANO_METEOR_INTERVAL_BASE / maxf(0.1, rate_mult)
+
+
+func _start_volcano_warning() -> void:
+	if _volcano_warning_left > 0.0 or _volcano_active_left > 0.0:
+		return
+	_volcano_warning_left = _Constants.VOLCANO_WARNING_TIME
+	DebugLog.log_command("WeatherManager", "volcano_warning", "warning=%.0fs" % _volcano_warning_left)
+	AudioManager.play("volcano_warning", Vector2.INF, -6.0)
+	volcano_warning_started.emit(_volcano_warning_left)
+	_halve_lava_time()
+
+
+func _start_volcano() -> void:
+	if _volcano_active_left > 0.0:
+		return
+	_volcano_warning_left = 0.0
+	var duration_mult: float = GameManager.get_volcano_duration_multiplier()
+	_volcano_active_left = _Constants.VOLCANO_DURATION * duration_mult
+	_volcano_meteor_timer = 0.0
+	DebugLog.log_command("WeatherManager", "volcano_started", "duration=%.0fs" % _volcano_active_left)
+	_start_volcano_rumble()
+	volcano_started.emit()
+	_spawn_meteor()
+
+
+func _end_volcano() -> void:
+	_volcano_active_left = 0.0
+	DebugLog.log_command("WeatherManager", "volcano_ended", "")
+	_end_volcano_rumble()
+	volcano_ended.emit()
+	_volcano_next_at = _clock + _seconds_to_next_volcano()
+
+
+## Spawns a single meteor at a random surface x coordinate.
+func _spawn_meteor() -> void:
+	var grid: GridWorld = get_node_or_null("/root/Main/World/GridWorld")
+	if grid == null:
+		return
+	var x_cell: int = randi_range(GridWorld.X_MIN, GridWorld.X_MAX)
+	var target_pos: Vector2 = grid.grid_to_world(Vector2i(x_cell, 0))
+	var meteor: Node = _METEOR_SCENE.instantiate()
+	meteor.setup(target_pos, GameManager.get_volcano_damage_multiplier(), GameManager.get_volcano_duration_multiplier())
+	# During a snowstorm, meteors deal impact damage but do not leave fire.
+	meteor.leave_burn_patch = not is_snowstorm_active()
+	get_tree().current_scene.add_child(meteor)
+
+
+## When the volcano warning starts, accelerate any pending or current lava rise.
+func _halve_lava_time() -> void:
+	var grid: GridWorld = get_node_or_null("/root/Main/World/GridWorld")
+	if grid != null and grid.has_method("halve_lava_remaining_time"):
+		grid.halve_lava_remaining_time()
+
+
+## HQ buildings are protected by default. This helper supports the commented-out
+## higher-difficulty HQ damage logic.
+func _should_damage_hq() -> bool:
+	return false
+	# Uncomment to enable HQ volcano damage on NIGHTMARE/GODLY:
+	# return GameManager.difficulty == GameManager.Difficulty.NIGHTMARE or GameManager.difficulty == GameManager.Difficulty.GODLY
 
 
 ## Exposure damage to every surface unit outside a friendly lantern's radius
@@ -327,12 +455,43 @@ func _end_storm_wind() -> void:
 		_storm_wind_player = null
 
 
+# ─── Volcano audio ───
+
+func _start_volcano_rumble() -> void:
+	_end_volcano_rumble()
+	_volcano_rumble_player = AudioStreamPlayer.new()
+	_volcano_rumble_player.stream = AudioManager._streams.get("volcano_rumble")
+	_volcano_rumble_player.bus = &"Ambient"
+	_volcano_rumble_player.volume_db = 6.0
+	add_child(_volcano_rumble_player)
+	_volcano_rumble_player.play()
+
+
+func _end_volcano_rumble() -> void:
+	if _volcano_rumble_player != null:
+		_volcano_rumble_player.queue_free()
+		_volcano_rumble_player = null
+
+
+## Free all volcano burn patches (called when a snowstorm starts).
+func _extinguish_volcano_fires() -> void:
+	for patch in get_tree().get_nodes_in_group("burning_grounds"):
+		if patch.is_volcano_fire:
+			patch.queue_free()
+
+
 # ─── Test / debug hooks ───
 
 ## Random snowstorm scheduling on or off. Forced triggers below work either
 ## way; an in-flight warning or storm always completes.
 func set_weather_events_enabled(enabled: bool) -> void:
 	events_enabled = enabled
+
+
+## Random volcano scheduling on or off. Forced triggers below work either way;
+## an in-flight warning or eruption always completes.
+func set_volcano_events_enabled(enabled: bool) -> void:
+	volcano_events_enabled = enabled
 
 
 func force_snowstorm_warning() -> void:
@@ -346,3 +505,16 @@ func force_snowstorm_start() -> void:
 func force_snowstorm_end() -> void:
 	if _storm_left > 0.0:
 		_end_snowstorm()
+
+
+func force_volcano_warning() -> void:
+	_start_volcano_warning()
+
+
+func force_volcano_start() -> void:
+	_start_volcano()
+
+
+func force_volcano_end() -> void:
+	if _volcano_active_left > 0.0:
+		_end_volcano()

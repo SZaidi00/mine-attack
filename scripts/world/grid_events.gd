@@ -142,6 +142,24 @@ func get_lava_warning_remaining() -> float:
 	return _lava_warning_left
 
 
+## Called when a volcano eruption warning starts: accelerate any pending or
+## in-progress lava rise by halving its remaining time.
+func halve_remaining_time() -> void:
+	match _lava_state:
+		LavaState.WARNING:
+			_lava_warning_left *= 0.5
+		LavaState.CREEPING_UP:
+			# Advance the timer so only half the remaining up-time is left.
+			var remaining: float = maxf(0.0, _Constants.LAVA_CREEP_UP_TIME - _lava_timer)
+			_lava_timer += remaining * 0.5
+		LavaState.CREEPING_DOWN:
+			var remaining: float = maxf(0.0, _Constants.LAVA_CREEP_DOWN_TIME - _lava_timer)
+			_lava_timer += remaining * 0.5
+		LavaState.IDLE:
+			if _lava_next_at > _clock:
+				_lava_next_at = _clock + (_lava_next_at - _clock) * 0.5
+
+
 ## Ease-in-out curve for a more natural tide motion.
 func _smoothstep(t: float) -> float:
 	return t * t * (3.0 - 2.0 * t)

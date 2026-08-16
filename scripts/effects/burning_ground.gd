@@ -12,6 +12,10 @@ var team: GameManager.Team = GameManager.Team.PLAYER
 var radius: float = 40.0
 var dps: float = Constants.BURNING_GROUND_DPS
 var duration: float = Constants.BURNING_GROUND_DURATION
+## If true, this fire damages every unit regardless of team (volcano meteor scorch).
+var damage_all_teams: bool = false
+## If true, this patch was spawned by a volcano meteor and can be extinguished by snowstorms.
+var is_volcano_fire: bool = false
 
 var _elapsed: float = 0.0
 var _tick_timer: float = 0.0
@@ -20,6 +24,7 @@ var _flicker: float = 0.0
 
 func _ready() -> void:
 	_flicker = randf() * TAU  # desync overlapping patches
+	add_to_group("burning_grounds")
 	queue_redraw()
 
 
@@ -46,12 +51,52 @@ func _process(delta: float) -> void:
 func _tick_damage() -> void:
 	var damage: int = maxi(1, roundi(dps * TICK_INTERVAL))
 	for unit in get_tree().get_nodes_in_group("units"):
-		if unit.team == team or unit._state == Unit.State.DEAD:
+		if unit._state == Unit.State.DEAD:
+			continue
+		if not damage_all_teams and unit.team == team:
 			continue
 		if unit.get_combat_position().distance_to(global_position) <= radius:
 			# Environmental: ground fire is attrition, not an attacker — no
 			# popups or combat reflexes (same convention as storm exposure).
 			unit.take_damage(damage, null, true)
+	_damage_structures(damage)
+
+
+func _damage_structures(damage: int) -> void:
+	# Volcano fires scorch structures; crystal-forge fires do not.
+	if not damage_all_teams:
+		return
+	for group in ["towers", "lanterns", "walls"]:
+		for node in get_tree().get_nodes_in_group(group):
+			if _is_protected_structure(node):
+				continue
+			if node.global_position.distance_to(global_position) <= radius:
+				node.take_damage(damage)
+	# Buildings group includes HQ buildings; skip those but damage nothing else
+	# because the only other buildings are the HQ. Mine entries are also protected.
+	for building in get_tree().get_nodes_in_group("buildings"):
+		if _is_protected_structure(building):
+			continue
+		if building.global_position.distance_to(global_position) <= radius:
+			building.take_damage(damage)
+	# HQ volcano damage is disabled by design. Uncomment the block below (and
+	# the matching block in Meteor) to enable it on NIGHTMARE/GODLY:
+	# if WeatherManager._should_damage_hq():
+	# 	for building in get_tree().get_nodes_in_group("buildings"):
+	# 		if building.name != "PlayerBuilding" and building.name != "EnemyBuilding":
+	# 			continue
+	# 		if building.global_position.distance_to(global_position) <= radius:
+	# 			building.take_damage(damage)
+
+
+func _is_protected_structure(node: Node) -> bool:
+	# HQ buildings and mine entries are protected from volcano fire.
+	if node.is_in_group("mine_entries"):
+		return true
+	# The two headquarters are the only nodes named PlayerBuilding/EnemyBuilding.
+	if node.name == "PlayerBuilding" or node.name == "EnemyBuilding":
+		return true
+	return false
 
 
 func _draw() -> void:

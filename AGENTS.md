@@ -21,7 +21,7 @@ mine-attack/
 │   ├── building.tscn / mine_entry.tscn / projectile.tscn / unit.tscn
 │   ├── lantern.tscn / tower.tscn / wall_segment.tscn / trap.tscn
 │   ├── ui/                    # main_menu, hud, debug_overlay
-│   └── effects/               # coin_popup, damage_popup, coin_pickup, reject_popup, burning_ground
+│   └── effects/               # coin_popup, damage_popup, coin_pickup, reject_popup, burning_ground, meteor, volcano_background
 ├── scripts/
 │   ├── autoload/      # constants, game_manager, economy_manager, faction_manager, research_manager, debug_log, audio_manager, settings_manager, weather_manager
 │   ├── controllers/   # ai_controller, player_controller + helper modules
@@ -34,7 +34,7 @@ mine-attack/
 └── improvements/      # revamp.md + new sprites
 ```
 
-**Implemented revamp phases:** Phase 1 (Fog of War & lanterns), Phase 2 (factions), Phase 3 (towers & walls), Phase 4 (dynamic terrain: lava rising, cave-ins, ore depletion), Phase 5 (weather: snowstorms), Phase 6 (tech-tree overhaul: mutually-exclusive research branches, respec, traps, burning ground), Phase 7 (UI & menu updates: faction-select glow + themed particles, enemy-faction "???" top-bar indicator + identified popup, radial build menu, red weather warning), Phase 8 (AI refactor: AIBeliefSystem autoload, faction scouting, AI lantern placement, weather/lava responses, faction-specific strategies).
+**Implemented revamp phases:** Phase 1 (Fog of War & lanterns), Phase 2 (factions), Phase 3 (towers & walls), Phase 4 (dynamic terrain: lava rising, cave-ins, ore depletion), Phase 5 (weather: snowstorms), Phase 6 (tech-tree overhaul: mutually-exclusive research branches, respec, traps, burning ground), Phase 7 (UI & menu updates: faction-select glow + themed particles, enemy-faction "???" top-bar indicator + identified popup, radial build menu, red weather warning), Phase 8 (AI refactor: AIBeliefSystem autoload, faction scouting, AI lantern placement, weather/lava responses, faction-specific strategies), Phase 9 (volcano weather event: background volcano, eruption warnings, meteors, burn patches, snowstorm extinguishing, lava-time acceleration).
 
 ## Runtime architecture
 
@@ -63,7 +63,7 @@ Global singletons.
 - `research_manager.gd` — timed branch research tree (Phase 6): mutually-exclusive tiers where completing a tech permanently locks its alternative, one-time 500g respec, active research slot, Ore Sonar scan. Includes the standalone `arctic_training` snowstorm-movement buff.
 - `audio_manager.gd` — synthesized SFX and ambience.
 - `settings_manager.gd` — window resolution persistence (desktop only).
-- `weather_manager.gd` — Phase 5 snowstorms: game-time state machine (warning → storm), vision/speed multipliers (storm movement speed now scales down on higher difficulties and is raised by the Arctic Training research), lantern-shelter exposure damage (damage and storm frequency also scale up with difficulty), frost overlay flags, storm wind/ice-crack audio. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` (tests force storms instead).
+- `weather_manager.gd` — Phase 5 snowstorms + Phase 9 volcano: independent game-time state machines for snowstorms (warning → storm) and volcano eruptions (warning → active meteors). Snowstorms apply vision/speed multipliers (storm movement speed scales down on higher difficulties and is raised by Arctic Training), lantern-shelter exposure damage, frost overlays, and storm wind/ice-crack audio. Volcanoes rain meteors across the surface that deal impact damage and leave burning ground; meteors during an overlapping snowstorm deal impact only and snowstorms extinguish existing volcano fires. Both events' scheduling/damage/duration/meteor rate scale with difficulty. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` and `WeatherManager.set_volcano_events_enabled(false)` (tests force events instead).
 - `ai_belief_system.gd` — Phase 8: per-team belief maps (cells/unit sightings/enemy-faction guess) built only from that team's vision; confidence decays on stale intel. `update_belief_from_vision`, `get_believed_enemy_army`, `infer_enemy_faction`. Reset per match via `AIBeliefSystem.reset()` (HUD reset flows).
 
 ### `scripts/controllers/`

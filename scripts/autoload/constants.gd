@@ -250,6 +250,24 @@ const SNOWSTORM_WARNING_TIME: float = 5.0
 const SNOWSTORM_VISION_MULT: float = 0.5
 const SNOWSTORM_DAMAGE_PER_SEC: float = 2.0
 
+# ─── VOLCANO ───
+# Volcano eruptions: independent random surface event. A warning sounds, then
+# meteors rain down across the whole surface for VOLCANO_DURATION seconds.
+# Each meteor deals impact damage in a small radius and leaves burning ground
+# that damages units and structures over time. If a snowstorm is active, meteors
+# still fall but do not leave fire; any existing volcano fires are extinguished
+# when the snowstorm begins. HQ buildings and mine entries are protected.
+const VOLCANO_MIN_INTERVAL: float = 100.0
+const VOLCANO_MAX_INTERVAL: float = 150.0
+const VOLCANO_WARNING_TIME: float = 7.0
+const VOLCANO_DURATION: float = 18.0
+const VOLCANO_METEOR_INTERVAL_BASE: float = 0.9
+const VOLCANO_METEOR_IMPACT_DAMAGE_BASE: int = 35
+const VOLCANO_METEOR_RADIUS_CELLS: float = 1.5
+const VOLCANO_BURN_DPS_BASE: float = 6.0
+const VOLCANO_BURN_DURATION_BASE: float = 9.0
+const VOLCANO_BURN_RADIUS_CELLS: float = 1.0
+
 # ─── RESEARCH TREE (Revamp Phase 6+) ───
 # Timed research bought through ResearchManager (one active research per team,
 # up to RESEARCH_QUEUE_MAX queued behind it, 100% refund on cancel). The tree

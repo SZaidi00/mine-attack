@@ -232,6 +232,21 @@ func _on_lava_receded() -> void:
 	_release_sheltered_miners()
 
 
+## Volcano warning: recall all surface units (miners and fighters) into shelter
+## the same way snowstorms do. Underground units are already safe from meteors.
+func _on_volcano_warning(_seconds: float) -> void:
+	if not GameManager.game_active:
+		return
+	for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
+		if unit._state == Unit.State.DEAD or unit.is_underground:
+			continue
+		_shelter_miner(unit)
+
+
+func _on_volcano_ended() -> void:
+	_release_sheltered_miners()
+
+
 func _shelter_miner(unit: Unit) -> void:
 	if unit.shelter_in_place:
 		return

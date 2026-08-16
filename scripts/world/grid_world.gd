@@ -140,6 +140,10 @@ var _shimmer_timer: float = 0.0
 var _sky_top_color: Color = Color(0.02, 0.03, 0.06)
 var _underground_bottom_color: Color = Color(0.02, 0.03, 0.06)
 
+# Volcano background reference, set by VolcanoBackground._ready so GridWorld
+# can draw it between the sky and the ground (behind gameplay).
+var volcano_background: Node = null
+
 # Cohesive helper objects: each group of GridWorld responsibilities is
 # delegated to a RefCounted helper that accesses grid state via `grid.`.
 var _map_gen: GridMapGeneration
@@ -380,6 +384,11 @@ func is_lava_active() -> bool:
 
 func get_lava_warning_remaining() -> float:
 	return _events.get_lava_warning_remaining()
+
+
+## Called by WeatherManager when a volcano eruption warning starts.
+func halve_lava_remaining_time() -> void:
+	_events.halve_remaining_time()
 
 
 ## Highest the impending lava wave will reach (lowest y). Useful for evacuation
