@@ -14,6 +14,7 @@ var _timer: float = LIFETIME
 
 
 func _ready() -> void:
+	add_to_group("coin_pickups")
 	_add_pickup_area()
 	queue_redraw()
 
@@ -57,6 +58,8 @@ func _on_area_entered(area: Area2D) -> void:
 		return
 	var taken: int = mini(coin_value, space)
 	body.set("carried_coin", carried + taken)
+	if taken > 0:
+		body.set("_deposit_requested", true)
 	coin_value -= taken
 	body.queue_redraw()
 	_spawn_collected_popup(taken)

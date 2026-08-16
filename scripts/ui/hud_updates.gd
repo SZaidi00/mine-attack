@@ -1,0 +1,177 @@
+class_name HUDUpdates
+extends RefCounted
+
+var hud: HUD
+
+func _init(h: HUD) -> void:
+	hud = h
+
+
+## Revamp Phase 2: faction icons in the top bar. The player's own faction is
+## always shown; the enemy's stays hidden until a scout identifies it (the
+## "Enemy: ???" label swaps to the faction name — Revamp Phase 7).
+func _setup_faction_icons() -> void:
+	if hud._player_faction_icon:
+		var player_faction: FactionData = FactionManager.get_faction(GameManager.Team.PLAYER)
+		if player_faction != null and player_faction.icon != null:
+			hud._player_faction_icon.texture = player_faction.icon
+			hud._player_faction_icon.tooltip_text = "Your faction: %s" % player_faction.faction_name
+		else:
+			hud._player_faction_icon.visible = false
+	if hud._enemy_faction_icon:
+		hud._enemy_faction_icon.visible = false
+		if FactionManager.is_faction_identified(GameManager.Team.ENEMY):
+			_on_faction_identified(GameManager.Team.ENEMY)
+		elif not FactionManager.faction_identified.is_connected(_on_faction_identified):
+			FactionManager.faction_identified.connect(_on_faction_identified)
+
+
+func _on_faction_identified(team: GameManager.Team) -> void:
+	if team != GameManager.Team.ENEMY or hud._enemy_faction_icon == null:
+		return
+	var enemy_faction: FactionData = FactionManager.get_faction(GameManager.Team.ENEMY)
+	if enemy_faction != null and enemy_faction.icon != null:
+		hud._enemy_faction_icon.texture = enemy_faction.icon
+		hud._enemy_faction_icon.visible = true
+	if enemy_faction != null and hud._enemy_faction_label != null:
+		hud._enemy_faction_label.text = "Enemy: %s" % enemy_faction.faction_name
+		hud._enemy_faction_label.add_theme_color_override("font_color", enemy_faction.menu_color)
+		hud._enemy_faction_label.tooltip_text = enemy_faction.description
+
+
+func _sync_speed_buttons() -> void:
+	if hud._pause_button.button_pressed != GameManager.soft_paused:
+		hud._pause_button.set_pressed_no_signal(GameManager.soft_paused)
+	for speed: float in hud._speed_buttons:
+		var btn: Button = hud._speed_buttons[speed]
+		var pressed: bool = not GameManager.soft_paused and GameManager.game_speed == speed
+		if btn.button_pressed != pressed:
+			btn.set_pressed_no_signal(pressed)
+
+
+func _sync_view_buttons() -> void:
+	var pc: PlayerController = hud._get_player_controller()
+	var underground: bool = pc.is_underground_view() if pc else false
+	if hud._surface_button.button_pressed != (not underground):
+		hud._surface_button.set_pressed_no_signal(not underground)
+	if hud._underground_button.button_pressed != underground:
+		hud._underground_button.set_pressed_no_signal(underground)
+
+
+## The Attack/Defend/Garrison buttons are toggles reflecting the persistent
+## stance mode: the active mode stays highlighted (radio-style).
+func _sync_stance_buttons(pc: PlayerController) -> void:
+	var stance: String = pc.get_stance()
+	for stance_name: String in hud._stance_buttons:
+		var btn: Button = hud._stance_buttons[stance_name]
+		if btn.button_pressed != (stance == stance_name):
+			btn.set_pressed_no_signal(stance == stance_name)
+
+
+## Selection readout in the top bar: a count for groups, the unit's name
+## plus live HP when exactly one unit is selected, or structure info and the
+## demolition refund when structures are selected.
+func _update_selection_label(pc: PlayerController) -> void:
+	var selected_units: Array = pc.get_selected_units().filter(func(u): return is_instance_valid(u))
+	var selected_structures: Array = pc.get_selected_structures().filter(func(s): return is_instance_valid(s))
+	if selected_units.size() == 1 and selected_structures.is_empty():
+		var unit = selected_units[0]
+		var data = unit.get("data")
+		if data != null:
+			hud._selection_label.text = "%s — HP %d/%d" % [data.unit_name, unit.get("hp"), data.max_hp]
+			if data.is_miner:
+				hud._selection_label.text += " — Gold %d/%d" % [unit.get("carried_coin"), data.carry_capacity]
+			return
+	if selected_structures.size() == 1 and selected_units.is_empty():
+		var structure = selected_structures[0]
+		var name: String = _structure_display_name(structure)
+		var hp: int = structure.get("hp") if structure.get("max_hp") != null else 0
+		var max_hp: int = structure.get("max_hp") if structure.get("max_hp") != null else 0
+		var refund: int = _total_demolish_refund(selected_structures)
+		hud._selection_label.text = "%s — HP %d/%d — Demolish for %dg" % [name, hp, max_hp, refund]
+		return
+	if selected_units.is_empty() and selected_structures.is_empty():
+		hud._selection_label.text = "Selected: 0"
+		return
+	# Mixed or multi-selection: show counts and total structure refund.
+	var refund: int = _total_demolish_refund(selected_structures)
+	var text: String = "Selected: %d units" % selected_units.size()
+	if not selected_structures.is_empty():
+		text += ", %d structures" % selected_structures.size()
+	if refund > 0:
+		text += " — Demolish for %dg" % refund
+	hud._selection_label.text = text
+
+
+func _structure_display_name(structure: Node) -> String:
+	if structure.is_in_group("lanterns"):
+		if structure.get("is_underground_lantern"):
+			return "Mine Lantern"
+		return "Lantern T%d" % structure.get("tier")
+	if structure.is_in_group("towers"):
+		return "Sentry Tower"
+	if structure.is_in_group("walls"):
+		return "Wall"
+	if structure.is_in_group("traps"):
+		return "Trap"
+	return "Structure"
+
+
+func _total_demolish_refund(structures: Array) -> int:
+	var total: int = 0
+	for s in structures:
+		if is_instance_valid(s):
+			total += roundi(s.get("total_cost") * hud._Constants.STRUCTURE_DEMOLISH_REFUND_RATIO)
+	return total
+
+
+func _update_unit_breakdown() -> void:
+	var counts: Dictionary = { "Miner": 0, "Swordsman": 0, "Archer": 0, "Wizard": 0, "Dragon": 0, "Pigeon": 0 }
+	for unit in hud.get_tree().get_nodes_in_group("player"):
+		var data = unit.get("data")
+		if data == null:
+			continue
+		var unit_name: String = data.unit_name
+		if counts.has(unit_name):
+			counts[unit_name] += 1
+	for unit_name: String in hud._unit_count_labels:
+		hud._unit_count_labels[unit_name].text = "%d" % counts.get(unit_name, 0)
+
+
+func _update_upgrade_button() -> void:
+	var level: int = EconomyManager.get_miner_level(GameManager.Team.PLAYER)
+	var cost: int = EconomyManager.get_miner_upgrade_cost(GameManager.Team.PLAYER)
+	if cost < 0:
+		hud._upgrade_button.text = "Upgrade Miner\nMax Level"
+		hud._upgrade_button.disabled = true
+		hud._upgrade_button.tooltip_text = "Miners are fully upgraded"
+	else:
+		hud._upgrade_button.text = "Upgrade Miner\nLv %d → %d | %d" % [level, level + 1, cost]
+		var affordable: bool = EconomyManager.can_afford(GameManager.Team.PLAYER, cost)
+		hud._upgrade_button.disabled = not affordable
+		hud._upgrade_button.tooltip_text = "" if affordable else "Not enough coin (%d needed)" % cost
+
+
+func _update_fighter_upgrade_buttons() -> void:
+	for unit_id: String in hud._fighter_upgrade_buttons:
+		var btn: Button = hud._fighter_upgrade_buttons[unit_id]
+		var level: int = EconomyManager.get_fighter_level(GameManager.Team.PLAYER, unit_id)
+		var cost: int = EconomyManager.get_fighter_upgrade_cost(GameManager.Team.PLAYER, unit_id)
+		if cost < 0:
+			btn.text = "%s\nMax Level" % unit_id.capitalize()
+			btn.disabled = true
+			btn.tooltip_text = "%s is fully upgraded" % unit_id.capitalize()
+		else:
+			btn.text = "%s\nLv %d → %d | %d" % [unit_id.capitalize(), level, level + 1, cost]
+			var affordable: bool = EconomyManager.can_afford(GameManager.Team.PLAYER, cost)
+			btn.disabled = not affordable
+			btn.tooltip_text = "" if affordable else "Not enough coin (%d needed)" % cost
+
+
+func _initialize_hp_labels() -> void:
+	var player_building: Node2D = hud._get_player_building()
+	if player_building:
+		hud._player_hp_label.text = "%d" % player_building.get("_hp")
+	var enemy_building: Node2D = hud._get_enemy_building()
+	if enemy_building:
+		hud._enemy_hp_label.text = "%d" % enemy_building.get("_hp")

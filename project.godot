@@ -19,11 +19,14 @@ config/icon="res://icon.svg"
 
 Constants="*res://scripts/autoload/constants.gd"
 GameManager="*res://scripts/autoload/game_manager.gd"
+FactionManager="*res://scripts/autoload/faction_manager.gd"
 EconomyManager="*res://scripts/autoload/economy_manager.gd"
 ResearchManager="*res://scripts/autoload/research_manager.gd"
 DebugLog="*res://scripts/autoload/debug_log.gd"
 AudioManager="*res://scripts/autoload/audio_manager.gd"
 SettingsManager="*res://scripts/autoload/settings_manager.gd"
+WeatherManager="*res://scripts/autoload/weather_manager.gd"
+AIBeliefSystem="*res://scripts/autoload/ai_belief_system.gd"
 
 [display]
 
@@ -122,6 +125,11 @@ train_wizard={
 train_dragon={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":true,"keycode":53,"physical_keycode":53,"key_label":53,"unicode":53,"location":0,"echo":false,"script":null)
+]
+}
+train_pigeon={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":true,"keycode":54,"physical_keycode":54,"key_label":54,"unicode":54,"location":0,"echo":false,"script":null)
 ]
 }
 toggle_view={

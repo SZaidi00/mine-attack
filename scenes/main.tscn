@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://bf86yaf7cwlfg"]
 
 [ext_resource type="Script" uid="uid://k3vb7mo4pm2v" path="res://scripts/world/grid_world.gd" id="1_grid"]
+[ext_resource type="PackedScene" path="res://scenes/effects/volcano_background.tscn" id="1_volcano_bg"]
 [ext_resource type="PackedScene" path="res://scenes/building.tscn" id="2_building"]
 [ext_resource type="PackedScene" path="res://scenes/mine_entry.tscn" id="3_mine_entry"]
 [ext_resource type="Script" uid="uid://bsoufp3l05yw6" path="res://scripts/controllers/player_controller.gd" id="4_player"]
@@ -11,6 +12,8 @@
 [node name="Main" type="Node2D" unique_id=801313034]
 
 [node name="World" type="Node2D" parent="." unique_id=651210337]
+
+[node name="VolcanoBackground" parent="World" instance=ExtResource("1_volcano_bg")]
 
 [node name="GridWorld" type="Node2D" parent="World" unique_id=1472142808]
 script = ExtResource("1_grid")
@@ -38,7 +41,7 @@ position = Vector2(0, -150)
 
 [node name="Projectiles" type="Node2D" parent="." unique_id=1034364661]
 
-[node name="Structures" type="Node2D" parent="."]
+[node name="Structures" type="Node2D" parent="." unique_id=529574686]
 
 [node name="PlayerController" type="Node" parent="." unique_id=1575576657]
 script = ExtResource("4_player")

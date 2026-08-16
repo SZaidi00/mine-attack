@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="FactionData" format=3 uid="uid://be17638goftxy"]
+
+[ext_resource type="Script" uid="uid://csqfeip6fouko" path="res://scripts/resources/faction_data.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://drb0ro11lptwj" path="res://frost_mines_assets/icons/faction_arcane.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+faction_id = "arcane"
+faction_name = "Arcane"
+description = "Magic enhances all units. Fragile but powerful abilities."
+icon = ExtResource("2")
+menu_color = Color(0.686, 0.518, 0.984, 1)
+highlights = Array[String](["Wizards +25% damage, all units slightly frail", "Rune Blade: first hit of each engagement +50%", "All units cost +10% more"])
+swordsman_hp_mult = 0.8
+swordsman_dmg_mult = 1.15
+archer_hp_mult = 0.85
+wizard_hp_mult = 0.9
+wizard_dmg_mult = 1.25
+unit_cost_mult = 1.1
+tower_cost = 350
+tower_hp = 600
+swordsman_rune_blade = true
+wizard_blink_reduction = 5.0
+archer_arcane_shot = true
+miner_reveal = true
+dragon_mana_burn = true

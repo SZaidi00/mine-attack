@@ -24,7 +24,7 @@ signal unit_spawned(unit: Node2D)
 @export var height_cells: int = 5
 
 var _hp: int = max_hp
-var _base_max_hp: int = max_hp  # Fortify research adds on top of this.
+var _base_max_hp: int = max_hp  # Earth Shield research adds on top of this.
 var _queue: Array = []  # { id: String, data: UnitData, remaining: float }
 var _resources: Dictionary = {}
 var _destroyed: bool = false
@@ -33,10 +33,10 @@ var _deposit_point: Marker2D
 # seconds (stretched by the game-over slow-mo, which is the point).
 var _collapsing: bool = false
 var _collapse_t: float = 0.0
-# Fractional HP accumulator for the Self-Repair research regen.
-var _regen_accum: float = 0.0
 # match_time of the last hit taken (drives is_under_attack()).
 var _last_damage_time: float = -999.0
+# Throttle for the faction-identification scout check (enemy building only).
+var _identify_accum: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -56,29 +56,59 @@ func _ready() -> void:
 	_connect_view_mode()
 	if not ResearchManager.research_completed.is_connected(_on_research_completed):
 		ResearchManager.research_completed.connect(_on_research_completed)
+	if not ResearchManager.research_changed.is_connected(_on_research_changed):
+		ResearchManager.research_changed.connect(_on_research_changed)
 	queue_redraw()
 	call_deferred("_spawn_starting_miners")
 
 
-## Fortify research: raises max HP on top of the base value and heals the
-## delta, so the upgrade is immediately visible in the HP bar.
-func _on_research_completed(completed_team: GameManager.Team, tech_id: String) -> void:
-	if completed_team != team or tech_id != "fortify" or _destroyed:
+func _on_research_completed(completed_team: GameManager.Team, _tech_id: String) -> void:
+	_recompute_max_hp(completed_team)
+
+
+func _on_research_changed(changed_team: GameManager.Team) -> void:
+	_recompute_max_hp(changed_team)
+
+
+## Earth Shield / Citadel / Fortification research: flat and multiplier
+## building HP bonuses raise max HP on top of the base value and heal the
+## delta, so upgrades are immediately visible in the HP bar. On respec the
+## bonus shrinks back — no negative heal, current HP is clamped to the new max.
+func _recompute_max_hp(changed_team: GameManager.Team) -> void:
+	if changed_team != team or _destroyed:
 		return
-	var new_max: int = _base_max_hp + int(ResearchManager.get_stat_bonus(team, "building_hp"))
+	var mult: float = 1.0 + ResearchManager.get_stat_bonus(team, "building_hp_mult")
+	var new_max: int = roundi(_base_max_hp * mult) + int(ResearchManager.get_stat_bonus(team, "building_hp"))
 	var delta: int = new_max - max_hp
-	if delta <= 0:
+	if delta == 0:
 		return
 	max_hp = new_max
-	_hp += delta
+	if delta > 0:
+		_hp += delta
+	else:
+		_hp = mini(_hp, max_hp)
+	hp_changed.emit(_hp, max_hp)
+	queue_redraw()
+
+
+## Citadel / Deep Fortress building regen: only while the building is not
+## under attack and the match is active.
+func _apply_regen(delta: float) -> void:
+	if _destroyed or is_under_attack():
+		return
+	var regen: float = ResearchManager.get_stat_bonus(team, "building_regen_hp_per_sec")
+	if regen <= 0.0 or _hp >= max_hp:
+		return
+	_hp = mini(max_hp, _hp + int(roundf(regen * delta)))
 	hp_changed.emit(_hp, max_hp)
 	queue_redraw()
 
 
 ## Each base starts with free miners so the economy runs from the first
-## second. They still count toward the population cap.
+## second. They still count toward the population cap. Factions can grant
+## bonus starting miners (Revamp Phase 2: Industrial +1).
 func _spawn_starting_miners() -> void:
-	for i in range(_Constants.STARTING_MINERS):
+	for i in range(FactionManager.get_starting_miners(team)):
 		_spawn_front("miner", _resources["miner"])
 
 
@@ -152,18 +182,17 @@ func _process(delta: float) -> void:
 			modulate = Color(0.3, 0.3, 0.33, 1.0)
 		else:
 			visible = false
+	# Revamp Phase 2/8: an opposing unit within 8 cells identifies this
+	# building's hidden faction — player scouts reveal the enemy faction, AI
+	# scouts reveal the player's (icon appears next to the HP bar and HUD).
+	if not FactionManager.is_faction_identified(team):
+		_identify_accum += delta
+		if _identify_accum >= 0.5:
+			_identify_accum = 0.0
+			_check_faction_identified()
 	if not GameManager.game_active:
 		return
-	# Self-Repair research: slow regeneration up to max HP.
-	var regen: float = ResearchManager.get_stat_bonus(team, "building_regen")
-	if regen > 0.0 and _hp < max_hp:
-		_regen_accum += regen * delta
-		var whole: int = int(_regen_accum)
-		if whole > 0:
-			_regen_accum -= whole
-			_hp = mini(_hp + whole, max_hp)
-			hp_changed.emit(_hp, max_hp)
-			queue_redraw()
+	_apply_regen(delta)
 	if _queue.is_empty():
 		return
 	var current = _queue[0]
@@ -179,7 +208,7 @@ func _process(delta: float) -> void:
 	current.remaining -= delta / train_time_mult
 	if current.remaining <= 0.0:
 		DebugLog.log_command("Building %d" % get_instance_id(), "training_complete", current.id)
-		_spawn_front(current.id, current.data)
+		_spawn_front(current.id, current.data, current.get("cost", FactionManager.get_unit_cost(team, current.id)))
 		_queue.pop_front()
 		queue_changed.emit(_queue)
 
@@ -189,25 +218,37 @@ func queue_unit(unit_id: String) -> bool:
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "unknown unit_id " + unit_id)
 		return false
 	var data: UnitData = _resources[unit_id]
-	if not EconomyManager.can_afford(team, data.cost):
+	# Faction-modified price (Revamp Phase 2); base price when factionless.
+	var cost: int = FactionManager.get_unit_cost(team, unit_id)
+	# Dragon Mastery / Broodmother discounts for dragon training.
+	if unit_id == "dragon":
+		var dragon_cost_mult: float = maxf(0.1, 1.0 - ResearchManager.get_stat_bonus(team, "dragon_cost_mult"))
+		cost = maxi(1, roundi(cost * dragon_cost_mult))
+	if not EconomyManager.can_afford(team, cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "cannot afford " + unit_id)
 		return false
 	# Population is not checked here: over-cap orders are accepted and the
 	# queue simply pauses at the cap (see _process) instead of rejecting or
 	# refunding the finished unit.
-	if not EconomyManager.spend_coin(team, data.cost):
+	if not EconomyManager.spend_coin(team, cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "spend failed " + unit_id)
 		return false
-	_queue.append({ "id": unit_id, "data": data, "remaining": data.train_time })
+	var train_time: float = data.train_time
+	if unit_id == "dragon":
+		var dragon_time_mult: float = maxf(0.1, 1.0 - ResearchManager.get_stat_bonus(team, "dragon_train_time_mult"))
+		train_time *= dragon_time_mult
+	_queue.append({ "id": unit_id, "data": data, "cost": cost, "remaining": train_time, "train_time": train_time })
 	DebugLog.log_command("Building %d" % get_instance_id(), "queue_unit", unit_id)
 	queue_changed.emit(_queue)
 	return true
 
 
-func _spawn_front(_unit_id: String, data: UnitData) -> void:
+func _spawn_front(_unit_id: String, data: UnitData, paid_cost: int = -1) -> void:
+	if paid_cost < 0:
+		paid_cost = FactionManager.get_unit_cost(team, _unit_id)
 	if not EconomyManager.can_add_population(team, data.population):
-		# Refund if cap reached.
-		EconomyManager.add_coin(team, data.cost)
+		# Refund if cap reached (the actual price paid, including discounts).
+		EconomyManager.add_coin(team, paid_cost)
 		return
 	EconomyManager.add_population(team, data.population)
 	EconomyManager.train_unit(team)
@@ -356,11 +397,25 @@ func cancel_queue(index: int) -> bool:
 		DebugLog.log_reject("Building %d" % get_instance_id(), "cancel_queue", "invalid index %d" % index)
 		return false
 	var entry = _queue[index]
-	EconomyManager.add_coin(team, entry.data.cost)
+	var refund: int = entry.get("cost", entry.data.cost)
+	EconomyManager.add_coin(team, refund)
 	_queue.remove_at(index)
-	DebugLog.log_command("Building %d" % get_instance_id(), "cancel_queue", "%s refund=%d" % [entry.id, entry.data.cost])
+	DebugLog.log_command("Building %d" % get_instance_id(), "cancel_queue", "%s refund=%d" % [entry.id, refund])
 	queue_changed.emit(_queue)
 	return true
+
+
+## Revamp Phase 2/8: a faction stays hidden until any OPPOSING unit gets
+## within IDENTIFY_RANGE_CELLS of this building (scouting works both ways:
+## player units identify the enemy faction, AI units identify the player's).
+func _check_faction_identified() -> void:
+	var range_px: float = FactionManager.IDENTIFY_RANGE_CELLS * GridWorld.CELL_SIZE
+	var opposing_group: String = "enemy" if team == GameManager.Team.PLAYER else "player"
+	for unit in get_tree().get_nodes_in_group(opposing_group):
+		if unit is Node2D and global_position.distance_to(unit.global_position) <= range_px:
+			FactionManager.identify_faction(team)
+			queue_redraw()
+			return
 
 
 func _draw() -> void:
@@ -383,3 +438,10 @@ func _draw() -> void:
 		var fill_rect: Rect2 = Rect2(bar_pos, Vector2(bar_w * hp_pct, bar_h))
 		var src_rect: Rect2 = Rect2(0, 0, fill_texture.get_width() * hp_pct, fill_texture.get_height())
 		draw_texture_rect_region(fill_texture, fill_rect, src_rect)
+	# Revamp Phase 2: once scouted, the enemy's faction icon sits by the HP bar.
+	if FactionManager.is_faction_identified(team):
+		var faction: FactionData = FactionManager.get_faction(team)
+		if faction != null and faction.icon != null:
+			var icon_size := Vector2(24, 24)
+			var icon_pos := Vector2(bar_pos.x + bar_w + 6, bar_pos.y + bar_h / 2.0 - icon_size.y / 2.0)
+			draw_texture_rect(faction.icon, Rect2(icon_pos, icon_size), false)

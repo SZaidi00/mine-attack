@@ -244,6 +244,8 @@ func is_remembered_by(team: GameManager.Team, world_pos: Vector2) -> bool:
 
 ## 3. Phase 2: Faction System
 
+> **Status: fully implemented.** `FactionData` + `scripts/resources/factions/{arcane,brute,industrial}.tres`, the `FactionManager` autoload (hidden enemy faction, scouting identification, faction-modified costs), the main-menu faction select, HUD/building faction icons, all stat/economic modifiers, and all abilities: Rune Blade, Berserk, Swarm, Fortify (splash), Blink, Arcane Shot (pierce), Heavy Bolt (slow), Volley, Fight Back, Miner Reveal, Mana Burn, Crush (stun), Supply Drop, Industrial miner Efficiency. The AI's faction is a random pick each match. Two deliberate interpretation calls: **Blink** is innate to all wizards at 15s (the guide's "reduced from 15s to 10s" implies a baseline) with Arcane shaving 5s, and **Crush** stuns on the dragon's breath hit (dragons never land, so "landing attack" was read as the dragon's attack). Wizard "Efficiency (0 mana)" is intentionally skipped — the game has no mana.
+
 ### 3.1 Overview
 
 Three asymmetric factions replace the symmetric teams. Each faction has unique unit stats, abilities, and economic modifiers. The faction is chosen in the main menu and is **hidden from the opponent** until scouted.
@@ -426,6 +428,8 @@ func apply_faction_stats(unit: Unit, team: GameManager.Team):
 
 ## 4. Phase 3: Placeable Structures
 
+> **Status: implemented**, following the project's existing Lantern pattern (per-structure classes `Tower`/`WallSegment` under `Main/Structures`) rather than the unified `Structure` base class sketched in §4.3. Towers: placement rules, faction variants (Arcane 350g/600 HP purple-tinted missiles, Brute 1200 HP/1.8s/18 dmg, Industrial 200g/2× build), fighter>miner>building priority, vision, salvage. Walls: A* movement block once built, projectile absorption, faction cost/max (Industrial 30g/3), salvage. Both are invulnerable under construction and attackable via right-click; towers are also auto-attacked like lanterns. **Deviations:** tower range/vision reduced from 18 cells to 8 attack / 10 vision (18 cells covered a third of the map); wall cap reduced from 10 (15 Industrial) to 2 (3 Industrial) and chain placement dropped — a 2D map this size has no room for long walls; walls seal their full column (surface + dug cells beneath, re-sealed as new cells are dug) instead of just the surface cell — otherwise A* routes enemies through tunnels below the surface row and walls never get attacked; the seal is team-aware (`find_path` lifts the owner's seals) so a wall never blocks its builder; miners cannot breach placed walls (mining is underground-only in this game — fighters destroy walls); walls are not auto-attack targets (explicit orders only); the AI does not place structures yet (deferred to the Phase 8 AI refactor).
+
 ### 4.1 Sentry Tower
 
 **Placement:**
@@ -537,6 +541,8 @@ func _destroy():
 
 ## 5. Phase 4: Dynamic Terrain & Events
 
+> **Status: implemented**, following the guide's behavior sequence with the code in a new `scripts/world/grid_events.gd` helper module (lava, cave-ins, ore respawn) plus `LAVA`/`MAGMA_ROCK`/`FRESH_ORE`/`SOLID_ROCK` cell types, instead of growing `grid_world.gd`. Lava: random 90–120s interval, warning (screen shake + rumble + pulsing red glow over the bottom layers + HUD countdown banner), 1–2 bottom layers flood (kills units instantly with no cargo drop, destroys underground lanterns, spares the central wall and borders), 20s up with a periodic straggler sweep, then recedes into diggable magma rock (150 HP, 0 gold) with 40% fresh ore (100–200g). Cave-ins: random 45–75s, 3×3 underground collapse — diggable tiles become indestructible SOLID_ROCK for 10s, units take 50 damage and are pushed to the nearest walkable cell, underground lanterns destroyed. Ore depletion: veins past 80% yielded trickle at 10% per swing and draw dull; fresh veins respawn in layers 3+ every 60s when ore runs low. **Deviations:** the destruction payout still pays the full remainder on depleted ore (keeps the project-wide "every tile yields exactly coin_value" invariant — only the per-swing trickle drops); magma rock is A*-solid until dug like normal dirt (the guide's sketch made it walkable, which contradicts how digging works here); events accumulate game-time in `GridWorld._process` instead of `Timer` nodes so they freeze on pause/game-over like everything else; the Weather Alert warning extension is wired (`ResearchManager.get_level(team, "weather_alert")`) but stays at 5s until that Phase 5/6 tech exists. New constants in `constants.gd` (`LAVA_*`, `CAVEIN_*`, `MAGMA_*`, `ORE_*`), sprites `frost_mines_assets/tiles/{magma_rock,fresh_ore}.png` + `icons/icon_lava.png`, a `rumble` SFX, and tests in `tests/test_dynamic_terrain.gd` (random scheduling is disabled there via `GridWorld.set_dynamic_events_enabled(false)` and every event is forced).
+
 ### 5.1 Lava Rising
 
 **Overview:** The most dramatic terrain event. Lava periodically rises from the bottom of the mine, destroying everything in its path, then recedes and leaves new terrain.
@@ -591,6 +597,8 @@ enum CellType {
 - Mining time: 2× normal
 - If it contains ore: yields 100–200 gold (random)
 - Visual: Glowing red-orange rock with ember particles
+
+> **Current code location:** `GridWorld` logic has been split into helper modules under `scripts/world/`. Map generation and cell management live in `grid_world.gd`, `grid_map_generation.gd`, and `grid_mining.gd`; drawing/effects live in `grid_drawing.gd`. Any new dynamic-terrain code should hook into those modules rather than expanding `grid_world.gd` directly.
 
 **Implementation in `GridWorld`:**
 
@@ -746,6 +754,8 @@ func _recede_lava():
 
 ## 6. Phase 5: Weather System
 
+> **Status: implemented**, with the event logic in the new `scripts/autoload/weather_manager.gd` autoload as the guide intends — but following the Phase 4 GridEvents conventions instead of `Timer` nodes: the schedule accumulates game-time delta in `_process` (freezes on pause/game-over), random scheduling is gated by `WeatherManager.set_weather_events_enabled(false)` and every storm is forceable (`force_snowstorm_warning/start/end`). Snowstorms: random 60–90s interval, warning (HUD countdown banner top-center with the snowstorm icon + alarm SFX), then 15s of storm — all unit/lantern/tower vision radii halved (applied in `grid_fog_of_war._get_vision_sources`, buildings keep full radius), surface units at 90% speed (applied in `unit_navigation`), and 2 HP/s exposure damage (fractional accumulator, 1-HP chunks) to surface units outside a built friendly lantern's radius, with a blue frost overlay on exposed units (`unit._frosted`, drawn in `unit_rendering`). Storm presentation: dense angled storm-snow emitter in `grid_ambience`, a dark-blue radial vignette in the HUD, a looping synthesized `storm_wind` howl plus occasional `ice_crack` one-shots in `audio_manager`. Meteorological Array (`weather_alert` research: 2500g, 60s, tier-3 capstone at tree_pos (2,1) — the research panel canvas widened to three columns) extends both snowstorm and lava warnings from 5s to 15s; the lava side was already wired in Phase 4. `hud.gd` resets WeatherManager on restart/quit and in `_ready` (GameManager.match_time accumulates through the main menu, so the schedule must restart when a match loads). Tests in `tests/test_weather.gd`. **Deviations:** the snowstorm warning banner names the event ("SNOWSTORM IN %ds") rather than being ambiguous about storm-vs-lava — the two event timers are independent and each banner mirrors its own countdown, so the "does not say WHICH event" rule is only honored in spirit (the research buys time, not information asymmetry); lantern shelter radius uses the lantern's full (unhalved) vision radius so a storm never shrinks its own safe zone; exposure damage uses a new `environmental` flag on `unit.take_damage` — it costs HP and blocks out-of-combat regen but skips popups, hit flash, and the combat reflexes (miner flee, retaliation, Fight Back), so units keep following their orders through the storm (the first version routed through the normal combat path and every tick re-triggered the miner flee reflex, freezing miners at the mine); the AI does not react to weather warnings yet (deferred to the Phase 8 AI refactor, like structure placement).
+
 ### 6.1 Snowstorms
 
 **Overview:** Periodic surface weather events that reduce visibility and movement, and deal damage to unprotected units.
@@ -814,6 +824,8 @@ func _apply_snowstorm_damage(delta: float):
 **Why expensive:** This is a luxury research for players who want to optimize miner safety. At 2500g, it is a significant investment that delays army production.
 
 ### 6.3 Weather Implementation
+
+> **Current status:** A standalone `weather_manager.gd` does **not** exist yet. Ambient snow/dust particles are spawned by `scripts/world/grid_ambience.gd` from `GridWorld._ready()`. The weather-event system below is the intended design; when implemented it should live in a new `scripts/autoload/weather_manager.gd` autoload.
 
 ```gdscript
 # scripts/autoload/weather_manager.gd
@@ -896,6 +908,8 @@ func get_vision_multiplier() -> float:
 
 ## 7. Phase 6: Tech Tree Overhaul
 
+> **Status: implemented** — as a timed-research branch tree rather than the guide's instant `choose_branch` sketch: all ten branch techs are researched through the existing ResearchManager slot/cost/timer system (one active research per team, coin paid up front, 100% refund on cancel), and a tech's `locks` alternative is locked **on completion** (`branch_locked` signal) — canceling before completion locks nothing. Costs/times (invented — the guide specified none): deep_delve/surface_war 400g/20s, ore_sonar 500g/20s, reinforced_pack/longbow 600g/25s, rapid_fire 700g/25s, crystal_forge/siege_master 1000g/30s, earth_shield 900g/30s, guerrilla 800g/30s. Tier 2 keeps AND `requires` prereqs; tier 3 adds `requires_any` (OR — either tier-2 tech on the chosen side unlocks both tier-3 options). Respec: 500g, once per match per team, resets all researched levels and locks (in-progress research is unaffected; effects revert via `research_changed` listeners recomputing from base). Effects, by tech — deep_delve: miners reach layers 5–7 immediately (`unit.get_effective_miner_level`) and +10% underground move speed (`unit_navigation`); surface_war: +15% fighter speed (`unit_navigation`) and damage (`unit_combat`) on the surface, miners capped at layer 4 (same effective-level function + `layer_indicator`), towers +20% range (`tower._apply_branch_range`, recomputed live on research changes); ore_sonar: the Scan ability, now a single tech (12-cell radius, 40s cooldown, reveals Fresh Ore); reinforced_pack: +20 carry / +10 HP via stat bonuses plus cave-in push immunity (`grid_events` — the damage is still taken); longbow: +25 archer range and blind fire — archers skip the fog visibility gates entirely (auto-attack targeting in `unit_vision_targeting`, target-lock retention in `unit_combat`); rapid_fire: 20% attack-cooldown reduction for all fighters, +10% swordsman move speed; crystal_forge: +40% wizard damage and burning ground — wizard fireballs (dragon breath explicitly excluded) leave a code-drawn `BurningGround` patch ticking 5 DPS for 3s as environmental damage (no popups or retaliation, hidden in fog); earth_shield: +15% max HP to all units and +1000 building max HP (heals the delta; respec clamps current HP back); siege_master: +30% swordsman damage vs buildings (`unit_combat`) and towers at 50% cost (`player_build_placement`); guerrilla: +20% move speed with no ally within 6 cells (0.25s re-check in `unit.gd`) and traps — 50g one-shot spike traps, 50 damage, max 5 per team, placed from the build menu on any walkable unoccupied cell (code-drawn `Trap`; enemy traps stay hidden unless the cell is currently visible). The AI picks its tier-1 side by army composition (fighter-majority → surface_war, miner-heavy → deep_delve) then climbs that side tier by tier in a fixed preference order, every pick gated on `is_locked`. The research panel was reworked into the diverging tree: nodes laid out by `tree_pos` (tier column × branch row) with elbow edges for `requires` and dashed edges for `requires_any`, locked branches grayed out but keeping full tooltips, a Respec button in the footer, and new `tech_*` icons from `improvements/mine_attack_sprites`. Tests in `tests/test_research.gd`. **Deviations:** the old 13-tech tree was fully **replaced** — fortify, self_repair, bulwark, berserk, swift_boots, deep_scan, inferno, arcane_might and the old longbow/rapid_fire are gone; the `weather_alert` / Meteorological Array tech went with it — lava and snowstorm warnings are always 5s now and the `*_WARNING_TIME_RESEARCH` constants were deleted; cost/time values were invented (the guide specified none); blind fire is implemented as archers ignoring the fog gates outright rather than a separate fog-targeting mode; traps are placed via the build menu (a new "trap" placement kind) instead of a miner unit order; branches are timed researches through the existing slot instead of the instant `choose_branch` API sketched in §7.3.
+
 ### 7.1 Binary Branch System
 
 The tech tree is restructured into **mutually exclusive branches**. At each tier, choosing one path **permanently locks** the other.
@@ -946,7 +960,7 @@ If you chose **B1 or B2**:
 ### 7.3 Implementation
 
 ```gdscript
-# In ResearchManager
+# scripts/autoload/research_manager.gd
 var _tech_branches: Dictionary = {}  # team -> { "tier1": "deep_delve", "tier2": "ore_sonar", ... }
 var _locked_branches: Dictionary = {}  # team -> ["surface_war", "reinforced_pack", ...]
 
@@ -1042,6 +1056,8 @@ See the visual mockup for full sprite specifications. Summary:
 ---
 
 ## 9. Phase 8: AI Controller Refactor
+
+> **Current status:** **Implemented.** `AIBeliefSystem` lives in `scripts/autoload/ai_belief_system.gd` (belief cells/units/faction, confidence decay, faction inference). The behavior updates from 9.2 live in `scripts/controllers/ai_awareness.gd` (scouting, lantern placement, weather/lava response) plus faction strategy hooks in `ai_economy.gd` / `ai_smart_behaviors.gd`. Faction identification in `building.gd` works both ways. Note: the AI's combat/economy decisions still read the live scene tree in most places — the belief system currently feeds scouting and faction inference, not every decision.
 
 ### 9.1 AIBeliefSystem
 

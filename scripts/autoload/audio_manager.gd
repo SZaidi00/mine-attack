@@ -89,6 +89,16 @@ func _build_streams() -> void:
 	_streams["click"] = _tone(1400.0, 1000.0, 0.04, 0.3, "sine")
 	_streams["alarm"] = _tone(620.0, 620.0, 0.18, 0.3, "square")
 	_streams["sonar"] = _sonar_ping()
+	# Revamp Phase 4: low rolling rumble for lava warnings and the rise.
+	_streams["rumble"] = _rumble(1.6)
+	# Revamp Phase 5: howling storm wind (looped while a snowstorm rages) and
+	# a sharp ice crack one-shot.
+	_streams["storm_wind"] = _storm_wind_loop(5.0)
+	_streams["ice_crack"] = _ice_crack()
+	# Volcano event: deep warning alarm, looping eruption rumble, and meteor impacts.
+	_streams["volcano_warning"] = _volcano_warning()
+	_streams["volcano_rumble"] = _volcano_rumble_loop(4.0)
+	_streams["meteor_impact"] = _meteor_impact()
 	# Ambience (looping).
 	_streams["wind"] = _wind_loop(4.0)
 	_streams["drips"] = _drip_loop(5.0)
@@ -138,6 +148,19 @@ func _noise(duration: float, volume: float) -> AudioStreamWAV:
 	return _make_stream(frames, bytes)
 
 
+## Lava rumble (Revamp Phase 4): heavily smoothed brown noise, fading in and
+## out so the one-shot doesn't click at either end.
+func _rumble(duration: float) -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * duration)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	var smoothed: float = 0.0
+	for i in range(frames):
+		smoothed = lerpf(smoothed, randf() * 2.0 - 1.0, 0.01)
+		var env: float = minf(1.0, minf(i, frames - i) / (_MIX_RATE * 0.3))
+		_write_sample(bytes, i, smoothed * 0.9 * env)
+	return _make_stream(frames, bytes)
+
+
 ## Sonar ping (Ore Sonar scan): a bright chirp plus a softer delayed echo.
 func _sonar_ping() -> AudioStreamWAV:
 	var frames: int = int(_MIX_RATE * 0.7)
@@ -167,6 +190,91 @@ func _coin_chime() -> AudioStreamWAV:
 			phase += note[0] / _MIX_RATE
 			_write_sample(bytes, offset + i, sin(phase * TAU) * (1.0 - t) * 0.4)
 		offset += note_frames
+	return _make_stream(frames, bytes)
+
+
+## Storm wind (Revamp Phase 5): louder, faster-filtered noise with a slow
+## howling swell, looped while a snowstorm rages.
+func _storm_wind_loop(duration: float) -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * duration)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	var smoothed: float = 0.0
+	for i in range(frames):
+		smoothed = lerpf(smoothed, randf() * 2.0 - 1.0, 0.008)
+		var t: float = float(i) / frames
+		# Two detuned slow swells read as gusting howls rather than flat noise.
+		var howl: float = 0.6 + 0.25 * sin(t * TAU * 2.0) + 0.15 * sin(t * TAU * 3.7)
+		# Fade the loop seam so the wrap-around doesn't click.
+		var seam: float = minf(1.0, minf(i, frames - i) / (_MIX_RATE * 0.2))
+		_write_sample(bytes, i, smoothed * howl * 0.9 * seam)
+	var stream: AudioStreamWAV = _make_stream(frames, bytes)
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = frames
+	return stream
+
+
+## Ice crack (Revamp Phase 5): a sharp bright snap — a fast-decaying burst of
+## high-passed noise with a falling ping on top.
+func _ice_crack() -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * 0.2)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	var prev: float = 0.0
+	var phase: float = 0.0
+	for i in range(frames):
+		var t: float = float(i) / frames
+		var env: float = (1.0 - t) * (1.0 - t)
+		var white: float = randf() * 2.0 - 1.0
+		var high: float = white - prev  # crude high-pass: keeps the snap bright
+		prev = white
+		phase += lerpf(2400.0, 500.0, t) / _MIX_RATE
+		_write_sample(bytes, i, (high * 0.5 + sin(phase * TAU) * 0.35) * env * 0.6)
+	return _make_stream(frames, bytes)
+
+
+## Volcano warning: a deep, pulsing alarm tone — lower and more menacing than
+## the snowstorm alarm.
+func _volcano_warning() -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * 0.9)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	var phase: float = 0.0
+	for i in range(frames):
+		var t: float = float(i) / frames
+		var pulse: float = 0.5 + 0.5 * sin(t * TAU * 3.0)
+		var env: float = (1.0 - t) * (1.0 - t)
+		phase += lerpf(180.0, 120.0, t) / _MIX_RATE
+		var v: float = sin(phase * TAU) * pulse
+		_write_sample(bytes, i, v * env * 0.55)
+	return _make_stream(frames, bytes)
+
+
+## Volcano rumble: heavier, slower brown noise for the active eruption, looped.
+func _volcano_rumble_loop(duration: float) -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * duration)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	var smoothed: float = 0.0
+	for i in range(frames):
+		smoothed = lerpf(smoothed, randf() * 2.0 - 1.0, 0.005)
+		var t: float = float(i) / frames
+		# Slow, heavy swell so the rumble feels like a vast distant eruption.
+		var swell: float = 0.7 + 0.3 * sin(t * TAU * 1.3)
+		var seam: float = minf(1.0, minf(i, frames - i) / (_MIX_RATE * 0.25))
+		_write_sample(bytes, i, smoothed * swell * 1.0 * seam)
+	var stream: AudioStreamWAV = _make_stream(frames, bytes)
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = frames
+	return stream
+
+
+## Meteor impact: a short, bright explosion burst.
+func _meteor_impact() -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * 0.35)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	for i in range(frames):
+		var t: float = float(i) / frames
+		var env: float = (1.0 - t) * (1.0 - t)
+		_write_sample(bytes, i, (randf() * 2.0 - 1.0) * env * 0.9)
 	return _make_stream(frames, bytes)
 
 

@@ -41,6 +41,13 @@ size_flags_vertical = 3
 layout_mode = 2
 theme_override_constants/separation = 16
 
+[node name="PlayerFactionIcon" type="TextureRect" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
 [node name="CoinLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -110,6 +117,13 @@ theme_override_font_sizes/font_size = 13
 theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
 text = "0"
 
+[node name="PigeonCountLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.886275, 0.909804, 0.941176, 1)
+text = "0"
+
 [node name="Spacer2" type="Control" parent="TopBar/MarginContainer/VBoxContainer/StatsRow"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -124,6 +138,21 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.133333, 0.772549, 0.368627, 1)
 text = "5000"
+
+[node name="EnemyFactionIcon" type="TextureRect" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 20)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="EnemyFactionLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.58, 0.639216, 0.721569, 1)
+text = "Enemy: ???"
+tooltip_text = "The enemy faction is hidden until one of your units scouts their base"
 
 [node name="EnemyHPLabel" type="Label" parent="TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup"]
 unique_name_in_owner = true
@@ -157,6 +186,13 @@ size_flags_horizontal = 3
 [node name="SpeedGroup" type="HBoxContainer" parent="TopBar/MarginContainer/VBoxContainer/TabsRow"]
 layout_mode = 2
 theme_override_constants/separation = 8
+
+[node name="PauseButton" type="Button" parent="TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(40, 28)
+layout_mode = 2
+toggle_mode = true
+text = "⏸"
 
 [node name="Speed1Button" type="Button" parent="TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup"]
 unique_name_in_owner = true
@@ -562,7 +598,7 @@ custom_minimum_size = Vector2(100, 70)
 layout_mode = 2
 toggle_mode = true
 text = "Build"
-tooltip_text = "Build a lantern: surface lanterns light up your half of the map, mine lanterns reveal buried ore underground"
+tooltip_text = "Open the build menu: lanterns light up your half, mine lanterns reveal buried ore, sentry towers shoot enemies, walls block movement, traps (Guerrilla Tactics) ambush intruders, pigeons scout the enemy"
 
 [node name="QueuePanel" type="PanelContainer" parent="."]
 anchors_preset = 11

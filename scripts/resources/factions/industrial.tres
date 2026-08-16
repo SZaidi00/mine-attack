@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="FactionData" format=3 uid="uid://xsnk2kas6w3h"]
+
+[ext_resource type="Script" uid="uid://csqfeip6fouko" path="res://scripts/resources/faction_data.gd" id="1"]
+[ext_resource type="Texture2D" uid="uid://dxe044f8fngeo" path="res://frost_mines_assets/icons/faction_industrial.png" id="2"]
+
+[resource]
+script = ExtResource("1")
+faction_id = "industrial"
+faction_name = "Industrial"
+description = "Superior economy and production. Weak units, strong attrition."
+icon = ExtResource("2")
+menu_color = Color(0.984, 0.749, 0.141, 1)
+highlights = Array[String](["Cheap fighters: 75/120/200g, +200g and +1 miner at start", "Miners: +25% mining, +10 carry, +15% ore gold", "Swarm: swordsmen +15% speed in groups of 3+"])
+swordsman_hp_mult = 0.85
+swordsman_dmg_mult = 0.9
+archer_hp_mult = 0.9
+archer_dmg_mult = 0.95
+dragon_hp_mult = 0.9
+miner_mining_mult = 1.25
+miner_carry_bonus = 10
+miner_ore_yield_mult = 1.15
+cost_overrides = {
+"archer": 120,
+"swordsman": 75,
+"wizard": 200
+}
+starting_gold_bonus = 200
+starting_miner_bonus = 1
+tower_cost = 200
+tower_build_time_mult = 0.5
+wall_cost = 30
+wall_max_count = 3
+swordsman_swarm = true
+archer_volley = true
+dragon_supply_drop = true

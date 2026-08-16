@@ -4,6 +4,7 @@ extends Resource
 @export var unit_name: String = "Unit"
 @export var is_miner: bool = false
 @export var is_fighter: bool = false
+@export var is_scout: bool = false
 @export var cost: int = 100
 @export var train_time: float = 5.0
 @export var population: int = 1

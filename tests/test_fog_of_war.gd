@@ -189,8 +189,10 @@ func test_lantern_min_distance_and_max_count() -> void:
 	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-20, 0))))
 	assert_false(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-21, 0))), "too close to another lantern")
 	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-25, 0))))
-	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-32, 0))))
-	assert_false(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-38, 0))), "4th lantern exceeds the max of 3")
+	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-30, 0))))
+	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-35, 0))))
+	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-38, 0))), "5th lantern is allowed")
+	assert_false(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-15, 0))), "6th lantern exceeds the max of %d" % Constants.LANTERN_MAX_COUNT)
 
 
 func test_built_lantern_is_a_vision_source() -> void:
@@ -200,7 +202,7 @@ func test_built_lantern_is_a_vision_source() -> void:
 	for source in _grid._get_vision_sources(PLAYER):
 		if source[0] == Vector2i(-20, 0) and source[1] == Constants.LANTERN_T1_VISION:
 			found = true
-	assert_true(found, "built lantern must contribute its 8-cell vision")
+	assert_true(found, "built lantern must contribute its T1 vision")
 
 
 func test_lantern_upgrade_in_place() -> void:
@@ -209,7 +211,7 @@ func test_lantern_upgrade_in_place() -> void:
 	var coin_before: int = EconomyManager.get_coin(PLAYER)
 	assert_true(_pc.try_place_lantern("lantern", _grid.grid_to_world(Vector2i(-20, 0))), "placing on an own lantern upgrades it")
 	assert_eq(lantern.tier, 2, "upgrade must raise the tier")
-	assert_eq(lantern.vision_radius, Constants.LANTERN_T2_VISION, "T2 sees 14 cells")
+	assert_eq(lantern.vision_radius, Constants.LANTERN_T2_VISION, "T2 sees %d cells" % Constants.LANTERN_T2_VISION)
 	assert_eq(EconomyManager.get_coin(PLAYER), coin_before - Constants.LANTERN_T2_COST, "upgrade costs 600g")
 	assert_false(lantern.is_built(), "upgraded lantern rebuilds before providing vision")
 
@@ -253,14 +255,25 @@ func test_underground_lantern_max_count() -> void:
 	assert_false(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-20, 5))), "6th mine lantern exceeds the max of 5")
 
 
-func test_underground_lantern_reveals_buried_ore() -> void:
+func test_underground_lantern_reveals_exposed_ore_only() -> void:
+	# Place an ore vein directly next to the empty shaft so it is exposed.
+	var ore_pos: Vector2i = Vector2i(-16, 3)
+	_grid._cells[ore_pos] = GridWorld.Cell.new(GridWorld.CellType.ORE, 1, 1, Constants.LAYER_TILE_HP[1], 50)
+	_grid._astar.set_point_solid(ore_pos, true)
+
+	# Place a fully buried ore vein with solid dirt on all sides.
+	var buried_pos: Vector2i = Vector2i(-22, 3)
+	_grid._cells[buried_pos] = GridWorld.Cell.new(GridWorld.CellType.ORE, 1, 1, Constants.LAYER_TILE_HP[1], 50)
+	_grid._astar.set_point_solid(buried_pos, true)
+	for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var n: Vector2i = buried_pos + off
+		if not _grid._cells.has(n):
+			_grid._cells[n] = GridWorld.Cell.new(GridWorld.CellType.DIRT, 1, 1, Constants.LAYER_TILE_HP[1], 0)
+			_grid._astar.set_point_solid(n, true)
+
 	_place_built_lantern("underground_lantern", Vector2i(-15, 3))
-	var revealed: int = 0
-	for x in range(-25, -4):
-		for y in range(1, 14):
-			if _grid.is_ore_revealed(Vector2i(x, y), PLAYER):
-				revealed += 1
-	assert_gt(revealed, 0, "a built mine lantern must permanently reveal buried ore in its radius")
+	assert_true(_grid.is_ore_revealed(ore_pos, PLAYER), "a built mine lantern must reveal exposed ore in its radius")
+	assert_false(_grid.is_ore_revealed(buried_pos, PLAYER), "a built mine lantern must NOT reveal fully buried ore")
 
 
 # ─── Layer-locked vision ───
@@ -284,6 +297,13 @@ func test_miner_lights_only_current_layer() -> void:
 	await wait_seconds(0.1)
 	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(2, 0)), 2, "surface miner must light the surface around it")
 	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(0, 1)), 0, "surface miner must NOT light the underground below")
+
+
+func test_surface_fighter_does_not_light_underground() -> void:
+	_spawn_unit("res://scripts/resources/units/archer.tres", PLAYER, Vector2(0, 16))
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(2, 0)), 2, "surface archer must light the surface around it")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(0, 1)), 0, "surface archer must NOT light the underground below")
 
 
 # ─── Lanterns as combat targets ───

@@ -80,6 +80,26 @@ func test_killed_miner_drops_cargo_pickup() -> void:
 		found.free()
 
 
+func test_idle_miner_collects_nearby_dropped_gold() -> void:
+	# An idle underground miner with an empty bag should seek out a coin pickup
+	# from a dead miner and collect it so the gold can be deposited.
+	var cell_size: int = GridWorld.CELL_SIZE
+	var miner_pos: Vector2 = Vector2(-15 * cell_size, 3 * cell_size + cell_size * 0.5)
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, miner_pos)
+	miner.is_underground = true
+
+	var pickup: CoinPickup = preload("res://scenes/effects/coin_pickup.tscn").instantiate()
+	pickup.global_position = miner_pos
+	pickup.coin_value = 12
+	_main.add_child(pickup)
+	autofree(pickup)
+
+	await wait_seconds(0.3)
+	assert_eq(miner.carried_coin, 12, "idle miner should collect dropped gold")
+	assert_true(miner.get("_deposit_requested"), "collected gold should be flagged for deposit")
+	assert_false(is_instance_valid(pickup), "pickup should be consumed")
+
+
 func test_kill_selected_only_kills_the_selection() -> void:
 	var pc: Node = _main.get_node("PlayerController")
 	var chosen: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(-480, 16))

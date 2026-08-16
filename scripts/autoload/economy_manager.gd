@@ -51,9 +51,10 @@ func _ready() -> void:
 
 
 func reset() -> void:
+	# Faction starting bonuses (Revamp Phase 2); neutral when no faction is set.
 	_coin = {
-		GameManager.Team.PLAYER: _Constants.STARTING_COIN,
-		GameManager.Team.ENEMY: _Constants.STARTING_COIN,
+		GameManager.Team.PLAYER: FactionManager.get_starting_coin(GameManager.Team.PLAYER),
+		GameManager.Team.ENEMY: FactionManager.get_starting_coin(GameManager.Team.ENEMY),
 	}
 	_population = {
 		GameManager.Team.PLAYER: 0,
