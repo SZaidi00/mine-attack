@@ -64,6 +64,8 @@ func _handle_idle_miner() -> void:
 	# command or look for the next cell to dig.
 	if unit.carried_coin >= unit.data.carry_capacity or (unit._deposit_requested and unit.carried_coin > 0):
 		unit._commands.deposit_coin()
+	elif _seek_nearby_coin_pickup():
+		pass
 	elif not unit.is_underground:
 		unit._commands.climb_down_ladder()
 	elif unit._pending_mine_cell != Vector2i(-9999, -9999):
@@ -183,6 +185,45 @@ func _idle_near_mine_entry() -> void:
 		return
 	if unit.global_position.distance_to(entry.global_position) > GridWorld.CELL_SIZE * 2.0:
 		unit._commands.move_to(entry.global_position)
+
+
+## An idle miner with bag space looks for nearby coin pickups dropped by dead
+## miners and walks over to collect them. The pickup's Area2D transfers the
+## cargo on contact and flags the miner for deposit so the gold is not lost.
+func _seek_nearby_coin_pickup() -> bool:
+	if unit.data == null or not unit.data.is_miner:
+		return false
+	if unit.carried_coin >= unit.data.carry_capacity:
+		return false
+
+	var best: Node2D = null
+	var best_dist: float = INF
+	var range_cells: int = Constants.MINER_COIN_SCAN_RANGE_CELLS
+	var range_world_sq: float = float(range_cells * range_cells) * GridWorld.CELL_SIZE * GridWorld.CELL_SIZE
+	var my_grid: Vector2i = unit._grid.world_to_grid(unit.global_position)
+	var my_layer_underground: bool = my_grid.y > unit._grid.Y_MIN
+
+	for pickup in unit.get_tree().get_nodes_in_group("coin_pickups"):
+		var pickup_grid: Vector2i = unit._grid.world_to_grid(pickup.global_position)
+		var pickup_underground: bool = pickup_grid.y > unit._grid.Y_MIN
+		if pickup_underground != my_layer_underground:
+			continue
+		var d_sq: float = unit.global_position.distance_squared_to(pickup.global_position)
+		if d_sq > range_world_sq:
+			continue
+		if d_sq < best_dist:
+			best_dist = d_sq
+			best = pickup
+
+	if best == null:
+		return false
+
+	# Don't spam move commands if the pickup is on the other side of an obstacle.
+	unit._navigation._repath(best.global_position)
+	if unit._path.is_empty():
+		return false
+	unit._commands.move_to(best.global_position)
+	return true
 
 
 func _mark_cell_unreachable(grid_pos: Vector2i) -> void:

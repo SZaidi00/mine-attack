@@ -48,6 +48,9 @@ const MINING_STATS: Dictionary = {
 	3: { "damage": 5, "swings": 5.0 },   # 25 dps
 }
 
+# How far an idle miner scans for dropped coin pickups (killed-miner cargo).
+const MINER_COIN_SCAN_RANGE_CELLS: int = 8
+
 # ─── MINER UPGRADES ───
 const MINER_UPGRADE_COSTS: Dictionary = {
 	2: 500,   # L1 → L2
@@ -92,9 +95,10 @@ const PLAYER_BUILDING_HP: float = 5000.0
 const ENEMY_BUILDING_HP: float = 5000.0
 
 # ─── FOG OF WAR (Revamp Phase 1) ───
-# Vision radii in grid cells. Miners and dragons only light the layer they are
-# on (a miner's lamp does not shine up the shaft); other fighters and
-# buildings light both. A tile left behind by vision stays "remembered" for
+# Vision radii in grid cells. Miners only light the layer they are on (a
+# miner's lamp does not shine up the shaft); surface fighters and buildings
+# light only the surface, while underground lanterns light only the
+# underground. A tile left behind by vision stays "remembered" for
 # FOG_MEMORY_DURATION seconds of game time, then fades back to full fog.
 const VISION_MINER_SURFACE: int = 4
 const VISION_MINER_UNDERGROUND: int = 3

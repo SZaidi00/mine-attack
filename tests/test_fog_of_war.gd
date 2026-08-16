@@ -299,6 +299,13 @@ func test_miner_lights_only_current_layer() -> void:
 	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(0, 1)), 0, "surface miner must NOT light the underground below")
 
 
+func test_surface_fighter_does_not_light_underground() -> void:
+	_spawn_unit("res://scripts/resources/units/archer.tres", PLAYER, Vector2(0, 16))
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(2, 0)), 2, "surface archer must light the surface around it")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(0, 1)), 0, "surface archer must NOT light the underground below")
+
+
 # ─── Lanterns as combat targets ───
 
 func test_fighter_auto_attacks_visible_enemy_lantern() -> void:

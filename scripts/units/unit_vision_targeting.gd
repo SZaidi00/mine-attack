@@ -9,7 +9,7 @@ func _init(u: Unit) -> void:
 
 ## Fog of War vision radius in grid cells (Revamp Phase 1). Miners see less
 ## underground than on the surface; dragons only get their big flight radius
-## above ground. Everything else uses its flat per-type radius on both layers.
+## above ground. Everything else uses its flat per-type radius on the surface.
 func get_vision_radius() -> int:
 	if unit.data == null:
 		return 0
@@ -29,14 +29,15 @@ func get_vision_radius() -> int:
 	return 0
 
 
-## Which layer(s) this unit's lamp lights (Revamp Phase 1): miners and
-## dragons only reveal the layer they are on — vision no longer bleeds
-## through the surface ceiling or across the central wall into the enemy
-## mine. Other fighters light both layers.
+## Which layer(s) this unit's lamp lights (Revamp Phase 1): miners only
+## reveal the layer they are on — vision no longer bleeds through the
+## surface ceiling or across the central wall into the enemy mine. Surface
+## fighters and flying units light only the surface; underground vision is
+## reserved for underground miners and mine lanterns.
 func get_vision_layer() -> int:
-	if unit.data != null and (unit.data.is_miner or unit.data.flight_altitude > 0.0):
+	if unit.data != null and unit.data.is_miner:
 		return GridWorld.VISION_LAYER_UNDERGROUND if unit.is_underground else GridWorld.VISION_LAYER_SURFACE
-	return GridWorld.VISION_LAYER_BOTH
+	return GridWorld.VISION_LAYER_SURFACE
 
 
 ## Fog of War: true while this unit's team can currently see world_pos.
