@@ -7,6 +7,23 @@ Mine ore underground, train an army, and destroy the enemy base. The game blends
 
 ---
 
+## Download and play
+
+The easiest way to play is from a release:
+
+1. Go to the [**Releases**](https://github.com/SZaidi00/mine-attack/releases) page.
+2. Download the latest zip for your platform:
+   - **macOS**: `MineAttack-macOS.zip`
+   - **Windows**: `MineAttack-Windows.zip`
+3. Extract the zip.
+   - **macOS**: open `MineAttack.app`. If Gatekeeper warns that the app is from an unidentified developer, right-click the app and choose **Open**.
+   - **Windows**: run `MineAttack.exe`.
+4. Pick a difficulty and faction, then press **Play**.
+
+> **Web build**: If you want to play in a browser, the `MineAttack.html` and supporting files are also attached to each release. Serve them over HTTP (not `file://`) — see the web instructions below.
+
+---
+
 ## Getting it running locally
 
 ### Option A — Run in the Godot editor (recommended for development)
@@ -44,8 +61,15 @@ The project uses [GUT](https://github.com/bitwes/Gut) (bundled in `addons/gut/`)
 godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit
 ```
 
-cd /Users/shumail/Documents/Projects/mine-attack                          
-tools/export_all.sh  
+### Exporting desktop and web builds
+
+Run the release exporter (replace `godot` with the path to your Godot binary if it is not on your `PATH`):
+
+```bash
+tools/export_all.sh
+```
+
+This produces `build/MineAttack.html`, `build/MineAttack.app`, `build/MineAttack.exe`, `MineAttack-macOS.zip`, and `MineAttack-Windows.zip`.
 
 ---
 
@@ -78,6 +102,70 @@ tools/export_all.sh
 
 The central wall separating the two mines can be broken by miners on either side when ordered to mine it.
 
+## Game concepts
+
+### Factions
+Before each match, both sides pick a faction. Each faction grants a passive bonus and a unit ability you can trigger with the ability button:
+
+- **Brute**: tougher units; **Berserk** ability boosts attack speed.
+- **Shadow**: faster, stealthier units; **Blink** teleports a unit.
+- **Ironclad**: stronger structures and siege; **Heavy Bolt** and **Crush**.
+- **Arcane**: wizard-focused; **Mana Burn** and **Arcane Shot**.
+- **Swarm**: cheaper, faster-training units; **Swarm** and **Volley**.
+- **Explorer**: mining and vision bonuses; **Miner Reveal** and **Supply Drop**.
+
+Hover the faction cards in the main menu to see the full description.
+
+### Fog of war and vision
+The map is hidden until your units or structures reveal it. **Lanterns** provide permanent vision, can be upgraded through three tiers, and shelter miners during snowstorms. Place them from the build menu. Towers and walls also block sight and movement until destroyed.
+
+### Weather and dynamic terrain
+The battlefield changes over time:
+
+- **Snowstorms** reduce vision and movement; keep miners near lanterns or they take frost damage.
+- **Volcano eruptions** rain meteors on the surface, leaving burning ground that damages units.
+- **Lava rises** from the bottom of the mine, forcing you upward and eventually turning flooded cells into new ore.
+- **Cave-ins** drop 3×3 rock blocks that deal damage and push units.
+
+### Research
+Open the research panel with **R** to advance along mutually-exclusive branches. Completing a tech locks its alternative, but you can respec once per match for 500 gold. Research unlocks traps, burning-ground spells, stronger surface combat, guerrilla tactics, and siege master upgrades.
+
+### Structures
+Use the radial build menu to place:
+
+- **Lanterns**: vision and snowstorm shelter.
+- **Towers**: ranged defense that attacks enemies in range.
+- **Walls**: block enemy movement and sight.
+- **Traps**: hidden area damage triggered by enemy units.
+
 ## Win condition
 
 Destroy the enemy building before it destroys yours. Difficulty (Easy / Normal / Hard / Nightmare) scales the AI's economy, training speed, aggression, and how fiercely its sieges fight back.
+
+---
+
+## Automated releases
+
+This repository includes a pre-push hook in `.githooks/pre-push`. When you push to `main`, it automatically:
+
+1. Runs `tools/export_all.sh` to rebuild the macOS and Windows zips.
+2. Creates a new GitHub release with an auto-incremented patch version (e.g., `v0.1.0` → `v0.1.1`).
+3. Attaches `MineAttack-macOS.zip` and `MineAttack-Windows.zip` to the release.
+
+To enable the hook after cloning, run:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+To skip the hook for a single push:
+
+```bash
+SKIP_RELEASE=1 git push origin main
+```
+
+To set a specific version instead of auto-incrementing:
+
+```bash
+VERSION_OVERRIDE=v0.2.0 git push origin main
+```

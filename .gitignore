@@ -7,3 +7,6 @@
 
 # Export outputs (regenerable via tools/export_all.sh)
 build/
+
+# Release archives produced by tools/export_all.sh
+/MineAttack-*.zip

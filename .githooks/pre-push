@@ -1,0 +1,64 @@
+#!/bin/bash
+# Pre-push hook: rebuild release zips and publish a GitHub release on pushes to main.
+
+set -euo pipefail
+
+remote="$1"
+url="$2"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+	if [ "$remote_ref" != "refs/heads/main" ]; then
+		continue
+	fi
+
+	if [ "${SKIP_RELEASE:-}" = "1" ]; then
+		echo "SKIP_RELEASE=1 set; skipping release creation for $remote_ref."
+		continue
+	fi
+
+	echo "Pre-push hook: preparing release for $remote_ref..."
+
+	if ! command -v gh >/dev/null 2>&1; then
+		echo "error: gh CLI not found; install it to auto-create releases." >&2
+		echo "       Or skip this hook with: SKIP_RELEASE=1 git push origin main" >&2
+		exit 1
+	fi
+
+	# Make sure the commit being pushed is not behind origin/main.
+	git fetch origin main --quiet || true
+	if git rev-parse --verify origin/main >/dev/null 2>&1; then
+		ahead=$(git rev-list --count --left-right "$local_sha"...origin/main 2>/dev/null | cut -f2 || echo "0")
+		if [ "$ahead" -gt 0 ]; then
+			echo "error: the commit being pushed is behind origin/main." >&2
+			echo "       Pull and merge before pushing, or skip with: SKIP_RELEASE=1 git push origin main" >&2
+			exit 1
+		fi
+	fi
+
+	echo "Running tools/export_all.sh..."
+	./tools/export_all.sh
+
+	if [ -n "${VERSION_OVERRIDE:-}" ]; then
+		new_tag="$VERSION_OVERRIDE"
+	else
+		latest=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "v0.0.0")
+		if [[ "$latest" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+			major="${BASH_REMATCH[1]}"
+			minor="${BASH_REMATCH[2]}"
+			patch="${BASH_REMATCH[3]}"
+			new_tag="v${major}.${minor}.$((patch + 1))"
+		else
+			new_tag="v0.1.0"
+		fi
+	fi
+
+	echo "Creating GitHub release $new_tag..."
+	gh release create "$new_tag" \
+		--title "mine-attack $new_tag" \
+		--notes "stable version" \
+		MineAttack-macOS.zip MineAttack-Windows.zip
+
+	echo "Release $new_tag published."
+done
+
+exit 0
