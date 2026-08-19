@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MineAttack HUD UI Lab</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="hud-page" data-hud="steel">
+  <div class="app-shell">
+    <header class="hero-panel">
+      <div>
+        <p class="eyebrow">MineAttack visual iteration</p>
+        <h1>HUD Directions</h1>
+        <p class="lede">Unify the in-game interface with the frosted-steel menu language while keeping resources, unit counts, warnings, speed controls, and commands readable at RTS speed.</p>
+      </div>
+      <div class="hero-badges" aria-label="Technical constraints">
+        <span>Readable over surface</span>
+        <span>Readable underground</span>
+        <span>9-slice friendly</span>
+      </div>
+    </header>
+
+    <nav class="lab-nav" aria-label="UI mockup sections">
+      <a href="./index.html">Snowstorm</a>
+      <a href="./meteor.html">Meteor shower</a>
+      <a href="./main-menu.html">Main menu</a>
+      <a class="active" href="./hud.html">HUD</a>
+      <a href="./build-menu.html">Build menu</a>
+      <a href="./research-menu.html">Research menu</a>
+    </nav>
+
+    <main class="workspace">
+      <section class="stage-column" aria-label="HUD mockup viewport">
+        <div class="toolbar">
+          <div class="segmented" role="group" aria-label="HUD direction">
+            <button class="variant-button" data-variant="current">Current</button>
+            <button class="variant-button active" data-variant="steel">A · Frosted Steel</button>
+            <button class="variant-button" data-variant="tactical">B · Tactical Minimal</button>
+            <button class="variant-button" data-variant="deck">C · Siege Deck</button>
+          </div>
+        </div>
+
+        <div class="stage single hud-stage">
+          <section class="scene hud-scene" aria-label="HUD concept over MineAttack gameplay">
+            <img class="hud-backdrop" src="./assets/mineattack-clear.png" alt="MineAttack gameplay viewport with HUD concepts" />
+            <div class="hud-shade"></div>
+
+            <div class="hud-design hud-steel" aria-label="Frosted steel HUD concept">
+              <header class="steel-top hud-metal">
+                <div class="hud-cluster resource-cluster">
+                  <span><img src="./assets/icons/icon_coin.png" alt="" /><b>500</b></span>
+                  <span><img src="./assets/icons/icon_miner.png" alt="" />Miner L1</span>
+                  <span><img src="./assets/icons/faction_industrial.png" alt="" />Industrial</span>
+                </div>
+                <div class="hud-cluster unit-cluster">
+                  <b>3/100</b><span><img src="./assets/icons/icon_swordsman.png" alt="" />3</span><span><img src="./assets/icons/icon_archer.png" alt="" />0</span><span><img src="./assets/icons/icon_wizard.png" alt="" />0</span><span><img src="./assets/icons/icon_dragon.png" alt="" />0</span>
+                </div>
+                <div class="hud-cluster status-cluster">
+                  <span class="hp blue"><img src="./assets/icons/icon_hp.png" alt="" />5000</span><span class="hp red"><img src="./assets/icons/icon_hp.png" alt="" />5000</span><span>Enemy: ???</span>
+                </div>
+                <div class="hud-cluster speed-cluster"><b>1×</b><span>2×</span><span>3×</span><span>5×</span><span>10×</span></div>
+              </header>
+              <div class="steel-alert"><img src="./assets/icons/icon_snowstorm.png" alt="" /> SNOWSTORM IN 42s</div>
+              <aside class="steel-queue hud-metal" aria-label="Training queue">
+                <header class="queue-header">
+                  <div><p>Training queue</p><strong>2 in production</strong></div>
+                  <span>2/5</span>
+                </header>
+                <section class="queue-active">
+                  <img src="./assets/icons/icon_swordsman.png" alt="" />
+                  <div><b>Swordsman</b><span>Ready in 5.0s</span></div>
+                  <em>62%</em>
+                  <i><b style="width:62%"></b></i>
+                </section>
+                <ol class="queue-list">
+                  <li><img src="./assets/icons/icon_miner.png" alt="" /><span>Miner</span><b>3.0s</b></li>
+                  <li><img src="./assets/icons/icon_archer.png" alt="" /><span>Archer</span><b>6.0s</b></li>
+                  <li class="queue-ghost"><img src="./assets/icons/icon_wizard.png" alt="" /><span>Wizard</span><b>Locked</b></li>
+                </ol>
+                <footer class="queue-actions"><button>Pause</button><button>Clear</button></footer>
+              </aside>
+              <footer class="steel-bottom hud-metal">
+                <button class="upgrade">Upgrade Miner<br /><b>200</b></button>
+                <button><img src="./assets/icons/icon_miner.png" alt="" />Miner<br /><b>50</b></button>
+                <button><img src="./assets/icons/icon_swordsman.png" alt="" />Sword<br /><b>75</b></button>
+                <button><img src="./assets/icons/icon_archer.png" alt="" />Archer<br /><b>120</b></button>
+                <button><img src="./assets/icons/icon_wizard.png" alt="" />Wizard<br /><b>400</b></button>
+                <button><img src="./assets/icons/icon_dragon.png" alt="" />Dragon<br /><b>1500</b></button>
+                <button class="stance active">Attack</button>
+                <button class="stance">Defend</button>
+                <button class="stance">Garrison</button>
+                <button class="stance">Rally</button>
+                <button class="danger">Kill</button>
+                <button class="utility">Research</button>
+                <button class="utility">Build</button>
+              </footer>
+            </div>
+
+            <div class="hud-design hud-tactical" aria-label="Tactical minimal HUD concept">
+              <header class="tactical-top-left">
+                <span><img src="./assets/icons/icon_coin.png" alt="" />500</span>
+                <span>3/100</span>
+                <span>Industrial</span>
+              </header>
+              <header class="tactical-top-right">
+                <span class="hp blue">5000</span><span class="hp red">5000</span><b>1×</b>
+              </header>
+              <div class="tactical-event">SNOWSTORM · 42s</div>
+              <aside class="tactical-layers"><b>L1</b><b>L2</b><span>L3</span><span>L4</span><span>L5</span><span>L6</span><span>L7</span></aside>
+              <footer class="tactical-bottom">
+                <button><img src="./assets/icons/icon_miner.png" alt="" /><span>50</span></button>
+                <button><img src="./assets/icons/icon_swordsman.png" alt="" /><span>75</span></button>
+                <button><img src="./assets/icons/icon_archer.png" alt="" /><span>120</span></button>
+                <button><img src="./assets/icons/icon_wizard.png" alt="" /><span>400</span></button>
+                <button><img src="./assets/icons/icon_dragon.png" alt="" /><span>1500</span></button>
+                <button class="wide">Attack</button>
+                <button class="wide">Build</button>
+                <button class="wide">Research</button>
+              </footer>
+            </div>
+
+            <div class="hud-design hud-deck" aria-label="Siege deck HUD concept">
+              <aside class="deck-rail hud-metal">
+                <div class="deck-logo">MA</div>
+                <button class="active">Surface</button>
+                <button>Underground</button>
+                <button>Research</button>
+                <button>Build</button>
+                <div class="deck-speed"><span>SPEED</span><b>1×</b></div>
+              </aside>
+              <header class="deck-status hud-metal">
+                <div><span>Ore</span><b>500</b></div>
+                <div><span>Army</span><b>3/100</b></div>
+                <div><span>Player HQ</span><b class="blue-text">5000</b></div>
+                <div><span>Enemy HQ</span><b class="red-text">5000</b></div>
+              </header>
+              <div class="deck-event"><img src="./assets/icons/icon_weather_alert.png" alt="" /><div><b>EVENT WATCH</b><span>Snowstorm approaching · 42 seconds</span></div></div>
+              <footer class="deck-production hud-metal">
+                <section><b>Economy</b><button>Miner · 50</button><button>Upgrade · 200</button></section>
+                <section><b>Army</b><button>Sword · 75</button><button>Archer · 120</button><button>Wizard · 400</button></section>
+                <section><b>Command</b><button>Attack</button><button>Defend</button><button>Rally</button></section>
+              </footer>
+            </div>
+
+            <div class="scene-label proposed-label">A · Frosted Steel</div>
+          </section>
+        </div>
+
+        <div class="annotation-row">
+          <article>
+            <strong>Hierarchy first</strong>
+            <span>Resources, army count, HQ health, warnings, and speed controls remain anchored in predictable locations.</span>
+          </article>
+          <article>
+            <strong>Material without clutter</strong>
+            <span>Rivets and frost edges frame the UI, but command buttons remain flat enough for fast scanning.</span>
+          </article>
+          <article>
+            <strong>Surface and underground safe</strong>
+            <span>Every concept uses high-opacity panels and restrained glow so it remains readable over both views.</span>
+          </article>
+        </div>
+      </section>
+
+      <aside class="control-panel" aria-label="HUD design notes">
+        <div class="panel-heading">
+          <p class="eyebrow">Direction notes</p>
+          <h2 id="variantTitle">A · Frosted Steel</h2>
+          <p id="variantDescription">The safest full redesign: same layout, stronger materials, tighter grouping, and a production queue that shows active progress, upcoming units, capacity, and controls.</p>
+        </div>
+        <div class="implementation-card variant-notes">
+          <h3>What to evaluate</h3>
+          <ul id="variantNotes">
+            <li>The queue now reads as a production module instead of a small empty status box.</li>
+            <li>Active training gets the strongest gold treatment; queued and locked units sit underneath.</li>
+            <li>Pause and Clear controls are included without changing the bottom command bar.</li>
+          </ul>
+        </div>
+        <div class="implementation-card">
+          <h3>Production fit</h3>
+          <ul>
+            <li>All options preserve the current information inventory.</li>
+            <li>Option A maps most directly onto the existing Control layout.</li>
+            <li>Options B and C would require larger layout refactors.</li>
+          </ul>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="./variants.js"></script>
+</body>
+</html>

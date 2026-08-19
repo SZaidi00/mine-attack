@@ -62,6 +62,7 @@ const _ICON_SNOWSTORM: Texture2D = preload("res://frost_mines_assets/icons/icon_
 @onready var _enemy_faction_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyFactionLabel
 @onready var _stance_buttons: Dictionary = {}
 @onready var _game_over_panel: PanelContainer = $GameOverPanel
+@onready var _weather_overlay: WeatherOverlayRenderer = $WeatherOverlay
 
 var _styling: HUDStyling
 var _menus: HUDMenus
@@ -154,6 +155,12 @@ func _ready() -> void:
 	_updates._sync_view_buttons()
 	_updates._sync_speed_buttons()
 	_updates._initialize_hp_labels()
+	# Sync overlay with any weather state that survived from a previous match
+	# (should not happen because WeatherManager.reset() runs above, but keeps
+	# the overlay honest if signals are already in-flight).
+	if _weather_overlay != null:
+		_weather_overlay.set_snowstorm_active(WeatherManager.is_snowstorm_active())
+		_weather_overlay.set_volcano_active(WeatherManager.is_volcano_active())
 
 
 func _process(_delta: float) -> void:
@@ -183,6 +190,13 @@ func _process(_delta: float) -> void:
 	var pause_menu_wanted: bool = get_tree().paused and not _research_panel.owns_pause()
 	if _pause_panel != null and _pause_panel.visible != pause_menu_wanted:
 		_pause_panel.visible = pause_menu_wanted
+
+	# Hide weather overlays once the match ends (the old vignettes did this).
+	if not GameManager.game_active and _weather_overlay != null:
+		if WeatherManager.is_snowstorm_active():
+			_weather_overlay.set_snowstorm_active(false)
+		if WeatherManager.is_volcano_active():
+			_weather_overlay.set_volcano_active(false)
 
 
 func _on_pause_restart() -> void:
@@ -366,20 +380,16 @@ var _build_pigeon_button: Button = null
 var _lava_banner: HBoxContainer = null
 var _lava_banner_label: Label = null
 
-# Weather banner + storm vignette (Revamp Phase 5): flashing countdown at the
-# top center while a snowstorm is imminent, and a dark-blue edge vignette
-# while the storm rages. Driven by WeatherManager signals and its live
-# countdown, same as the lava banner.
+# Weather banner (Revamp Phase 5 + Phase 01 revamp): flashing countdown at the
+# top center while a snowstorm is imminent. The layered overlay is handled by
+# the WeatherOverlay node; this banner is just the warning readout.
 var _weather_banner: HBoxContainer = null
 var _weather_banner_label: Label = null
-var _storm_vignette: TextureRect = null
 
-# Volcano banner + vignette: flashing countdown below the snowstorm banner
-# while a volcano eruption is imminent, and a red/orange edge vignette while
-# the eruption rages.
+# Volcano banner: flashing countdown below the snowstorm banner while a volcano
+# eruption is imminent. The layered overlay is handled by WeatherOverlay.
 var _volcano_banner: HBoxContainer = null
 var _volcano_banner_label: Label = null
-var _volcano_vignette: TextureRect = null
 
 
 func _build_lava_banner() -> void:
@@ -461,32 +471,9 @@ func _build_weather_banner() -> void:
 	_weather_banner.visible = false
 	add_child(_weather_banner)
 
-	# Storm vignette: dark-blue edges closing in while the snowstorm rages.
-	_storm_vignette = TextureRect.new()
-	_storm_vignette.name = "StormVignette"
-	_storm_vignette.texture = _make_vignette_texture()
-	_storm_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_storm_vignette.stretch_mode = TextureRect.STRETCH_SCALE
-	_storm_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_storm_vignette.visible = false
-	add_child(_storm_vignette)
-
 	WeatherManager.weather_warning_started.connect(_on_weather_warning_started)
 	WeatherManager.snowstorm_started.connect(_on_snowstorm_started)
 	WeatherManager.snowstorm_ended.connect(_on_snowstorm_ended)
-
-
-## Radial gradient: transparent center fading to dark blue at the edges.
-func _make_vignette_texture() -> Texture2D:
-	var size: int = 256
-	var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
-	var center: float = (size - 1) / 2.0
-	for x in range(size):
-		for y in range(size):
-			var d: float = Vector2(x - center, y - center).length() / center
-			var alpha: float = clampf((d - 0.45) / 0.55, 0.0, 1.0) ** 1.6 * 0.55
-			img.set_pixel(x, y, Color(0.08, 0.16, 0.42, alpha))
-	return ImageTexture.create_from_image(img)
 
 
 func _on_weather_warning_started(_seconds: float) -> void:
@@ -495,11 +482,13 @@ func _on_weather_warning_started(_seconds: float) -> void:
 
 func _on_snowstorm_started() -> void:
 	_weather_banner.visible = false
-	_storm_vignette.visible = true
+	if _weather_overlay != null:
+		_weather_overlay.set_snowstorm_active(true)
 
 
 func _on_snowstorm_ended() -> void:
-	_storm_vignette.visible = false
+	if _weather_overlay != null:
+		_weather_overlay.set_snowstorm_active(false)
 
 
 func _update_weather_banner() -> void:
@@ -514,11 +503,6 @@ func _update_weather_banner() -> void:
 			# Flashing red pulse.
 			var pulse: float = 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0)
 			_weather_banner.modulate = Color(1.0, 1.0, 1.0, pulse)
-	# The vignette follows the live storm state (covers scene reloads and
-	# game-over freezes where signals alone would leave it stuck).
-	var storm_on: bool = WeatherManager.is_snowstorm_active() and GameManager.game_active
-	if _storm_vignette != null and _storm_vignette.visible != storm_on:
-		_storm_vignette.visible = storm_on
 
 
 func _build_volcano_banner() -> void:
@@ -545,32 +529,9 @@ func _build_volcano_banner() -> void:
 	_volcano_banner.visible = false
 	add_child(_volcano_banner)
 
-	# Volcano vignette: red/orange edges closing in while the eruption rages.
-	_volcano_vignette = TextureRect.new()
-	_volcano_vignette.name = "VolcanoVignette"
-	_volcano_vignette.texture = _make_volcano_vignette_texture()
-	_volcano_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_volcano_vignette.stretch_mode = TextureRect.STRETCH_SCALE
-	_volcano_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_volcano_vignette.visible = false
-	add_child(_volcano_vignette)
-
 	WeatherManager.volcano_warning_started.connect(_on_volcano_warning_started)
 	WeatherManager.volcano_started.connect(_on_volcano_started)
 	WeatherManager.volcano_ended.connect(_on_volcano_ended)
-
-
-## Radial gradient: transparent center fading to red/orange at the edges.
-func _make_volcano_vignette_texture() -> Texture2D:
-	var size: int = 256
-	var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
-	var center: float = (size - 1) / 2.0
-	for x in range(size):
-		for y in range(size):
-			var d: float = Vector2(x - center, y - center).length() / center
-			var alpha: float = clampf((d - 0.45) / 0.55, 0.0, 1.0) ** 1.6 * 0.5
-			img.set_pixel(x, y, Color(0.65, 0.15, 0.05, alpha))
-	return ImageTexture.create_from_image(img)
 
 
 func _on_volcano_warning_started(_seconds: float) -> void:
@@ -579,11 +540,13 @@ func _on_volcano_warning_started(_seconds: float) -> void:
 
 func _on_volcano_started() -> void:
 	_volcano_banner.visible = false
-	_volcano_vignette.visible = true
+	if _weather_overlay != null:
+		_weather_overlay.set_volcano_active(true)
 
 
 func _on_volcano_ended() -> void:
-	_volcano_vignette.visible = false
+	if _weather_overlay != null:
+		_weather_overlay.set_volcano_active(false)
 
 
 func _update_volcano_banner() -> void:
@@ -598,10 +561,6 @@ func _update_volcano_banner() -> void:
 			# Flashing red-orange pulse.
 			var pulse: float = 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0)
 			_volcano_banner.modulate = Color(1.0, 1.0, 1.0, pulse)
-	# The vignette follows the live volcano state.
-	var volcano_on: bool = WeatherManager.is_volcano_active() and GameManager.game_active
-	if _volcano_vignette != null and _volcano_vignette.visible != volcano_on:
-		_volcano_vignette.visible = volcano_on
 
 
 # Faction identified popup (Revamp Phase 7): a brief center-screen banner

@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MineAttack Main Menu UI Lab</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="menu-page" data-menu="command">
+  <div class="app-shell">
+    <header class="hero-panel">
+      <div>
+        <p class="eyebrow">MineAttack visual iteration</p>
+        <h1>Main Menu Directions</h1>
+        <p class="lede">Explore a stronger first impression: stamped-steel command UI, clearer faction identity, and a menu that feels connected to the frozen volcanic mine.</p>
+      </div>
+      <div class="hero-badges" aria-label="Technical constraints">
+        <span>1920×1080 logical UI</span>
+        <span>Existing palette</span>
+        <span>Texture-swap friendly</span>
+      </div>
+    </header>
+
+    <nav class="lab-nav" aria-label="UI mockup sections">
+      <a href="./index.html">Snowstorm</a>
+      <a href="./meteor.html">Meteor shower</a>
+      <a class="active" href="./main-menu.html">Main menu</a>
+      <a href="./hud.html">HUD</a>
+      <a href="./build-menu.html">Build menu</a>
+      <a href="./research-menu.html">Research menu</a>
+    </nav>
+
+    <main class="workspace">
+      <section class="stage-column" aria-label="Main menu mockup viewport">
+        <div class="toolbar">
+          <div class="segmented" role="group" aria-label="Main menu direction">
+            <button class="variant-button" data-variant="current">Current</button>
+            <button class="variant-button active" data-variant="command">A · Command Console</button>
+            <button class="variant-button" data-variant="factions">B · Faction Gate</button>
+            <button class="variant-button" data-variant="briefing">C · Operation Briefing</button>
+          </div>
+        </div>
+
+        <div class="stage single menu-stage">
+          <section class="scene menu-scene" aria-label="Main menu concept">
+            <img class="menu-backdrop" src="./assets/mineattack-menu-current.png" alt="MineAttack main menu background" />
+            <div class="menu-vignette"></div>
+            <div class="menu-snow"></div>
+            <div class="menu-atmosphere" aria-hidden="true"></div>
+
+            <div class="menu-design menu-command" aria-label="Command console menu concept">
+              <div class="menu-side-status left-status">
+                <span>PLAYER HQ</span>
+                <strong>ONLINE</strong>
+                <i class="blue-light"></i>
+              </div>
+              <div class="menu-side-status right-status">
+                <span>ENEMY HQ</span>
+                <strong>UNKNOWN</strong>
+                <i class="red-light"></i>
+              </div>
+              <section class="command-card metal-card">
+                <p class="eyebrow">Frost mines command</p>
+                <h2>MINEATTACK</h2>
+                <p class="menu-tagline">Frozen surface. Living mountain. One enemy base.</p>
+                <div class="menu-field-grid">
+                  <label>Difficulty <b>NORMAL</b></label>
+                  <label>Resolution <b>2560 × 1440</b></label>
+                </div>
+                <button class="menu-primary">Next · Choose Faction</button>
+                <button class="menu-secondary">Quit</button>
+                <small>Right-click orders · R research · B build</small>
+              </section>
+            </div>
+
+            <div class="menu-design menu-factions" aria-label="Faction gate menu concept">
+              <header class="faction-gate-header">
+                <p class="eyebrow">Choose your doctrine</p>
+                <h2>CHOOSE YOUR FACTION</h2>
+                <span>Each branch changes your economy, army, and research path.</span>
+              </header>
+              <div class="faction-gate-grid">
+                <article class="faction-card arcane-card">
+                  <img src="./assets/icons/faction_arcane.png" alt="Arcane faction icon" />
+                  <h3>ARCANE</h3>
+                  <p>Crystal engineering and battlefield control.</p>
+                  <ul><li>Wizard specialization</li><li>Vision and shelter tech</li><li>High-risk burst economy</li></ul>
+                  <button>Select Arcane</button>
+                </article>
+                <article class="faction-card brute-card">
+                  <img src="./assets/icons/faction_brute.png" alt="Brute faction icon" />
+                  <h3>BRUTE</h3>
+                  <p>Direct siege power and aggressive pressure.</p>
+                  <ul><li>Stronger frontline units</li><li>Wall breach bonuses</li><li>Fast army momentum</li></ul>
+                  <button>Select Brute</button>
+                </article>
+                <article class="faction-card industrial-card selected">
+                  <img src="./assets/icons/faction_industrial.png" alt="Industrial faction icon" />
+                  <h3>INDUSTRIAL</h3>
+                  <p>Mining logistics, towers, and durable infrastructure.</p>
+                  <ul><li>Efficient ore extraction</li><li>Stronger structures</li><li>Defensive late game</li></ul>
+                  <button>Deploy Industrial</button>
+                </article>
+              </div>
+              <footer class="faction-footer"><span>Difficulty · Normal</span><b>ENTER THE FROST MINES</b></footer>
+            </div>
+
+            <div class="menu-design menu-briefing" aria-label="Operation briefing menu concept">
+              <aside class="briefing-rail metal-card">
+                <p class="eyebrow">MineAttack</p>
+                <h2>FROST MINES</h2>
+                <nav>
+                  <a class="active">Start Operation</a>
+                  <a>Difficulty</a>
+                  <a>Display</a>
+                  <a>Quit</a>
+                </nav>
+              </aside>
+              <section class="briefing-board metal-card">
+                <div class="briefing-heading">
+                  <span>OPERATION 07</span>
+                  <strong>VOLCANIC FRONT</strong>
+                </div>
+                <p>Establish a mine network, hold the surface, scout the enemy doctrine, and destroy the opposing headquarters.</p>
+                <div class="briefing-stats">
+                  <span><b>Event risk</b>Snowstorm / eruption</span>
+                  <span><b>Starting ore</b>500</span>
+                  <span><b>Enemy faction</b>Unknown</span>
+                </div>
+                <button class="menu-primary">Begin Briefing</button>
+              </section>
+              <div class="briefing-ticker">WEATHER ALERT · TEMPERATURE FALLING · VOLCANIC ACTIVITY RISING</div>
+            </div>
+
+            <div class="scene-label proposed-label">A · Command Console</div>
+          </section>
+        </div>
+
+        <div class="annotation-row">
+          <article>
+            <strong>One shared material language</strong>
+            <span>Panels use recessed metal, gold readouts, rivets, frost rim-light, and worn warning strips.</span>
+          </article>
+          <article>
+            <strong>Faction identity up front</strong>
+            <span>Arcane, Brute, and Industrial retain their existing hues but get stronger heraldry and clearer silhouettes.</span>
+          </article>
+          <article>
+            <strong>Background remains recognizable</strong>
+            <span>The current night sky, bases, volcano, and falling snow remain visible beneath the new interface.</span>
+          </article>
+        </div>
+      </section>
+
+      <aside class="control-panel" aria-label="Main menu design notes">
+        <div class="panel-heading">
+          <p class="eyebrow">Direction notes</p>
+          <h2 id="variantTitle">A · Command Console</h2>
+          <p id="variantDescription">A polished version of the current centered flow, upgraded with tactile metal, animated atmosphere, faction-colored base glows, and world-status details.</p>
+        </div>
+        <div class="implementation-card variant-notes">
+          <h3>What to evaluate</h3>
+          <ul id="variantNotes">
+            <li>The background now has drifting cloud bands, aurora light, and stronger base/volcano glows.</li>
+            <li>The flow remains the same: title, difficulty, resolution, next, and quit.</li>
+            <li>The player/enemy status modules reinforce the two-sided siege fantasy.</li>
+          </ul>
+        </div>
+        <div class="implementation-card">
+          <h3>Production fit</h3>
+          <ul>
+            <li>Can be built with new 9-slice panel and button textures.</li>
+            <li>No layout or flow changes are required for option A.</li>
+            <li>Options B and C are stronger departures for discussion.</li>
+          </ul>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="./variants.js"></script>
+</body>
+</html>

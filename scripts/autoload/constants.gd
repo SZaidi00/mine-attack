@@ -251,7 +251,7 @@ const SNOWSTORM_MIN_INTERVAL: float = 60.0
 const SNOWSTORM_MAX_INTERVAL: float = 90.0
 const SNOWSTORM_DURATION: float = 15.0
 const SNOWSTORM_WARNING_TIME: float = 5.0
-const SNOWSTORM_VISION_MULT: float = 0.5
+const SNOWSTORM_VISION_MULT: float = 0.25
 const SNOWSTORM_DAMAGE_PER_SEC: float = 2.0
 
 # ─── VOLCANO ───

@@ -5,9 +5,19 @@
 [ext_resource type="Script" path="res://scripts/ui/training_queue_panel.gd" id="3_queue_panel"]
 [ext_resource type="Script" path="res://scripts/ui/layer_indicator.gd" id="4_layer_ind"]
 [ext_resource type="Script" path="res://scripts/ui/research_panel.gd" id="5_research_panel"]
+[ext_resource type="Script" path="res://scripts/ui/weather_overlay_renderer.gd" id="6_weather_overlay"]
 
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_hud")
+
+[node name="WeatherOverlay" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_weather_overlay")
 
 [node name="TopBar" type="PanelContainer" parent="."]
 anchors_preset = 10

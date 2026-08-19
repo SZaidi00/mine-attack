@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MineAttack Meteor Shower UI Lab</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="meteor-page" data-meteor="siege">
+  <div class="app-shell">
+    <header class="hero-panel">
+      <div>
+        <p class="eyebrow">MineAttack visual iteration</p>
+        <h1>Meteor Shower Presentation</h1>
+        <p class="lede">Turn the volcano event from a red screen tint into a readable siege forecast: crater activity, incoming trails, impact zones, and emergency HUD language.</p>
+      </div>
+      <div class="hero-badges" aria-label="Technical constraints">
+        <span>Godot 4.7</span>
+        <span>GL Compatibility</span>
+        <span>Canvas-friendly</span>
+      </div>
+    </header>
+
+    <nav class="lab-nav" aria-label="UI mockup sections">
+      <a href="./index.html">Snowstorm</a>
+      <a class="active" href="./meteor.html">Meteor shower</a>
+      <a href="./main-menu.html">Main menu</a>
+      <a href="./hud.html">HUD</a>
+      <a href="./build-menu.html">Build menu</a>
+      <a href="./research-menu.html">Research menu</a>
+    </nav>
+
+    <main class="workspace">
+      <section class="stage-column" aria-label="Meteor shower mockup viewport">
+        <div class="toolbar">
+          <div class="segmented" role="group" aria-label="Meteor presentation direction">
+            <button class="meteor-button" data-meteor-preset="current">Current</button>
+            <button class="meteor-button" data-meteor-preset="impact">A · Impact Forecast</button>
+            <button class="meteor-button active" data-meteor-preset="siege">B · Volcanic Siege</button>
+          </div>
+          <button id="meteorCompare" class="compare-toggle" type="button" aria-pressed="false">Compare current</button>
+        </div>
+
+        <div id="meteorStage" class="stage single">
+          <section id="meteorSingle" class="scene" aria-label="Proposed meteor shower treatment">
+            <img class="base-image meteor-clear" src="./assets/mineattack-clear.png" alt="MineAttack gameplay viewport with a proposed meteor shower overlay" />
+            <img class="base-image meteor-current" src="./assets/mineattack-meteor-current.png" alt="MineAttack gameplay viewport with the current volcano eruption overlay" />
+            <div class="meteor-grade"></div>
+            <canvas class="meteor-canvas"></canvas>
+            <div class="impact-warning warning-module">
+              <img src="./assets/icons/icon_lava.png" alt="" />
+              <div>
+                <strong>VOLCANO ERUPTION</strong>
+                <span>Impact window · 00:18</span>
+              </div>
+              <b>HIGH</b>
+            </div>
+            <div class="hazard-readout">
+              <span><i></i>3 trajectories tracked</span>
+              <span><i></i>Burn patches likely</span>
+              <span><i></i>Surface exposure rising</span>
+            </div>
+            <div class="scene-label proposed-label">Proposed treatment</div>
+          </section>
+
+          <section id="meteorSplitCurrent" class="scene split-scene" aria-label="Current meteor shower treatment">
+            <img class="base-image always-visible" src="./assets/mineattack-meteor-current.png" alt="Current MineAttack volcano eruption treatment" />
+            <div class="scene-label">Current red vignette</div>
+          </section>
+
+          <section id="meteorSplitProposed" class="scene split-scene" aria-label="Proposed meteor shower comparison">
+            <img class="base-image always-visible" src="./assets/mineattack-clear.png" alt="MineAttack gameplay viewport with a proposed meteor shower overlay" />
+            <div class="meteor-grade"></div>
+            <canvas class="meteor-canvas"></canvas>
+            <div class="impact-warning warning-module">
+              <img src="./assets/icons/icon_lava.png" alt="" />
+              <div>
+                <strong>VOLCANO ERUPTION</strong>
+                <span>Impact window · 00:18</span>
+              </div>
+              <b>HIGH</b>
+            </div>
+            <div class="hazard-readout">
+              <span><i></i>3 trajectories tracked</span>
+              <span><i></i>Burn patches likely</span>
+              <span><i></i>Surface exposure rising</span>
+            </div>
+            <div class="scene-label proposed-label">Proposed treatment</div>
+          </section>
+        </div>
+
+        <div class="annotation-row">
+          <article>
+            <strong>Bombardment without markers</strong>
+            <span>Trajectory streaks and ember density carry the danger while impact rings remain off.</span>
+          </article>
+          <article>
+            <strong>Heat without a red bubble</strong>
+            <span>The volcano, embers, and sky glow carry the danger instead of tinting every edge evenly.</span>
+          </article>
+          <article>
+            <strong>RTS readability preserved</strong>
+            <span>HUD, underground, and unit silhouettes stay visible while the surface becomes hostile.</span>
+          </article>
+        </div>
+      </section>
+
+      <aside class="control-panel" aria-label="Meteor controls">
+        <div class="panel-heading">
+          <p class="eyebrow">Iteration controls</p>
+          <h2 id="meteorTitle">B · Volcanic Siege</h2>
+          <p id="meteorDescription">Maximum meteor and ember density with a moderate crater plume, no impact rings, and all atmosphere clipped to the surface.</p>
+        </div>
+
+        <div class="control-group">
+          <label for="meteorDensity">Meteor density <output id="meteorDensityValue">100%</output></label>
+          <input id="meteorDensity" type="range" min="0" max="100" value="100" />
+        </div>
+
+        <div class="control-group">
+          <label for="emberGlow">Ember glow <output id="emberGlowValue">100%</output></label>
+          <input id="emberGlow" type="range" min="0" max="100" value="100" />
+        </div>
+
+        <div class="control-group">
+          <label for="impactMarkers">Impact marker strength <output id="impactMarkersValue">0%</output></label>
+          <input id="impactMarkers" type="range" min="0" max="100" value="0" />
+        </div>
+
+        <div class="control-group">
+          <label for="plumePower">Crater plume · volcano smoke/glow <output id="plumePowerValue">45%</output></label>
+          <input id="plumePower" type="range" min="0" max="100" value="45" />
+        </div>
+
+        <div class="control-group">
+          <label for="heatGrade">Heat color grade <output id="heatGradeValue">68%</output></label>
+          <input id="heatGrade" type="range" min="0" max="100" value="68" />
+        </div>
+
+        <div class="toggle-list">
+          <label><input id="targetZonesToggle" type="checkbox" checked /> Surface impact zones</label>
+          <label><input id="emberFieldToggle" type="checkbox" checked /> Floating ember field</label>
+          <label><input id="warningRailToggle" type="checkbox" checked /> Emergency warning rail</label>
+        </div>
+
+        <div class="implementation-card">
+          <h3>Implementation readout</h3>
+          <ul id="meteorNotes">
+            <li>Locked to 100% meteor density and ember glow for the eruption peak.</li>
+            <li>Crater plume is the smoke and glow rising from the volcano mouth; it is set to 45%.</li>
+            <li>All heat, trails, embers, and plume effects stop at the surface line.</li>
+          </ul>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="./meteor.js"></script>
+</body>
+</html>
