@@ -96,6 +96,28 @@ static func make_panel_style(
 	return style
 
 
+## Stamped-metal command-console card used by the main menu. Frosted top rim,
+## inset bottom shadow, and a heavy outer shadow so it floats over the animated
+## battlefield backdrop.
+static func make_metal_card_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.set_corner_radius_all(14)
+	style.set_border_width_all(1)
+	# Frosted rim highlight (StyleBoxFlat uses one border color for all sides).
+	style.border_color = Color(1.0, 1.0, 1.0, 0.20)
+	# Thicker top edge to read as a stamped-steel lip.
+	style.border_width_top = 2
+	style.bg_color = Color("#151c29")
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.52)
+	style.shadow_size = 26
+	style.shadow_offset = Vector2(0.0, 10.0)
+	style.content_margin_left = PANEL_PADDING + 10
+	style.content_margin_top = PANEL_PADDING + 8
+	style.content_margin_right = PANEL_PADDING + 10
+	style.content_margin_bottom = PANEL_PADDING + 8
+	return style
+
+
 static func make_recessed_panel_style(
 	bg: Color = COLOR_RECESSED_BG,
 	border: Color = COLOR_RECESSED_BORDER,
@@ -296,15 +318,21 @@ static func warning_text_color(variant: WarningVariant) -> Color:
 static func make_faction_card_style(faction_color: Color, selected: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.set_corner_radius_all(RADIUS_PANEL)
-	style.set_border_width_all(3 if selected else 1)
+	style.set_border_width_all(1)
+	# Prominent faction-color bar across the top edge (heraldry accent).
+	style.border_width_top = 6
 	style.bg_color = Color("#151c29") if not selected else Color("#1c2434")
-	style.border_color = faction_color.darkened(0.5)
+	# StyleBoxFlat has a single border color, so the top bar and side borders
+	# share the faction hue (or gold when selected).
+	style.border_color = faction_color if not selected else COLOR_TEXT_GOLD
 	if selected:
-		style.border_color = COLOR_TEXT_GOLD
 		style.shadow_color = Color(COLOR_TEXT_GOLD.r, COLOR_TEXT_GOLD.g, COLOR_TEXT_GOLD.b, 0.35)
 		style.shadow_size = 18
+	else:
+		style.shadow_color = Color(faction_color.r, faction_color.g, faction_color.b, 0.10)
+		style.shadow_size = 8
 	style.content_margin_left = DENSE_PADDING
-	style.content_margin_top = DENSE_PADDING
+	style.content_margin_top = DENSE_PADDING + 6
 	style.content_margin_right = DENSE_PADDING
 	style.content_margin_bottom = DENSE_PADDING
 	return style
