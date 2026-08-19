@@ -12,22 +12,17 @@ extends Control
 # effects (native tooltip). Player side only — the AI researches through
 # AIController. One active research per team; cancel refunds 100%.
 
+const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
 const _TEAM: GameManager.Team = GameManager.Team.PLAYER
 
-const _COL_BTN_NORMAL: Color = Color("#1a2434")
-const _COL_BTN_HOVER: Color = Color("#253650")
-const _COL_BTN_PRESSED: Color = Color("#111927")
-const _COL_BTN_DISABLED: Color = Color("#151c29")
-const _COL_BTN_BORDER: Color = Color(1, 1, 1, 0.07)
-const _COL_BTN_HOVER_BORDER: Color = Color("#4a86c8")
-const _COL_MAXED_BG: Color = Color("#14251a")
-const _COL_MAXED_BORDER: Color = Color("#3d7a4a")
+const _COL_MAXED_BG: Color = UIThemeTokens.COLOR_SUCCESS_BG
+const _COL_MAXED_BORDER: Color = UIThemeTokens.COLOR_SUCCESS_BORDER
 const _COL_LOCKED_BG: Color = Color(0.09, 0.1, 0.13, 0.65)
 const _COL_LOCKED_BORDER: Color = Color(1, 1, 1, 0.04)
-const _COL_TEXT: Color = Color("#e2e8f0")
-const _COL_TEXT_DIM: Color = Color("#94a3b8")
+const _COL_TEXT: Color = UIThemeTokens.COLOR_TEXT_PRIMARY
+const _COL_TEXT_DIM: Color = UIThemeTokens.COLOR_TEXT_DIM
 const _COL_EDGE_LOCKED: Color = Color(1, 1, 1, 0.15)
 const _COL_EDGE_OPEN: Color = Color("#8a6d1f")
 
@@ -181,22 +176,20 @@ func _build_ui() -> void:
 	card.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	card.grow_vertical = Control.GROW_DIRECTION_BOTH
 	card.custom_minimum_size = Vector2(1040, 900)
-	var card_style := StyleBoxFlat.new()
-	card_style.bg_color = Color(0.047, 0.066, 0.106, 0.97)
-	card_style.border_color = Color(1, 1, 1, 0.08)
-	card_style.set_border_width_all(1)
-	card_style.set_corner_radius_all(10)
-	card_style.shadow_color = Color(0, 0, 0, 0.35)
-	card_style.shadow_size = 6
+	var card_style := UIThemeTokens.make_panel_style()
+	card_style.content_margin_left = UIThemeTokens.PANEL_PADDING
+	card_style.content_margin_top = UIThemeTokens.DENSE_PADDING
+	card_style.content_margin_right = UIThemeTokens.PANEL_PADDING
+	card_style.content_margin_bottom = UIThemeTokens.DENSE_PADDING
 	card.add_theme_stylebox_override("panel", card_style)
 	# Grow-both keeps the card centered whatever size the content ends up.
 	add_child(card)
 
 	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_bottom", 10)
+	margin.add_theme_constant_override("margin_left", UIThemeTokens.PANEL_PADDING)
+	margin.add_theme_constant_override("margin_top", UIThemeTokens.DENSE_PADDING)
+	margin.add_theme_constant_override("margin_right", UIThemeTokens.PANEL_PADDING)
+	margin.add_theme_constant_override("margin_bottom", UIThemeTokens.DENSE_PADDING)
 	card.add_child(margin)
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 8)
@@ -207,14 +200,14 @@ func _build_ui() -> void:
 	vbox.add_child(header)
 	var title := Label.new()
 	title.text = "Research Tree"
-	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_HEADER)
 	title.add_theme_color_override("font_color", _COL_TEXT)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 	var close_button := Button.new()
 	close_button.text = "Close (R)"
-	close_button.add_theme_font_size_override("font_size", 12)
-	_style_button(close_button)
+	close_button.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
+	UIThemeTokens.apply_button_theme(close_button, UIThemeTokens.ButtonVariant.SECONDARY)
 	close_button.pressed.connect(func() -> void: visible = false)
 	header.add_child(close_button)
 
@@ -253,7 +246,7 @@ func _build_ui() -> void:
 		btn.position = rect.position
 		btn.size = rect.size
 		btn.add_theme_font_size_override("font_size", 12)
-		_style_button(btn)
+		UIThemeTokens.apply_button_theme(btn, UIThemeTokens.ButtonVariant.SECONDARY)
 		btn.pressed.connect(_start_research.bind(tech_id))
 		btn.mouse_entered.connect(func() -> void: AudioManager.play("click", Vector2.INF, -14.0))
 		_canvas.add_child(btn)
@@ -263,14 +256,14 @@ func _build_ui() -> void:
 
 	_active_label = Label.new()
 	_active_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_active_label.add_theme_font_size_override("font_size", 12)
+	_active_label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
 	_active_label.add_theme_color_override("font_color", _COL_TEXT)
 	vbox.add_child(_active_label)
 
 	_progress_bar = ProgressBar.new()
 	_progress_bar.custom_minimum_size = Vector2(0, 14)
 	_progress_bar.max_value = 1.0
-	_style_progress_bar()
+	UIThemeTokens.apply_progress_bar_theme(_progress_bar, UIThemeTokens.ProgressVariant.GOLD)
 	vbox.add_child(_progress_bar)
 
 	_queue_container = VBoxContainer.new()
@@ -284,22 +277,22 @@ func _build_ui() -> void:
 
 	_cancel_button = Button.new()
 	_cancel_button.text = "Cancel research (100% refund)"
-	_cancel_button.add_theme_font_size_override("font_size", 12)
-	_style_button(_cancel_button)
+	_cancel_button.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
+	UIThemeTokens.apply_button_theme(_cancel_button, UIThemeTokens.ButtonVariant.DANGER)
 	_cancel_button.pressed.connect(_cancel_research)
 	footer.add_child(_cancel_button)
 
 	_respec_button = Button.new()
 	_respec_button.text = "Respec (%dg)" % _Constants.BRANCH_RESPEC_COST
 	_respec_button.tooltip_text = "Reset all researched branches — one-time use per match"
-	_respec_button.add_theme_font_size_override("font_size", 12)
-	_style_button(_respec_button)
+	_respec_button.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
+	UIThemeTokens.apply_button_theme(_respec_button, UIThemeTokens.ButtonVariant.PRIMARY)
 	_respec_button.pressed.connect(_respec)
 	footer.add_child(_respec_button)
 
 	_scan_button = Button.new()
-	_scan_button.add_theme_font_size_override("font_size", 12)
-	_style_button(_scan_button)
+	_scan_button.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
+	UIThemeTokens.apply_button_theme(_scan_button, UIThemeTokens.ButtonVariant.SECONDARY)
 	_scan_button.pressed.connect(_scan)
 	footer.add_child(_scan_button)
 
@@ -335,7 +328,7 @@ func _refresh_node(tech_id: String, _busy: bool) -> void:
 		_style_node_maxed(btn)
 	else:
 		# Re-apply the base style: a respec can un-max/unlock a node.
-		_style_button(btn)
+		UIThemeTokens.apply_button_theme(btn, UIThemeTokens.ButtonVariant.SECONDARY)
 		var is_pending: bool = _is_tech_pending(tech_id)
 		var line: String
 		if is_pending:
@@ -428,15 +421,15 @@ func _refresh_queue() -> void:
 		row.add_theme_constant_override("separation", 6)
 		var label := Label.new()
 		label.text = "%d. %s — %ds" % [i + 1, tech_name, int(entry.time)]
-		label.add_theme_font_size_override("font_size", 12)
+		label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
 		label.add_theme_color_override("font_color", _COL_TEXT_DIM)
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(label)
 		var remove_button := Button.new()
 		remove_button.text = "×"
 		remove_button.tooltip_text = "Cancel queued research (100% refund)"
-		remove_button.add_theme_font_size_override("font_size", 12)
-		_style_button(remove_button)
+		remove_button.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
+		UIThemeTokens.apply_button_theme(remove_button, UIThemeTokens.ButtonVariant.DANGER)
 		remove_button.pressed.connect(_cancel_queue_entry.bind(i))
 		row.add_child(remove_button)
 		_queue_container.add_child(row)
@@ -534,34 +527,13 @@ func _on_economy_changed(_team: GameManager.Team) -> void:
 
 # ─── Styling ───
 
-func _style_button(btn: Button) -> void:
-	for state in ["normal", "hover", "pressed", "disabled"]:
-		var style := StyleBoxFlat.new()
-		match state:
-			"normal":
-				style.bg_color = _COL_BTN_NORMAL
-				style.border_color = _COL_BTN_BORDER
-			"hover":
-				style.bg_color = _COL_BTN_HOVER
-				style.border_color = _COL_BTN_HOVER_BORDER
-			"pressed":
-				style.bg_color = _COL_BTN_PRESSED
-				style.border_color = _COL_BTN_BORDER
-			"disabled":
-				style.bg_color = _COL_BTN_DISABLED
-				style.border_color = _COL_BTN_BORDER
-		style.set_border_width_all(1)
-		style.set_corner_radius_all(8)
-		btn.add_theme_stylebox_override(state, style)
-
-
 func _style_node_maxed(btn: Button) -> void:
 	for state in ["normal", "disabled"]:
 		var style := StyleBoxFlat.new()
 		style.bg_color = _COL_MAXED_BG
 		style.border_color = _COL_MAXED_BORDER
 		style.set_border_width_all(1)
-		style.set_corner_radius_all(8)
+		style.set_corner_radius_all(UIThemeTokens.RADIUS_BUTTON)
 		btn.add_theme_stylebox_override(state, style)
 
 
@@ -571,16 +543,5 @@ func _style_node_locked(btn: Button) -> void:
 		style.bg_color = _COL_LOCKED_BG
 		style.border_color = _COL_LOCKED_BORDER
 		style.set_border_width_all(1)
-		style.set_corner_radius_all(8)
+		style.set_corner_radius_all(UIThemeTokens.RADIUS_BUTTON)
 		btn.add_theme_stylebox_override(state, style)
-
-
-func _style_progress_bar() -> void:
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color("#121a28")
-	bg.set_corner_radius_all(7)
-	_progress_bar.add_theme_stylebox_override("background", bg)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color("#8a6d1f")
-	fill.set_corner_radius_all(7)
-	_progress_bar.add_theme_stylebox_override("fill", fill)

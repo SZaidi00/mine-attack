@@ -1,6 +1,7 @@
 class_name UnitButton
 extends Button
 
+const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
 const _ICON_MINER: Texture2D = preload("res://frost_mines_assets/icons/icon_miner.png")
@@ -123,37 +124,17 @@ func _update_state() -> void:
 
 
 func _apply_style() -> void:
-	add_theme_font_size_override("font_size", 11)
-	add_theme_color_override("font_color", Color("#e2e8f0"))
-	add_theme_color_override("font_pressed_color", Color("#e2e8f0"))
-	add_theme_color_override("font_hover_color", Color("#e2e8f0"))
-	add_theme_color_override("font_disabled_color", Color("#94a3b8"))
+	add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
+	UIThemeTokens.apply_button_theme(self, UIThemeTokens.ButtonVariant.SECONDARY)
 
 	if disabled:
-		var disabled_style: StyleBoxFlat = _make_flat_style(Color("#151c29"))
+		var disabled_style: StyleBoxFlat = UIThemeTokens.make_button_state_style(UIThemeTokens.ButtonVariant.SECONDARY, "disabled")
 		add_theme_stylebox_override("normal", disabled_style)
 		add_theme_stylebox_override("hover", disabled_style)
 		add_theme_stylebox_override("pressed", disabled_style)
 		modulate = Color(1, 1, 1, 0.55)
 	else:
-		add_theme_stylebox_override("normal", _make_flat_style(Color("#1a2434"), Color(1, 1, 1, 0.07)))
-		add_theme_stylebox_override("hover", _make_flat_style(Color("#253650"), Color("#4a86c8")))
-		add_theme_stylebox_override("pressed", _make_flat_style(Color("#111927"), Color(1, 1, 1, 0.07)))
 		modulate = Color(1, 1, 1, 1)
-
-
-func _make_flat_style(bg: Color, border: Color = Color(0, 0, 0, 0)) -> StyleBoxFlat:
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = bg
-	if border.a > 0.0:
-		style.border_color = border
-		style.set_border_width_all(1)
-	style.set_corner_radius_all(8)
-	style.content_margin_left = 6
-	style.content_margin_top = 6
-	style.content_margin_right = 6
-	style.content_margin_bottom = 6
-	return style
 
 
 func _setup_icon() -> void:

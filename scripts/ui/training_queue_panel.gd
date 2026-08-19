@@ -1,6 +1,7 @@
 class_name TrainingQueuePanel
 extends PanelContainer
 
+const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
 @onready var _progress_bar: ProgressBar = $MarginContainer/VBoxContainer/ProgressBar
@@ -27,17 +28,10 @@ func _style_progress_bar() -> void:
 	if _progress_bar == null:
 		return
 	_progress_bar.custom_minimum_size = Vector2(0, 14)
-	var bg: StyleBoxFlat = StyleBoxFlat.new()
-	bg.bg_color = Color("#121a28")
-	bg.set_corner_radius_all(7)
-	_progress_bar.add_theme_stylebox_override("background", bg)
-	var fill: StyleBoxFlat = StyleBoxFlat.new()
-	fill.bg_color = Color("#3b82c4")
-	fill.set_corner_radius_all(7)
-	_progress_bar.add_theme_stylebox_override("fill", fill)
+	UIThemeTokens.apply_progress_bar_theme(_progress_bar, UIThemeTokens.ProgressVariant.BLUE)
 	if _current_label:
-		_current_label.add_theme_color_override("font_color", Color("#e2e8f0"))
-		_current_label.add_theme_font_size_override("font_size", 11)
+		_current_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+		_current_label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
 
 
 func _update_progress() -> void:
@@ -103,26 +97,12 @@ func _make_queue_button(text: String, tooltip: String, color: Color) -> Button:
 	btn.tooltip_text = tooltip
 	btn.custom_minimum_size = Vector2(0, 32)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.add_theme_font_size_override("font_size", 11)
+	btn.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
+	UIThemeTokens.apply_button_theme(btn, UIThemeTokens.ButtonVariant.SECONDARY)
 	btn.add_theme_color_override("font_color", color)
-	btn.add_theme_stylebox_override("normal", _make_flat_style(Color("#1a2434"), Color(1, 1, 1, 0.07)))
-	btn.add_theme_stylebox_override("hover", _make_flat_style(Color("#253650"), Color("#4a86c8")))
-	btn.add_theme_stylebox_override("pressed", _make_flat_style(Color("#111927"), Color(1, 1, 1, 0.07)))
+	btn.add_theme_color_override("font_hover_color", color.lightened(0.2))
+	btn.add_theme_color_override("font_pressed_color", color)
 	return btn
-
-
-func _make_flat_style(bg: Color, border: Color = Color(0, 0, 0, 0)) -> StyleBoxFlat:
-	var style: StyleBoxFlat = StyleBoxFlat.new()
-	style.bg_color = bg
-	if border.a > 0.0:
-		style.border_color = border
-		style.set_border_width_all(1)
-	style.set_corner_radius_all(6)
-	style.content_margin_left = 4
-	style.content_margin_top = 4
-	style.content_margin_right = 4
-	style.content_margin_bottom = 4
-	return style
 
 
 func _cancel_queue(index: int) -> void:

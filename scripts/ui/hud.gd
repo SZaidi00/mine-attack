@@ -2,6 +2,7 @@ extends CanvasLayer
 class_name HUD
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
+const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
 
 const HUDStyling = preload("res://scripts/ui/hud_styling.gd")
 const HUDMenus = preload("res://scripts/ui/hud_menus.gd")
@@ -377,42 +378,47 @@ var _build_pigeon_button: Button = null
 # Lava warning banner (Revamp Phase 4): flashing countdown above the bottom
 # bar while a lava rise is imminent. Driven entirely by GridWorld signals and
 # its live countdown, so it stays correct through pauses and speed changes.
-var _lava_banner: HBoxContainer = null
+var _lava_banner: PanelContainer = null
 var _lava_banner_label: Label = null
 
 # Weather banner (Revamp Phase 5 + Phase 01 revamp): flashing countdown at the
 # top center while a snowstorm is imminent. The layered overlay is handled by
 # the WeatherOverlay node; this banner is just the warning readout.
-var _weather_banner: HBoxContainer = null
+var _weather_banner: PanelContainer = null
 var _weather_banner_label: Label = null
 
 # Volcano banner: flashing countdown below the snowstorm banner while a volcano
 # eruption is imminent. The layered overlay is handled by WeatherOverlay.
-var _volcano_banner: HBoxContainer = null
+var _volcano_banner: PanelContainer = null
 var _volcano_banner_label: Label = null
 
 
 func _build_lava_banner() -> void:
-	_lava_banner = HBoxContainer.new()
+	_lava_banner = PanelContainer.new()
 	_lava_banner.name = "LavaWarningBanner"
-	_lava_banner.alignment = BoxContainer.ALIGNMENT_CENTER
 	_lava_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_lava_banner.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_lava_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_lava_banner.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_lava_banner.position.y = -150.0
+	_lava_banner.add_theme_stylebox_override("panel", UIThemeTokens.make_warning_banner_style(UIThemeTokens.WarningVariant.LAVA))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lava_banner.add_child(row)
 	var icon: TextureRect = TextureRect.new()
 	icon.texture = _ICON_LAVA
 	icon.custom_minimum_size = Vector2(26, 26)
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.expand_mode = TextureRect.EXPAND_FIT_HEIGHT
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_lava_banner.add_child(icon)
+	row.add_child(icon)
 	_lava_banner_label = Label.new()
-	_lava_banner_label.add_theme_color_override("font_color", Color(1.0, 0.5, 0.15))
+	_lava_banner_label.add_theme_color_override("font_color", UIThemeTokens.warning_text_color(UIThemeTokens.WarningVariant.LAVA))
 	_lava_banner_label.add_theme_font_size_override("font_size", 28)
 	_lava_banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_lava_banner.add_child(_lava_banner_label)
+	row.add_child(_lava_banner_label)
 	_lava_banner.visible = false
 	add_child(_lava_banner)
 	var grid: GridWorld = get_node_or_null("/root/Main/World/GridWorld")
@@ -447,27 +453,32 @@ func _update_lava_banner() -> void:
 
 
 func _build_weather_banner() -> void:
-	_weather_banner = HBoxContainer.new()
+	_weather_banner = PanelContainer.new()
 	_weather_banner.name = "WeatherWarningBanner"
-	_weather_banner.alignment = BoxContainer.ALIGNMENT_CENTER
 	_weather_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_weather_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_weather_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_weather_banner.grow_vertical = Control.GROW_DIRECTION_END
 	_weather_banner.position.y = 120.0
+	_weather_banner.add_theme_stylebox_override("panel", UIThemeTokens.make_warning_banner_style(UIThemeTokens.WarningVariant.SNOWSTORM))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_weather_banner.add_child(row)
 	var icon: TextureRect = TextureRect.new()
 	icon.texture = _ICON_SNOWSTORM
 	icon.custom_minimum_size = Vector2(26, 26)
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.expand_mode = TextureRect.EXPAND_FIT_HEIGHT
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_weather_banner.add_child(icon)
+	row.add_child(icon)
 	_weather_banner_label = Label.new()
 	# Revamp Phase 7: the warning flashes red (the storm itself stays icy).
-	_weather_banner_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.25))
+	_weather_banner_label.add_theme_color_override("font_color", UIThemeTokens.warning_text_color(UIThemeTokens.WarningVariant.SNOWSTORM))
 	_weather_banner_label.add_theme_font_size_override("font_size", 28)
 	_weather_banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_weather_banner.add_child(_weather_banner_label)
+	row.add_child(_weather_banner_label)
 	_weather_banner.visible = false
 	add_child(_weather_banner)
 
@@ -506,26 +517,31 @@ func _update_weather_banner() -> void:
 
 
 func _build_volcano_banner() -> void:
-	_volcano_banner = HBoxContainer.new()
+	_volcano_banner = PanelContainer.new()
 	_volcano_banner.name = "VolcanoWarningBanner"
-	_volcano_banner.alignment = BoxContainer.ALIGNMENT_CENTER
 	_volcano_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_volcano_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_volcano_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_volcano_banner.grow_vertical = Control.GROW_DIRECTION_END
 	_volcano_banner.position.y = 170.0
+	_volcano_banner.add_theme_stylebox_override("panel", UIThemeTokens.make_warning_banner_style(UIThemeTokens.WarningVariant.VOLCANO))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_volcano_banner.add_child(row)
 	var icon: TextureRect = TextureRect.new()
 	icon.texture = _ICON_LAVA
 	icon.custom_minimum_size = Vector2(26, 26)
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.expand_mode = TextureRect.EXPAND_FIT_HEIGHT
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_volcano_banner.add_child(icon)
+	row.add_child(icon)
 	_volcano_banner_label = Label.new()
-	_volcano_banner_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.15))
+	_volcano_banner_label.add_theme_color_override("font_color", UIThemeTokens.warning_text_color(UIThemeTokens.WarningVariant.VOLCANO))
 	_volcano_banner_label.add_theme_font_size_override("font_size", 28)
 	_volcano_banner_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_volcano_banner.add_child(_volcano_banner_label)
+	row.add_child(_volcano_banner_label)
 	_volcano_banner.visible = false
 	add_child(_volcano_banner)
 

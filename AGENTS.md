@@ -127,11 +127,12 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 ### `scripts/ui/`
 
+- `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners.
 - `hud.gd` — node references, signal wiring, game-over flow, lava/weather/volcano warning banners, faction-identified popup; delegates to helpers.
-  - `hud_styling.gd` — StyleBoxFlat helpers and panel/button styling.
+  - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
   - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count).
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
-- `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen).
+- `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system.
 - `research_panel.gd` — research branch-tree overlay (diverging layout, locked branches grayed with tooltips, respec button).
 - `training_queue_panel.gd` — vertical training queue.
 - `unit_button.gd` — training buttons.

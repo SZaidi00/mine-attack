@@ -1,6 +1,8 @@
 class_name HUDMenus
 extends RefCounted
 
+const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
+
 var hud: HUD
 # Kept here (not on HUD) since only the build menu uses it.
 var _trap_button: Button = null
@@ -23,8 +25,7 @@ func _build_pause_menu() -> void:
 	hud._pause_panel.process_mode = Node.PROCESS_MODE_ALWAYS
 	hud._pause_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hud._pause_panel.visible = false
-	var dim: StyleBoxFlat = StyleBoxFlat.new()
-	dim.bg_color = Color(0.02, 0.03, 0.06, 0.75)
+	var dim: StyleBoxFlat = UIThemeTokens.make_panel_style(Color(0.02, 0.03, 0.06, 0.75), Color(0.0, 0.0, 0.0, 0.0))
 	hud._pause_panel.add_theme_stylebox_override("panel", dim)
 
 	var center: CenterContainer = CenterContainer.new()
@@ -37,7 +38,8 @@ func _build_pause_menu() -> void:
 	var title: Label = Label.new()
 	title.text = "PAUSED"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_TITLE)
+	title.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
 	vbox.add_child(title)
 
 	_add_pause_button(vbox, "Resume", func(): hud.get_tree().paused = false)
@@ -83,6 +85,8 @@ func _add_pause_button(parent: Control, text: String, callback: Callable) -> voi
 	var btn: Button = Button.new()
 	btn.text = text
 	btn.custom_minimum_size = Vector2(180, 36)
+	btn.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
+	UIThemeTokens.apply_button_theme(btn, UIThemeTokens.ButtonVariant.SECONDARY)
 	btn.pressed.connect(func(): AudioManager.play("click"))
 	btn.pressed.connect(callback)
 	parent.add_child(btn)
@@ -117,7 +121,7 @@ func _build_build_menu() -> void:
 	card.grow_vertical = Control.GROW_DIRECTION_BOTH
 	card.custom_minimum_size = Vector2(720, 420)
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	hud._styling._style_panel(card)
+	card.add_theme_stylebox_override("panel", UIThemeTokens.make_panel_style())
 	hud._build_menu.add_child(card)
 
 	var margin := MarginContainer.new()
@@ -136,16 +140,14 @@ func _build_build_menu() -> void:
 	vbox.add_child(header)
 	var title := Label.new()
 	title.text = "Build"
-	title.add_theme_font_size_override("font_size", 18)
-	title.add_theme_color_override("font_color", Color("#e2e8f0"))
+	title.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_HEADER)
+	title.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 	var close_button := Button.new()
 	close_button.text = "Close"
-	close_button.add_theme_font_size_override("font_size", 12)
-	close_button.add_theme_stylebox_override("normal", hud._styling._make_flat_style(hud._styling._COL_BTN_NORMAL, hud._styling._COL_BTN_BORDER))
-	close_button.add_theme_stylebox_override("hover", hud._styling._make_flat_style(hud._styling._COL_BTN_HOVER, hud._styling._COL_BTN_HOVER_BORDER))
-	close_button.add_theme_stylebox_override("pressed", hud._styling._make_flat_style(hud._styling._COL_BTN_PRESSED, hud._styling._COL_BTN_BORDER))
+	close_button.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
+	UIThemeTokens.apply_button_theme(close_button, UIThemeTokens.ButtonVariant.SECONDARY)
 	close_button.pressed.connect(func() -> void: hud._build_menu.visible = false)
 	header.add_child(close_button)
 
@@ -170,16 +172,12 @@ func _build_build_menu() -> void:
 func _add_build_option(parent: Control, kind: String, icon: Texture2D) -> Button:
 	var btn: Button = Button.new()
 	btn.custom_minimum_size = _GRID_BUTTON_SIZE
-	btn.add_theme_font_size_override("font_size", 13)
-	btn.add_theme_color_override("font_color", Color("#e2e8f0"))
+	btn.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
+	UIThemeTokens.apply_button_theme(btn, UIThemeTokens.ButtonVariant.SECONDARY)
 	if icon != null:
 		btn.icon = _scaled_icon(icon, 40)
 		btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-	btn.add_theme_stylebox_override("normal", hud._styling._make_flat_style(hud._styling._COL_BTN_NORMAL, hud._styling._COL_BTN_BORDER, 8, 8))
-	btn.add_theme_stylebox_override("hover", hud._styling._make_flat_style(hud._styling._COL_BTN_HOVER, hud._styling._COL_BTN_HOVER_BORDER, 8, 8))
-	btn.add_theme_stylebox_override("pressed", hud._styling._make_flat_style(hud._styling._COL_TAB_ACTIVE, hud._styling._COL_TAB_ACTIVE_BORDER, 8, 8))
-	btn.add_theme_stylebox_override("disabled", hud._styling._make_flat_style(hud._styling._COL_BTN_DISABLED, Color(0, 0, 0, 0), 8, 8))
 	btn.pressed.connect(func(): AudioManager.play("click"))
 	btn.pressed.connect(_on_build_option.bind(kind))
 	parent.add_child(btn)
