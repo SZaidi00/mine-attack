@@ -100,6 +100,8 @@ func _ready() -> void:
 	_styling._style_upgrade_button()
 	_styling._style_fighter_upgrade_buttons()
 	_styling._style_stance_buttons()
+	_style_top_bar()
+	_style_game_over_buttons()
 	_stance_buttons = {
 		"attack": _attack_button,
 		"defend": _defend_button,
@@ -162,6 +164,38 @@ func _ready() -> void:
 	if _weather_overlay != null:
 		_weather_overlay.set_snowstorm_active(WeatherManager.is_snowstorm_active())
 		_weather_overlay.set_volcano_active(WeatherManager.is_volcano_active())
+
+
+func _style_top_bar() -> void:
+	# Resource readouts.
+	_coin_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	_coin_label.add_theme_font_size_override("font_size", 16)
+	_miner_level_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_PLAYER)
+	_miner_level_label.add_theme_font_size_override("font_size", 16)
+
+	# Army readouts.
+	_unit_count_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	_unit_count_label.add_theme_font_size_override("font_size", 16)
+	for label in _unit_count_labels.values():
+		label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+		label.add_theme_font_size_override("font_size", 13)
+
+	# Status readouts.
+	_player_hp_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_PLAYER)
+	_player_hp_label.add_theme_font_size_override("font_size", 16)
+	_enemy_hp_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_ENEMY)
+	_enemy_hp_label.add_theme_font_size_override("font_size", 16)
+	_enemy_faction_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_DIM)
+	_enemy_faction_label.add_theme_font_size_override("font_size", 13)
+	_selection_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_DIM)
+	_selection_label.add_theme_font_size_override("font_size", 13)
+
+
+func _style_game_over_buttons() -> void:
+	var quit: Button = $GameOverPanel/MarginContainer/VBoxContainer/QuitButton
+	var again: Button = $GameOverPanel/MarginContainer/VBoxContainer/PlayAgainButton
+	UIThemeTokens.apply_button_theme(quit, UIThemeTokens.ButtonVariant.SECONDARY)
+	UIThemeTokens.apply_button_theme(again, UIThemeTokens.ButtonVariant.PRIMARY)
 
 
 func _process(_delta: float) -> void:

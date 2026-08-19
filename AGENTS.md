@@ -106,7 +106,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `grid_mining.gd` — cell damage, mining, ore reveal, ore depletion trickle.
   - `grid_ambience.gd` — snow/dust particles, plus storm snow burst toggled by WeatherManager signals.
   - `grid_events.gd` — lava rising (warning → flood → recede into magma rock/fresh ore), cave-ins (3×3 SOLID_ROCK, 50 damage + push), ore vein respawn. Random scheduling can be disabled via `GridWorld.set_dynamic_events_enabled(false)`.
-- `building.gd` — training queue, deposits, building HP/destruction, faction identification polling.
+- `building.gd` — training queue (supports manual pause/clear from the HUD), deposits, building HP/destruction, faction identification polling.
 - `mine_entry.gd` — ladder teleport positions.
 - `ladder.gd` — ladder visuals/positioning.
 - `lantern.gd` / `tower.gd` / `wall_segment.gd` / `trap.gd` — placeable structures.
@@ -134,7 +134,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
 - `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system.
 - `research_panel.gd` — research branch-tree overlay (diverging layout, locked branches grayed with tooltips, respec button).
-- `training_queue_panel.gd` — vertical training queue.
+- `training_queue_panel.gd` — Frosted Steel production module: active training with progress, queued items, capacity readout, Pause/Resume and Clear actions.
 - `unit_button.gd` — training buttons.
 - `layer_indicator.gd` — underground layer accessibility indicator.
 - `debug_overlay.gd` — runtime debug display.
