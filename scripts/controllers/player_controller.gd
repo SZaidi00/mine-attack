@@ -307,6 +307,12 @@ func is_build_mode_active() -> bool:
 	return _build_placement.is_build_mode_active()
 
 
+## Public cancellation hook for the HUD build tray: close the menu and the
+## active ghost without requiring a right-click/Escape event.
+func cancel_build_mode() -> void:
+	_build_placement._cancel_build_mode()
+
+
 func try_place_structure(kind: String, world_pos: Vector2) -> bool:
 	return _build_placement.try_place_structure(kind, world_pos)
 

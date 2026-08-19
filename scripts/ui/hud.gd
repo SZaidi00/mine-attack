@@ -219,6 +219,12 @@ func _process(_delta: float) -> void:
 	_update_volcano_banner()
 	if _build_menu != null and _build_menu.visible:
 		_menus._update_build_menu()
+	# If a build card is selected and the placement mode is cancelled (right-click,
+	# Esc, or successful placement), close the tray so it does not linger.
+	if _menus.is_menu_in_placement_mode():
+		pc = _get_player_controller()
+		if pc == null or not pc.is_build_mode_active():
+			_menus.close_build_menu()
 	# Keep the pause menu in sync with the tree state (pause is toggled from
 	# PlayerController via Space/Esc) — except when the pause is owned by the
 	# research overlay's "Pause game" toggle, which has its own UI on top.
@@ -401,7 +407,9 @@ func _get_enemy_building() -> Node2D:
 
 
 var _pause_panel: PanelContainer = null
-# Radial build menu (Revamp Phase 7): options fan out above the Build button.
+# Blueprint tray build menu (Revamp Phase 5 / 7): bottom-centered panel of
+# build cards. A selected structure keeps the tray open until placement is
+# confirmed or cancelled.
 var _build_menu: Control = null
 var _build_lantern_button: Button = null
 var _build_mine_lantern_button: Button = null
