@@ -38,6 +38,12 @@ uniform float plume_power : hint_range(0.0, 1.0) = 0.45;
 
 const vec3 WARM_GLOW = vec3(0.984314, 0.749020, 0.141176);
 
+// Reference band the particle seeds were authored against (mockup values).
+// Cloud/blob Y positions are stored in this band and re-mapped into the live
+// band each frame, since the live band follows the camera's ground line.
+const float REF_BAND_TOP = 0.095;
+const float REF_BAND_BOTTOM = 0.382;
+
 void fragment() {
 	vec2 uv = SCREEN_UV;
 	float y = uv.y;
@@ -71,7 +77,8 @@ void fragment() {
 			float dir = wind >= 0.0 ? 1.0 : -1.0;
 			float x = cb.x + dir * cm.x * t * 0.1;
 			x = fract(x + 100.0);
-			float cy = cb.y + sin(t * 0.35 + cm.z) * 0.012;
+			float cy = surface_top + ((cb.y - REF_BAND_TOP) / (REF_BAND_BOTTOM - REF_BAND_TOP)) * band_height
+					+ sin(t * 0.35 + cm.z) * 0.012 * (band_height / (REF_BAND_BOTTOM - REF_BAND_TOP));
 			float dx = uv.x - x;
 			if (dx > 0.5) dx -= 1.0;
 			if (dx < -0.5) dx += 1.0;
@@ -92,7 +99,8 @@ void fragment() {
 			float dir = wind >= 0.0 ? 1.0 : -1.0;
 			float x = fb.x + (wind * 0.7 + 0.2) * fm.x * t * 0.1;
 			x = fract(x + 100.0);
-			float cy = fb.y + sin(t * 0.45 + fm.z) * fm.w;
+			float cy = surface_top + ((fb.y - REF_BAND_TOP) / (REF_BAND_BOTTOM - REF_BAND_TOP)) * band_height
+					+ sin(t * 0.45 + fm.z) * fm.w * (band_height / (REF_BAND_BOTTOM - REF_BAND_TOP));
 			float dx = uv.x - x;
 			if (dx > 0.5) dx -= 1.0;
 			if (dx < -0.5) dx += 1.0;

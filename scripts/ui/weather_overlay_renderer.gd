@@ -37,6 +37,11 @@ var _volcano_time: float = 0.0
 ## storm rages on the surface view and toward 0 when it ends or the camera
 ## goes underground, so the fog never pops in/out or covers the mine view.
 var _storm_strength: float = 0.0
+## Normalized screen Y of the terrain line under the current camera. The
+## fixed SURFACE_BOTTOM constant is only a fallback: panning/zooming moves
+## the ground line on screen, so the clip band is recomputed every frame to
+## keep weather strictly above ground.
+var _band_bottom_norm: float = SURFACE_BOTTOM
 
 # Particle pools
 var _cloud_banks: Array[Dictionary] = []
@@ -96,6 +101,7 @@ func _process(delta: float) -> void:
 	if not storm_visible and not _volcano_active:
 		return
 
+	_update_surface_band()
 	var viewport_size: Vector2 = get_viewport_rect().size
 	if storm_visible:
 		_storm_time += delta
@@ -147,6 +153,7 @@ func _setup_shader_constants() -> void:
 
 func _update_shader_state(_initial: bool) -> void:
 	var material: ShaderMaterial = _fog_rect.material
+	material.set_shader_parameter("surface_bottom", _band_bottom_norm)
 	material.set_shader_parameter("snowstorm_active", _storm_strength > 0.001)
 	material.set_shader_parameter("storm_strength", _storm_strength)
 	material.set_shader_parameter("storm_time", _storm_time)
@@ -161,6 +168,19 @@ func _update_shader_state(_initial: bool) -> void:
 func _is_underground_view() -> bool:
 	var pc: PlayerController = get_node_or_null("/root/Main/PlayerController") as PlayerController
 	return pc != null and pc.is_underground_view()
+
+
+## Recomputes the normalized screen Y of the terrain line (grid row Y_MIN's
+## top edge) so fog, snow, meteors, and embers all stop exactly at the ground
+## instead of a fixed screen band. When the ground line is off-screen above
+## (deep underground view), the band collapses to a sliver and nothing draws.
+func _update_surface_band() -> void:
+	var viewport_height: float = get_viewport_rect().size.y
+	if viewport_height <= 0.0:
+		return
+	var ground_world_y: float = float(GridWorld.Y_MIN * GridWorld.CELL_SIZE)
+	var screen_y: float = (get_viewport().canvas_transform * Vector2(0.0, ground_world_y)).y
+	_band_bottom_norm = clampf(screen_y / viewport_height, SURFACE_TOP + 0.001, 1.0)
 
 
 func _update_lanterns() -> void:
@@ -250,7 +270,7 @@ func _update_snow(delta: float, viewport_size: Vector2) -> void:
 		var flake: Dictionary = _snowflakes[i]
 		flake.y += flake.speed * delta * (0.7 + _STORM_INTENSITY * 0.8) / (SURFACE_BOTTOM - SURFACE_TOP)
 		flake.x += _WIND * flake.drift * delta * 0.13 / (SURFACE_BOTTOM - SURFACE_TOP)
-		if flake.y > SURFACE_BOTTOM:
+		if flake.y > _band_bottom_norm:
 			flake.y = SURFACE_TOP - randf() * 0.025
 			flake.x = randf()
 		if flake.x > 1.08:
@@ -281,7 +301,7 @@ func _update_meteors(delta: float, viewport_size: Vector2) -> void:
 			continue
 		meteor.y += meteor.speed * delta * (0.45 + 1.0 * 0.8)
 		meteor.x -= meteor.speed * delta * 0.31
-		if meteor.y > 0.395 or meteor.x < -0.18:
+		if meteor.y > _band_bottom_norm or meteor.x < -0.18:
 			meteor.x = 0.42 + randf() * 0.78
 			meteor.y = -0.12 - randf() * 0.18
 
@@ -307,7 +327,7 @@ func _update_embers(delta: float, viewport_size: Vector2) -> void:
 		ember.y -= ember.speed * delta * (0.55 + 1.0)
 		ember.x += sin(_volcano_time + ember.phase) * ember.sway * delta * 0.012
 		if ember.y < 0.08:
-			ember.y = 0.375 + randf() * 0.02
+			ember.y = _band_bottom_norm - 0.02 + randf() * 0.02
 			ember.x = randf()
 
 
@@ -325,7 +345,7 @@ class ParticleLayer:
 			return
 		var viewport_size: Vector2 = get_viewport_rect().size
 		var top: float = viewport_size.y * WeatherOverlayRenderer.SURFACE_TOP
-		var bottom: float = viewport_size.y * WeatherOverlayRenderer.SURFACE_BOTTOM
+		var bottom: float = viewport_size.y * renderer._band_bottom_norm
 		if renderer._storm_strength > 0.001:
 			_draw_snow(viewport_size, top, bottom)
 		if renderer._volcano_active:
@@ -376,8 +396,9 @@ class ParticleLayer:
 			draw_line(tail, head, Color(1.0, 0.894, 0.573, 0.82), meteor.width)
 			draw_circle(head, meteor.width * 1.7, Color(1.0, 0.965, 0.8, 0.9))
 			# Subtle impact flash near ground line.
-			if meteor.y > 0.36 and meteor.y < 0.395:
-				var flash: float = 1.0 - absf(meteor.y - 0.378) / 0.017
+			var ground: float = renderer._band_bottom_norm
+			if meteor.y > ground - 0.02 and meteor.y < ground:
+				var flash: float = 1.0 - absf(meteor.y - (ground - 0.01)) / 0.01
 				if flash > 0.0:
 					draw_circle(head, meteor.width * 4.0 * flash, Color(1.0, 0.76, 0.35, 0.35 * flash))
 
