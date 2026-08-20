@@ -133,7 +133,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count).
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
 - `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system.
-- `research_panel.gd` — research branch-tree overlay (diverging layout, locked branches grayed with tooltips, respec button).
+- `research_panel.gd` — Doctrine Deck research overlay: spatial branch map with tech cards (icon, state badge, discipline-colored accent, active progress strip) and elbow/OR-dashed connectors, persistent detail rail (cost/time/prereq/exclusion + action button) and footer queue chips with cancel/respec/scan.
 - `training_queue_panel.gd` — Frosted Steel production module: active training with progress, queued items, capacity readout, Pause/Resume and Clear actions.
 - `unit_button.gd` — training buttons.
 - `layer_indicator.gd` — underground layer accessibility indicator.
