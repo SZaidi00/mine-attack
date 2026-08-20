@@ -3,10 +3,14 @@ extends Node2D
 
 ## Crystal Forge (Revamp Phase 6): wizard fireballs scorch the impact area,
 ## leaving a patch of burning ground that ticks damage onto enemy units for
-## BURNING_GROUND_DURATION seconds. Purely code-drawn (flickering fire
-## circle); frees itself when the duration elapses.
+## BURNING_GROUND_DURATION seconds. Purely code-drawn: a dark scorch base,
+## bright flickering flame layers with rising licks, and a pulsing danger ring
+## drawn at exactly `radius` so the damage area is readable at a glance.
+## Frees itself when the duration elapses.
 
 const TICK_INTERVAL: float = 0.5
+
+const _DAMAGE_POPUP_SCENE: PackedScene = preload("res://scenes/effects/damage_popup.tscn")
 
 var team: GameManager.Team = GameManager.Team.PLAYER
 var radius: float = 40.0
@@ -57,9 +61,18 @@ func _tick_damage() -> void:
 			continue
 		if unit.get_combat_position().distance_to(global_position) <= radius:
 			# Environmental: ground fire is attrition, not an attacker — no
-			# popups or combat reflexes (same convention as storm exposure).
+			# combat reflexes (same convention as storm exposure), but the tick
+			# does raise an orange -X popup so the damage reads.
 			unit.take_damage(damage, null, true)
+			_spawn_fire_popup(unit, damage)
 	_damage_structures(damage)
+
+
+func _spawn_fire_popup(unit: Node2D, amount: int) -> void:
+	var popup: DamagePopup = _DAMAGE_POPUP_SCENE.instantiate()
+	popup.setup_fire(amount)
+	popup.global_position = unit.get_combat_position() + Vector2(0, -20)
+	get_tree().current_scene.add_child(popup)
 
 
 func _damage_structures(damage: int) -> void:
@@ -102,12 +115,25 @@ func _is_protected_structure(node: Node) -> bool:
 func _draw() -> void:
 	var life_left: float = clampf(1.0 - _elapsed / duration, 0.0, 1.0)
 	var pulse: float = 0.75 + 0.25 * sin(_flicker * 9.0)
+	# Dark scorch base so the patch reads on bright snow and terrain.
+	draw_circle(Vector2.ZERO, radius, Color(0.08, 0.04, 0.02, 0.45 * life_left))
 	# Outer glow, mid flame, hot core — alpha pulses and fades with lifetime.
-	draw_circle(Vector2.ZERO, radius, Color(0.9, 0.3, 0.05, 0.10 * pulse * life_left))
-	draw_circle(Vector2.ZERO, radius * 0.7, Color(1.0, 0.5, 0.1, 0.16 * pulse * life_left))
-	draw_circle(Vector2.ZERO, radius * 0.35, Color(1.0, 0.8, 0.35, 0.22 * pulse * life_left))
+	draw_circle(Vector2.ZERO, radius, Color(0.9, 0.3, 0.05, 0.28 * pulse * life_left))
+	draw_circle(Vector2.ZERO, radius * 0.7, Color(1.0, 0.5, 0.1, 0.38 * pulse * life_left))
+	draw_circle(Vector2.ZERO, radius * 0.35, Color(1.0, 0.8, 0.35, 0.45 * pulse * life_left))
+	# Flickering flame licks rising off the patch.
+	for i in 5:
+		var angle: float = i * TAU / 5.0 + 0.4
+		var base: Vector2 = Vector2.RIGHT.rotated(angle) * radius * 0.45
+		var lick: float = (0.5 + 0.5 * sin(_flicker * 7.0 + i * 2.1)) * life_left
+		var tip: Vector2 = base + Vector2(0.0, -radius * (0.25 + 0.35 * lick))
+		draw_line(base, tip, Color(1.0, 0.55, 0.12, 0.55 * pulse * life_left), 3.5, true)
+		draw_line(base, tip, Color(1.0, 0.85, 0.4, 0.4 * pulse * life_left), 1.5, true)
+	# Pulsing danger ring at the exact damage radius — this is the readout
+	# players use to see where the fire hurts.
+	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, Color(1.0, 0.3, 0.05, 0.7 * pulse * life_left), 2.5)
 	# Flickering embers drifting inside the radius.
 	for i in 6:
-		var angle: float = _flicker * (1.5 + i * 0.3) + i * TAU / 6.0
-		var ember_pos: Vector2 = Vector2.RIGHT.rotated(angle) * radius * (0.25 + 0.1 * i)
+		var ember_angle: float = _flicker * (1.5 + i * 0.3) + i * TAU / 6.0
+		var ember_pos: Vector2 = Vector2.RIGHT.rotated(ember_angle) * radius * (0.25 + 0.1 * i)
 		draw_circle(ember_pos, 2.5, Color(1.0, 0.65, 0.2, 0.5 * pulse * life_left))

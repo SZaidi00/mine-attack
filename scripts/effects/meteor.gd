@@ -2,14 +2,18 @@ class_name Meteor
 extends Node2D
 
 ## A falling meteor spawned during a volcano eruption. Drops from the sky to a
-## random surface cell, deals impact damage in a radius, and leaves a burning
-## patch unless a snowstorm is currently active.
+## random surface cell, deals impact damage in a radius, holds a brief
+## expanding shockwave flash at the impact point (IMPACT_FLASH_DURATION), and
+## leaves a burning patch unless a snowstorm is currently active.
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
 const _BURNING_GROUND_SCENE: PackedScene = preload("res://scenes/effects/burning_ground.tscn")
 
 const FALL_DURATION: float = 0.4
 const FALL_HEIGHT: float = 420.0
+## After impact the meteor lingers this long as an expanding flash/shockwave
+## so the hit (and its damage radius) reads before the burn patch takes over.
+const IMPACT_FLASH_DURATION: float = 0.45
 
 var impact_damage: int = _Constants.VOLCANO_METEOR_IMPACT_DAMAGE_BASE
 var impact_radius: float = _Constants.VOLCANO_METEOR_RADIUS_CELLS * GridWorld.CELL_SIZE
@@ -21,6 +25,7 @@ var leave_burn_patch: bool = true
 var _target_pos: Vector2 = Vector2.ZERO
 var _elapsed: float = 0.0
 var _impacted: bool = false
+var _impact_elapsed: float = 0.0
 var _flicker: float = 0.0
 
 
@@ -40,6 +45,14 @@ func setup(target_position: Vector2, damage_multiplier: float = 1.0, duration_mu
 func _process(delta: float) -> void:
 	if not GameManager.game_active:
 		return
+	if _impacted:
+		# Impact flash phase: hold position, play the shockwave, then free.
+		_impact_elapsed += delta
+		_flicker += delta * 15.0
+		queue_redraw()
+		if _impact_elapsed >= IMPACT_FLASH_DURATION:
+			queue_free()
+		return
 	_elapsed += delta
 	_flicker += delta * 15.0
 	var t: float = clampf(_elapsed / FALL_DURATION, 0.0, 1.0)
@@ -57,8 +70,7 @@ func _trigger_impact() -> void:
 	_apply_impact_damage()
 	if leave_burn_patch and not WeatherManager.is_snowstorm_active():
 		_spawn_burn_patch()
-	# Leave the impact flash visible for one more frame, then free.
-	queue_free()
+	# Don't free yet: _process runs the impact flash for IMPACT_FLASH_DURATION.
 
 
 func _apply_impact_damage() -> void:
@@ -108,6 +120,9 @@ func _is_protected_structure(node: Node) -> bool:
 
 
 func _draw() -> void:
+	if _impacted:
+		_draw_impact_flash()
+		return
 	var t: float = clampf(_elapsed / FALL_DURATION, 0.0, 1.0)
 	var head_pos: Vector2 = Vector2.ZERO
 	var tail_pos: Vector2 = Vector2(0.0, -FALL_HEIGHT * (1.0 - t) * 0.6)
@@ -120,3 +135,26 @@ func _draw() -> void:
 	var trail_color: Color = Color(1.0, 0.25, 0.05, 0.5 * (1.0 - t))
 	draw_line(tail_pos, head_pos, trail_color, 10.0 * pulse, true)
 	draw_line(tail_pos + Vector2(-3.0, 0.0), head_pos, Color(1.0, 0.6, 0.1, 0.25 * (1.0 - t)), 16.0 * pulse, true)
+
+
+## Expanding shockwave + white-hot flash at the impact point. The outer ring
+## grows to exactly `impact_radius` so the blast area is readable at a glance.
+func _draw_impact_flash() -> void:
+	var t: float = clampf(_impact_elapsed / IMPACT_FLASH_DURATION, 0.0, 1.0)
+	var fade: float = 1.0 - t
+	# White-hot core flash collapsing inward.
+	draw_circle(Vector2.ZERO, 6.0 + 22.0 * fade, Color(1.0, 0.95, 0.7, 0.75 * fade))
+	# Ground burst glow.
+	draw_circle(Vector2.ZERO, impact_radius * 0.5, Color(1.0, 0.45, 0.08, 0.35 * fade))
+	# Shockwave ring expanding to the exact damage radius.
+	var ring_radius: float = impact_radius * (0.15 + 0.85 * t)
+	draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 48, Color(1.0, 0.62, 0.15, 0.8 * fade), 1.5 + 4.0 * fade)
+	# Faint outer band marking the full blast radius for the whole flash.
+	draw_arc(Vector2.ZERO, impact_radius, 0.0, TAU, 48, Color(1.0, 0.35, 0.05, 0.3 * fade), 8.0 * fade)
+	# Radiating sparks.
+	for i in 8:
+		var angle: float = i * TAU / 8.0 + 0.35
+		var dir: Vector2 = Vector2.RIGHT.rotated(angle)
+		var inner: Vector2 = dir * impact_radius * 0.2
+		var outer: Vector2 = dir * impact_radius * (0.45 + 0.4 * t)
+		draw_line(inner, outer, Color(1.0, 0.75, 0.3, 0.6 * fade), 2.5 * fade + 0.5, true)
