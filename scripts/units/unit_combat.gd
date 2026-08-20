@@ -6,8 +6,55 @@ const _PROJECTILE_SCENE: PackedScene = preload("res://scenes/projectile.tscn")
 
 var unit: Unit
 
+# Lingering burn (ignite): a BurningGround tick lights the unit, and it keeps
+# taking reduced fire ticks for Constants.BURN_LINGER_DURATION after leaving
+# the patch. _burn_dps is the lingering rate (already ratio-scaled).
+var _burn_remaining: float = 0.0
+var _burn_dps: float = 0.0
+var _burn_tick: float = 0.0
+
 func _init(u: Unit) -> void:
 	unit = u
+
+
+## Ignites the unit or refreshes an active burn. Re-igniting keeps the
+## stronger dps and never resets the tick countdown (no refresh exploit).
+func apply_burn(dps: float, duration: float) -> void:
+	if unit._state == Unit.State.DEAD:
+		return
+	if _burn_remaining <= 0.0:
+		_burn_dps = dps
+		_burn_tick = Constants.BURN_TICK_INTERVAL
+	else:
+		_burn_dps = maxf(_burn_dps, dps)
+	_burn_remaining = duration
+	unit.queue_redraw()
+
+
+## Per-frame burn processing (called from Unit._process, after the
+## game_active freeze so burns pause with the match). Ticks are
+## environmental: no hit flash, flee, or retaliation — just an orange popup.
+func _process_burn(delta: float) -> void:
+	if _burn_remaining <= 0.0:
+		return
+	_burn_remaining -= delta
+	_burn_tick -= delta
+	if _burn_tick <= 0.0:
+		_burn_tick = Constants.BURN_TICK_INTERVAL
+		var damage: int = maxi(1, roundi(_burn_dps * Constants.BURN_TICK_INTERVAL))
+		take_damage(damage, null, true)
+		if unit._state != Unit.State.DEAD:
+			_spawn_fire_popup(damage)
+	if _burn_remaining <= 0.0:
+		_burn_dps = 0.0
+	unit.queue_redraw()  # keeps the flame licks animating
+
+
+func _spawn_fire_popup(amount: int) -> void:
+	var popup: DamagePopup = _DAMAGE_POPUP_SCENE.instantiate()
+	popup.setup_fire(amount)
+	popup.global_position = unit.get_combat_position() + Vector2(0, -20)
+	unit.get_tree().current_scene.add_child(popup)
 
 
 ## environmental = weather/terrain chip damage (Revamp Phase 5 snowstorm

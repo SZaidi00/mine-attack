@@ -62,9 +62,12 @@ func _tick_damage() -> void:
 		if unit.get_combat_position().distance_to(global_position) <= radius:
 			# Environmental: ground fire is attrition, not an attacker — no
 			# combat reflexes (same convention as storm exposure), but the tick
-			# does raise an orange -X popup so the damage reads.
+			# does raise an orange -X popup so the damage reads. The tick also
+			# ignites the unit: it keeps taking reduced burn ticks for a few
+			# seconds after leaving the patch.
 			unit.take_damage(damage, null, true)
 			_spawn_fire_popup(unit, damage)
+			unit.apply_burn(dps * Constants.BURN_LINGER_DPS_RATIO, Constants.BURN_LINGER_DURATION)
 	_damage_structures(damage)
 
 

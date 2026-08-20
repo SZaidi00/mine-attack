@@ -634,6 +634,13 @@ const SURFACE_WAR_TOWER_RANGE_MULT: float = 1.2
 # crystal_forge: burning ground left by fireballs.
 const BURNING_GROUND_DPS: float = 5.0
 const BURNING_GROUND_DURATION: float = 3.0
+# Ignite: a unit that takes a burning-ground tick stays lit for
+# BURN_LINGER_DURATION after leaving the patch, taking BURN_TICK_INTERVAL
+# ticks at BURN_LINGER_DPS_RATIO of the patch's dps — standing in the fire
+# damages faster (full dps), walking through still stings.
+const BURN_TICK_INTERVAL: float = 0.5
+const BURN_LINGER_DURATION: float = 3.0
+const BURN_LINGER_DPS_RATIO: float = 0.5
 # guerrilla: miner-placed traps.
 const TRAP_COST: int = 50
 const TRAP_DAMAGE: float = 50.0

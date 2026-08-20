@@ -139,6 +139,16 @@ func draw() -> void:
 	if unit._frosted:
 		unit.draw_circle(Vector2(0, -altitude), selection_radius - 2.0, Color(0.55, 0.75, 1.0, 0.35))
 
+	# Lingering burn: flame licks flicker over the body while ignited (the
+	# per-frame redraw driving this comes from UnitCombat._process_burn).
+	if unit.is_burning():
+		var burn_t: float = Time.get_ticks_msec() / 1000.0
+		for i in 3:
+			var fx: float = -6.0 + i * 6.0
+			var lift: float = 3.0 + 2.5 * sin(burn_t * 9.0 + i * 2.1)
+			unit.draw_circle(Vector2(fx, body_top - 6.0 - lift), 2.5, Color(1.0, 0.5, 0.1, 0.6))
+			unit.draw_circle(Vector2(fx, body_top - 8.0 - lift * 1.6), 1.5, Color(1.0, 0.85, 0.4, 0.7))
+
 	# HP bar when damaged, hovered, or selected.
 	if unit.selected or unit.hovered or unit.hp < unit.data.max_hp:
 		var hp_pct: float = float(unit.hp) / float(unit.data.max_hp)
