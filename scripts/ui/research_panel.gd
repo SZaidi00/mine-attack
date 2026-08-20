@@ -326,6 +326,9 @@ func _build_map(body: HBoxContainer) -> void:
 	_canvas = TreeCanvas.new()
 	_canvas.col_open = _COL_EDGE_OPEN
 	_canvas.col_locked = _COL_EDGE_LOCKED
+	# Decorative connector layer: clicks on empty canvas fall through to the
+	# ScrollContainer (drag scroll); the tech cards stay clickable on top.
+	_canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	# Four tier columns (0-3) plus rows for five disciplines and cross-path
 	# capstones. The canvas lives in a ScrollContainer so the tree can be
 	# taller than the card without pushing the footer off-screen.
