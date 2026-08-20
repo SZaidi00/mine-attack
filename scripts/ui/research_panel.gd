@@ -65,16 +65,16 @@ const _BADGE_COLOR: Dictionary = {
 }
 
 const _TECH_ICONS: Dictionary = {
-	"deep_delve": preload("res://improvements/mine_attack_sprites/tech_deep_delve.png"),
-	"surface_war": preload("res://improvements/mine_attack_sprites/tech_surface_war.png"),
+	"deep_delve": preload("res://frost_mines_assets/icons/tech_deep_delve.png"),
+	"surface_war": preload("res://frost_mines_assets/icons/tech_surface_war.png"),
 	"arctic_training": preload("res://frost_mines_assets/icons/icon_snowstorm.png"),
-	"ore_sonar": preload("res://improvements/mine_attack_sprites/tech_ore_sonar.png"),
-	"reinforced_pack": preload("res://improvements/mine_attack_sprites/tech_reinforced_pack.png"),
+	"ore_sonar": preload("res://frost_mines_assets/icons/tech_ore_sonar.png"),
+	"reinforced_pack": preload("res://frost_mines_assets/icons/tech_reinforced_pack.png"),
 	"longbow": preload("res://frost_mines_assets/icons/icon_archer.png"),
 	"rapid_fire": preload("res://frost_mines_assets/icons/icon_archer.png"),
-	"crystal_forge": preload("res://improvements/mine_attack_sprites/tech_crystal_forge.png"),
+	"crystal_forge": preload("res://frost_mines_assets/icons/tech_crystal_forge.png"),
 	"earth_shield": preload("res://frost_mines_assets/icons/icon_hp.png"),
-	"siege_master": preload("res://improvements/mine_attack_sprites/tech_siege_master.png"),
+	"siege_master": preload("res://frost_mines_assets/icons/tech_siege_master.png"),
 	"guerrilla": preload("res://frost_mines_assets/icons/icon_swordsman.png"),
 	# New discipline roots.
 	"fortification": preload("res://frost_mines_assets/icons/icon_building.png"),
