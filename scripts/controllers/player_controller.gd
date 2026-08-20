@@ -19,6 +19,9 @@ signal view_mode_changed(mode: ViewMode)
 
 var _selected_units: Array = []
 var _selected_structures: Array = []
+## Last enemy unit left-clicked for inspection — enemies can't be selected,
+## but the HUD top bar shows the inspected unit's name and live HP.
+var _inspected_enemy: Unit = null
 var _drag_start: Vector2 = Vector2.ZERO
 var _is_dragging: bool = false
 var _camera_speed: float = 600.0

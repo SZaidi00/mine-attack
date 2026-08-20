@@ -42,11 +42,21 @@ func _single_select(screen_pos: Vector2) -> void:
 	var clicked_building: Node2D = _building_at(world_pos)
 	if clicked_building != null and clicked_building.get("team") == GameManager.Team.PLAYER:
 		if not shift:
+			pc._inspected_enemy = null
 			_select_units([])
 		# TODO: building selection UI.
 		return
+	# Enemy units can't be selected — a left click inspects them instead: the
+	# HUD top bar shows the unit's name and live HP. Fog of War still applies
+	# (_enemy_unit_at only finds units the player can currently see).
+	var enemy_unit: Unit = _enemy_unit_at(world_pos)
+	if enemy_unit != null:
+		_select_units([])
+		pc._inspected_enemy = enemy_unit
+		return
 	if shift:
 		return
+	pc._inspected_enemy = null
 	_select_units([])
 
 
@@ -78,6 +88,9 @@ func _select_units(units: Array) -> void:
 			u.selected = false
 			u.queue_redraw()
 	pc._selected_units = units
+	if not units.is_empty():
+		# A real selection replaces any enemy inspection.
+		pc._inspected_enemy = null
 	for u in pc._selected_units:
 		if is_instance_valid(u):
 			u.selected = true
@@ -96,6 +109,7 @@ func _select_structures(structures: Array) -> void:
 			s.selected = false
 			s.queue_redraw()
 	pc._selected_structures = structures
+	pc._inspected_enemy = null
 	for s in pc._selected_structures:
 		if is_instance_valid(s):
 			s.selected = true
