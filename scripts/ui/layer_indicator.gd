@@ -1,6 +1,7 @@
 class_name LayerIndicator
 extends Control
 
+const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
 const _LAYER_LABELS: Array[String] = ["L1", "L2", "L3", "L4", "L5", "L6", "L7"]
 
 var _level: int = 1
@@ -43,15 +44,15 @@ func _draw() -> void:
 	for i in range(_LAYER_LABELS.size()):
 		var accessible: bool = _is_accessible(i + 1)
 		var rect: Rect2 = Rect2(start.x + i * (box_size + gap), start.y, box_size, box_size)
-		var border_color: Color = Color("#3b82f6") if accessible else Color("#475569")
-		draw_rect(rect, Color("#0f172a"), true)
+		var border_color: Color = UIThemeTokens.COLOR_PLAYER if accessible else UIThemeTokens.COLOR_TEXT_DIM.darkened(0.3)
+		draw_rect(rect, UIThemeTokens.COLOR_RECESSED_BG, true)
 		draw_rect(rect, border_color, false, 2.0)
 
 		if accessible:
-			draw_rect(rect.grow(-5), Color("#3b82f6"), true)
+			draw_rect(rect.grow(-5), UIThemeTokens.COLOR_PLAYER, true)
 
 		var text_pos: Vector2 = rect.position + Vector2(box_size / 2.0, box_size + 14)
-		draw_string(font, text_pos, _LAYER_LABELS[i], HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, Color("#94a3b8"))
+		draw_string(font, text_pos, _LAYER_LABELS[i], HORIZONTAL_ALIGNMENT_CENTER, -1, font_size, UIThemeTokens.COLOR_TEXT_DIM)
 
 
 func _is_accessible(layer: int) -> bool:

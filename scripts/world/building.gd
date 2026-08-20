@@ -13,6 +13,7 @@ const _BUILDING_TEXTURES: Dictionary = {
 
 signal hp_changed(current: int, maximum: int)
 signal queue_changed(entries: Array)
+signal queue_paused_changed(paused: bool)
 signal destroyed(team: GameManager.Team)
 signal coin_deposited(team: GameManager.Team, amount: int)
 signal unit_spawned(unit: Node2D)
@@ -28,6 +29,7 @@ var _base_max_hp: int = max_hp  # Earth Shield research adds on top of this.
 var _queue: Array = []  # { id: String, data: UnitData, remaining: float }
 var _resources: Dictionary = {}
 var _destroyed: bool = false
+var _queue_paused: bool = false  # Manual pause toggled from the HUD.
 var _deposit_point: Marker2D
 # Collapse sequence after destruction: squash + darken over ~1.2 scaled
 # seconds (stretched by the game-over slow-mo, which is the point).
@@ -196,10 +198,9 @@ func _process(delta: float) -> void:
 	if _queue.is_empty():
 		return
 	var current = _queue[0]
-	# Population cap: the queue holds (training paused) until a unit dies.
-	# The unit is never despawned and the coin never refunded away — the order
-	# simply waits, like a supply block in classic RTS.
-	if not EconomyManager.can_add_population(team, current.data.population):
+	# Population cap or manual pause: the queue holds until space opens or the
+	# player resumes. The unit is never despawned and the coin is not refunded.
+	if _queue_paused or not EconomyManager.can_add_population(team, current.data.population):
 		return
 	# AI difficulty scales training speed (rates, never rules); players are 1.0.
 	var train_time_mult: float = 1.0
@@ -390,6 +391,24 @@ func _spawn_damage_popup(amount: int) -> void:
 
 func get_queue() -> Array:
 	return _queue
+
+
+func is_queue_paused() -> bool:
+	return _queue_paused
+
+
+func toggle_queue_paused() -> bool:
+	_queue_paused = not _queue_paused
+	queue_paused_changed.emit(_queue_paused)
+	return _queue_paused
+
+
+func clear_queue() -> void:
+	# Refund every queued entry in reverse order so indices stay valid.
+	while not _queue.is_empty():
+		var entry: Dictionary = _queue.pop_back()
+		EconomyManager.add_coin(team, entry.get("cost", FactionManager.get_unit_cost(team, entry.id)))
+	queue_changed.emit(_queue)
 
 
 func cancel_queue(index: int) -> bool:

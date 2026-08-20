@@ -19,6 +19,9 @@ signal view_mode_changed(mode: ViewMode)
 
 var _selected_units: Array = []
 var _selected_structures: Array = []
+## Last enemy unit left-clicked for inspection — enemies can't be selected,
+## but the HUD top bar shows the inspected unit's name and live HP.
+var _inspected_enemy: Unit = null
 var _drag_start: Vector2 = Vector2.ZERO
 var _is_dragging: bool = false
 var _camera_speed: float = 600.0
@@ -305,6 +308,12 @@ func start_build_placement(kind: String) -> void:
 
 func is_build_mode_active() -> bool:
 	return _build_placement.is_build_mode_active()
+
+
+## Public cancellation hook for the HUD build tray: close the menu and the
+## active ghost without requiring a right-click/Escape event.
+func cancel_build_mode() -> void:
+	_build_placement._cancel_build_mode()
 
 
 func try_place_structure(kind: String, world_pos: Vector2) -> bool:

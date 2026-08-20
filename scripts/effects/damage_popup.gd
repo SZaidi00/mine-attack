@@ -22,6 +22,16 @@ func setup_immune() -> void:
 	modulate = Color(0.75, 0.78, 0.85, 1.0)
 
 
+## Environmental fire damage (burning ground): orange instead of combat red,
+## larger with a dark outline so the tick reads against the flames.
+func setup_fire(amount: int) -> void:
+	text = "-" + str(amount)
+	modulate = Color(1.0, 0.55, 0.15, 1.0)
+	add_theme_font_size_override("font_size", 13)
+	add_theme_color_override("font_outline_color", Color(0.05, 0.02, 0.0, 0.9))
+	add_theme_constant_override("outline_size", 4)
+
+
 func _process(delta: float) -> void:
 	# Fog of War: a popup at a position the player cannot see must not leak
 	# enemy combat (or healing) activity.

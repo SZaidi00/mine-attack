@@ -248,6 +248,10 @@ func _process(delta: float) -> void:
 		if _damage_log[i][0] > 3.0:
 			_damage_log.remove_at(i)
 
+	# Lingering burn from walking through fire: ticks through stun (damage,
+	# not an action) and pauses with the match via the game_active gate above.
+	_combat._process_burn(delta)
+
 	# Revamp Phase 2 debuffs: the Heavy Bolt slow expires back to full speed;
 	# the Crush stun freezes all actions (regen above still ticks).
 	if _slow_timer > 0.0:
@@ -411,6 +415,17 @@ func rally_to(world_pos: Vector2) -> void:
 
 func take_damage(amount: int, attacker: Node2D = null, environmental: bool = false) -> void:
 	_combat.take_damage(amount, attacker, environmental)
+
+
+## Ignite from burning ground: keeps ticking reduced fire damage for a few
+## seconds after the unit leaves the patch (see Constants.BURN_LINGER_*).
+func apply_burn(dps: float, duration: float) -> void:
+	_combat.apply_burn(dps, duration)
+
+
+## True while a lingering burn is still ticking on this unit.
+func is_burning() -> bool:
+	return _combat._burn_remaining > 0.0
 
 
 ## Revamp Phase 4: lava deaths are instant and drop no cargo — the coin melts.

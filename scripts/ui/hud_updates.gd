@@ -91,6 +91,14 @@ func _update_selection_label(pc: PlayerController) -> void:
 		hud._selection_label.text = "%s — HP %d/%d — Demolish for %dg" % [name, hp, max_hp, refund]
 		return
 	if selected_units.is_empty() and selected_structures.is_empty():
+		# Enemy inspection: left-clicking an enemy unit shows its name and live
+		# HP here until the player selects something else or it dies.
+		var inspected = pc._inspected_enemy
+		if is_instance_valid(inspected) and inspected.get("hp") > 0:
+			var inspected_data = inspected.get("data")
+			if inspected_data != null:
+				hud._selection_label.text = "Enemy %s — HP %d/%d" % [inspected_data.unit_name, inspected.get("hp"), inspected_data.max_hp]
+				return
 		hud._selection_label.text = "Selected: 0"
 		return
 	# Mixed or multi-selection: show counts and total structure refund.

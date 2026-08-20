@@ -293,6 +293,29 @@ func test_burning_ground_ticks_enemies_and_frees_itself() -> void:
 	assert_true(bg.is_queued_for_deletion(), "the patch frees itself after its duration")
 
 
+func test_burn_lingers_after_leaving_the_fire() -> void:
+	# Ignite: a unit that takes a fire tick keeps burning at reduced dps for
+	# BURN_LINGER_DURATION after it walks out of the patch.
+	var enemy: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(0, 16))
+	var bg: Node2D = load("res://scenes/effects/burning_ground.tscn").instantiate()
+	bg.set("team", PLAYER)
+	_main.add_child(bg)
+	bg.global_position = Vector2(0, 16)
+	bg._process(0.5)  # one in-fire tick: damages and ignites
+	assert_true(enemy.is_burning(), "a fire tick ignites the unit")
+	bg.free()  # the unit walks out of the fire
+	var hp_after_ignite: int = enemy.get("hp")
+	enemy._combat._process_burn(0.5)  # first lingering tick
+	assert_lt(enemy.get("hp"), hp_after_ignite, "the burn keeps ticking after leaving the fire")
+	# Burn out the remaining linger duration (3.0s at 0.5s ticks).
+	for i in range(8):
+		enemy._combat._process_burn(0.5)
+	assert_false(enemy.is_burning(), "the burn expires after the linger duration")
+	var hp_settled: int = enemy.get("hp")
+	enemy._combat._process_burn(0.5)
+	assert_eq(enemy.get("hp"), hp_settled, "no further ticks once the burn is out")
+
+
 # ─── Earth Shield: building HP + respec revert ───
 
 func test_earth_shield_building_hp_reverts_on_respec() -> void:

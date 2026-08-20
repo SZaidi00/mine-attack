@@ -139,8 +139,8 @@ func get_snowstorm_remaining() -> float:
 	return _storm_left
 
 
-## Fog-of-war vision multiplier (Revamp Phase 5): a raging storm halves every
-## unit and lantern radius (buildings keep their full radius). Used for
+## Fog-of-war vision multiplier (Revamp Phase 5): a raging storm quarters
+## every unit and lantern radius (buildings keep their full radius). Used for
 ## non-unit sources; unit-specific multipliers are below.
 func get_vision_multiplier() -> float:
 	if not is_snowstorm_active():
