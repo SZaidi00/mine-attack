@@ -283,7 +283,10 @@ func _seed_meteors() -> void:
 	_meteors.clear()
 	for i in range(_METEOR_COUNT):
 		_meteors.append({
-			"x": 0.08 + randf() * 1.05,
+			# Full-width spawn: meteors drift left as they fall, so the range
+			# overshoots the right edge to keep landings covering the player's
+			# (left) side too.
+			"x": 0.05 + randf() * 1.15,
 			"y": -0.12 + randf() * 0.5,
 			"speed": 0.17 + randf() * 0.34,
 			"length": 0.045 + randf() * 0.09,
@@ -302,7 +305,11 @@ func _update_meteors(delta: float, viewport_size: Vector2) -> void:
 		meteor.y += meteor.speed * delta * (0.45 + 1.0 * 0.8)
 		meteor.x -= meteor.speed * delta * 0.31
 		if meteor.y > _band_bottom_norm or meteor.x < -0.18:
-			meteor.x = 0.42 + randf() * 0.78
+			# Respawn across the full width (overshooting the right edge): the
+			# leftward fall drift (~0.12 in normalized units) would otherwise
+			# shrink coverage toward the enemy side and leave the player's
+			# side of the screen meteor-free.
+			meteor.x = 0.05 + randf() * 1.15
 			meteor.y = -0.12 - randf() * 0.18
 
 
