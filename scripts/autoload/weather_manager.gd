@@ -7,6 +7,11 @@ extends Node
 # multipliers and exposure damage; the volcano rains meteors across the surface.
 # All three random events (snowstorm, volcano, lava rising) can overlap.
 #
+# To avoid a fixed snowstorm → lava → volcano opening, reset() shuffles a shared
+# deck of first-occurrence times; GridEvents reads the lava entry so all three
+# events start in a random order. Recurring intervals in Constants overlap so
+# the order stays unpredictable after the first wave.
+#
 # Like GridEvents (Phase 4), all timers accumulate game-time delta and the
 # whole node is pausable, so warnings and active phases freeze on pause/game-over
 # exactly like units and research. Random scheduling is gated by separate
@@ -53,6 +58,11 @@ var _frosted_units: Dictionary = {}  # unit instance_id -> Unit
 var _ice_crack_left: float = 0.0
 var _storm_wind_player: AudioStreamPlayer = null
 
+# Cached initial occurrence times for the three major random events. The deck
+# is shuffled once per match so the first snowstorm, lava rise, and volcano
+# eruption can arrive in any order instead of always snow → lava → volcano.
+var _initial_event_times: Dictionary = {}
+
 
 func _ready() -> void:
 	reset()
@@ -66,8 +76,9 @@ func reset() -> void:
 	_warning_left = 0.0
 	_storm_left = 0.0
 	_damage_accum.clear()
-	_snow_next_at = _seconds_to_next_snowstorm()
-	_volcano_next_at = _seconds_to_next_volcano()
+	_generate_initial_event_times()
+	_snow_next_at = _initial_event_times["snowstorm"]
+	_volcano_next_at = _initial_event_times["volcano"]
 	_volcano_warning_left = 0.0
 	_volcano_active_left = 0.0
 	_volcano_meteor_timer = 0.0
@@ -204,6 +215,30 @@ func get_speed_multiplier(unit = null) -> float:
 func _seconds_to_next_snowstorm() -> float:
 	var interval_mult: float = GameManager.get_snowstorm_interval_multiplier()
 	return randf_range(_Constants.SNOWSTORM_MIN_INTERVAL, _Constants.SNOWSTORM_MAX_INTERVAL) * interval_mult
+
+
+## Generates one shuffled set of first-occurrence times for the three random
+## events (snowstorm, lava rise, volcano eruption). Each match draws three
+## staggered windows, shuffles which event lands in each window, and caches the
+## result so WeatherManager and GridEvents agree on the opening order.
+func _generate_initial_event_times() -> void:
+	var windows: Array = [
+		randf_range(45.0, 75.0),
+		randf_range(70.0, 100.0),
+		randf_range(95.0, 125.0),
+	]
+	windows.shuffle()
+	_initial_event_times = {
+		"snowstorm": windows[0],
+		"lava": windows[1],
+		"volcano": windows[2],
+	}
+
+
+## Returns the cached first-occurrence time for an event ("snowstorm", "lava",
+## or "volcano"). GridEvents reads the lava entry during GridWorld._ready.
+func get_initial_event_time(event_name: String) -> float:
+	return _initial_event_times.get(event_name, -1.0)
 
 
 func _start_snowstorm_warning() -> void:

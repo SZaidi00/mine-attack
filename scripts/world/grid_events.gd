@@ -63,9 +63,14 @@ func _init(g: GridWorld) -> void:
 
 
 ## Called from GridWorld._ready: the first events land inside their random
-## windows after match start.
+## windows after match start. The first lava rise uses the shared shuffled deck
+## so its order relative to the first snowstorm/volcano is unpredictable.
 func schedule_initial() -> void:
-	_lava_next_at = randf_range(_Constants.LAVA_MIN_INTERVAL, _Constants.LAVA_MAX_INTERVAL)
+	var cached_lava: float = WeatherManager.get_initial_event_time("lava")
+	if cached_lava > 0.0:
+		_lava_next_at = cached_lava
+	else:
+		_lava_next_at = randf_range(_Constants.LAVA_MIN_INTERVAL, _Constants.LAVA_MAX_INTERVAL)
 	_cavein_next_at = randf_range(_Constants.CAVEIN_MIN_INTERVAL, _Constants.CAVEIN_MAX_INTERVAL)
 	_ore_respawn_next_at = _Constants.ORE_RESPAWN_INTERVAL
 

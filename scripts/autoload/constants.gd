@@ -186,8 +186,8 @@ const PIGEON_LINGER_HOME_TIME: float = 5.0
 # every non-wall cell becomes indestructible LAVA. After LAVA_DURATION the
 # lava recedes into diggable MAGMA_ROCK (0 gold), with MAGMA_ORE_CHANCE per
 # cell of high-value FRESH_ORE instead — but only on layers 6 and 7.
-const LAVA_MIN_INTERVAL: float = 90.0
-const LAVA_MAX_INTERVAL: float = 120.0
+const LAVA_MIN_INTERVAL: float = 70.0
+const LAVA_MAX_INTERVAL: float = 125.0
 const LAVA_WARNING_TIME: float = 5.0
 # Creeping tide: lava rises from the bottom to the wave peak over this many
 # seconds, then recedes back down. There is no fixed "active" hold at the top;
@@ -247,8 +247,9 @@ const ORE_RESPAWN_MIN_LAYER: int = 3
 # research raises the storm movement multiplier for the owning team.
 # Both the scheduling interval and the exposure damage are further scaled by
 # difficulty (more frequent and deadlier storms on higher difficulties).
-const SNOWSTORM_MIN_INTERVAL: float = 60.0
-const SNOWSTORM_MAX_INTERVAL: float = 90.0
+# Intervals overlap with lava/volcano so no single event always comes first.
+const SNOWSTORM_MIN_INTERVAL: float = 50.0
+const SNOWSTORM_MAX_INTERVAL: float = 105.0
 const SNOWSTORM_DURATION: float = 15.0
 const SNOWSTORM_WARNING_TIME: float = 5.0
 const SNOWSTORM_VISION_MULT: float = 0.25
@@ -261,8 +262,10 @@ const SNOWSTORM_DAMAGE_PER_SEC: float = 2.0
 # that damages units and structures over time. If a snowstorm is active, meteors
 # still fall but do not leave fire; any existing volcano fires are extinguished
 # when the snowstorm begins. HQ buildings and mine entries are protected.
-const VOLCANO_MIN_INTERVAL: float = 100.0
-const VOLCANO_MAX_INTERVAL: float = 150.0
+# Intervals overlap with snowstorm/lava so the three events can arrive in any
+# order after the shuffled first-occurrence deck is dealt.
+const VOLCANO_MIN_INTERVAL: float = 90.0
+const VOLCANO_MAX_INTERVAL: float = 145.0
 const VOLCANO_WARNING_TIME: float = 7.0
 const VOLCANO_DURATION: float = 18.0
 const VOLCANO_METEOR_INTERVAL_BASE: float = 0.9
