@@ -19,14 +19,20 @@ func _init(u: Unit) -> void:
 
 ## Ignites the unit or refreshes an active burn. Re-igniting keeps the
 ## stronger dps and never resets the tick countdown (no refresh exploit).
-func apply_burn(dps: float, duration: float) -> void:
+## Environmental burns (volcano fires) are reduced by Survival research.
+func apply_burn(dps: float, duration: float, environmental: bool = false) -> void:
 	if unit._state == Unit.State.DEAD:
 		return
+	var final_dps: float = dps
+	if environmental:
+		var reduction: float = ResearchManager.get_stat_bonus(unit.team, "environmental_damage_reduction") \
+			+ ResearchManager.get_stat_bonus(unit.team, "volcano_damage_reduction")
+		final_dps *= maxf(0.0, 1.0 - reduction)
 	if _burn_remaining <= 0.0:
-		_burn_dps = dps
+		_burn_dps = final_dps
 		_burn_tick = Constants.BURN_TICK_INTERVAL
 	else:
-		_burn_dps = maxf(_burn_dps, dps)
+		_burn_dps = maxf(_burn_dps, final_dps)
 	_burn_remaining = duration
 	unit.queue_redraw()
 

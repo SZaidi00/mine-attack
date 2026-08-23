@@ -370,8 +370,6 @@ class ParticleLayer:
 			var y: float = flake.y * height
 			if y < top - 10.0 or y > bottom + 10.0:
 				continue
-			if _in_lantern_shelter(Vector2(x, y)):
-				continue
 			var gust: float = 1.0 + sin(Time.get_ticks_msec() / 1000.0 * 1.2 + flake.phase) * 0.34
 			var length: float = flake.length * height * 1.25 * gust
 			var alpha: float = flake.alpha * (0.28 + WeatherOverlayRenderer._STORM_INTENSITY * 0.72) * renderer._storm_strength
@@ -423,9 +421,3 @@ class ParticleLayer:
 			var alpha: float = ember.alpha * flicker
 			draw_circle(Vector2(x, y), ember.radius, Color(1.0, 0.494, 0.149, alpha))
 
-	func _in_lantern_shelter(screen_pos: Vector2) -> bool:
-		for i in range(renderer._lantern_pos_array.size()):
-			var d: float = screen_pos.distance_to(renderer._lantern_pos_array[i])
-			if d < renderer._lantern_radius_array[i] * 0.7:
-				return true
-		return false

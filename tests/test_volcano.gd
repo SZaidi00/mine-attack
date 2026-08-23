@@ -238,6 +238,34 @@ func test_burn_patch_does_not_damage_hq() -> void:
 	assert_eq(hq.get("_hp"), hp_before, "HQ is protected from burn patches")
 
 
+# ─── Survival research reduction ───
+
+func test_survival_reduces_meteor_impact_damage() -> void:
+	ResearchManager._levels[PLAYER]["survival_instinct"] = 1
+	var target: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, _grid.grid_to_world(Vector2i(-20, 0)))
+	target.stop()
+	var hp_before: int = target.hp
+	_spawn_meteor_at(target.global_position, false)
+	await wait_seconds(0.5)
+	var damage: float = hp_before - target.hp
+	# Base impact on normal is 35; with 20% reduction it should be 28.
+	assert_almost_eq(damage, 28.0, 2.0, "Survival Instinct reduces meteor impact damage")
+
+
+func test_survival_reduces_burn_patch_damage() -> void:
+	# Unprotected enemy miner vs protected player miner with Survival Instinct.
+	var unprotected: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, _grid.grid_to_world(Vector2i(-20, 0)))
+	unprotected.stop()
+	ResearchManager._levels[PLAYER]["survival_instinct"] = 1
+	var protected: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _grid.grid_to_world(Vector2i(-21, 0)))
+	protected.stop()
+	_spawn_burn_patch(unprotected.global_position, 100.0, 2.0)
+	await wait_seconds(0.7)
+	var unprotected_damage: float = unprotected.data.max_hp - unprotected.hp
+	var protected_damage: float = protected.data.max_hp - protected.hp
+	assert_gt(unprotected_damage, protected_damage, "Survival Instinct reduces burn patch damage")
+
+
 # ─── Snowstorm overlap ───
 
 func test_snowstorm_extinguishes_volcano_fires() -> void:

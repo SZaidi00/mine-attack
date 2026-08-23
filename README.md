@@ -15,9 +15,11 @@ The easiest way to play is from a release:
 2. Download the latest zip for your platform:
    - **macOS**: `MineAttack-macOS.zip`
    - **Windows**: `MineAttack-Windows.zip`
+   - **Linux**: `MineAttack-Linux.zip`
 3. Extract the zip.
    - **macOS**: open `MineAttack.app`. If Gatekeeper warns that the app is from an unidentified developer, right-click the app and choose **Open**.
    - **Windows**: run `MineAttack.exe`.
+   - **Linux**: run `./MineAttack.x86_64` from the extracted folder.
 4. Pick a difficulty and faction, then press **Play**.
 
 > **Web build**: If you want to play in a browser, the `MineAttack.html` and supporting files are also attached to each release. Serve them over HTTP (not `file://`) — see the web instructions below.
@@ -69,7 +71,7 @@ Run the release exporter (replace `godot` with the path to your Godot binary if 
 tools/export_all.sh
 ```
 
-This produces `build/MineAttack.html`, `build/MineAttack.app`, `build/MineAttack.exe`, `MineAttack-macOS.zip`, and `MineAttack-Windows.zip`.
+This produces `build/MineAttack.html`, `build/MineAttack.app`, `build/MineAttack.exe`, `build/MineAttack.x86_64`, `MineAttack-macOS.zip`, `MineAttack-Windows.zip`, and `MineAttack-Linux.zip`.
 
 ---
 
@@ -148,9 +150,9 @@ Destroy the enemy building before it destroys yours. Difficulty (Easy / Normal /
 
 This repository includes a pre-push hook in `.githooks/pre-push`. When you push to `main`, it automatically:
 
-1. Runs `tools/export_all.sh` to rebuild the macOS and Windows zips.
+1. Runs `tools/export_all.sh` to rebuild the macOS, Windows, and Linux zips.
 2. Creates a new GitHub release with an auto-incremented patch version (e.g., `v0.1.0` → `v0.1.1`).
-3. Attaches `MineAttack-macOS.zip` and `MineAttack-Windows.zip` to the release.
+3. Attaches `MineAttack-macOS.zip`, `MineAttack-Windows.zip`, and `MineAttack-Linux.zip` to the release.
 
 To enable the hook after cloning, run:
 

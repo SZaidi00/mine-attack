@@ -11,24 +11,27 @@ var ai: AIController
 # the sibling later. Cross-path capstones are attempted after the plan.
 const _RESEARCH_PLANS: Dictionary = {
 	"arcane": [
-		"deep_delve", "arctic_training",
+		"deep_delve", "arctic_training", "survival_instinct",
 		"ore_sonar", "crystal_forge", "reinforced_pack",
+		"arctic_gear", "volcano_wards", "storm_refuge", "eruption_drills",
 		"fortification", "stone_masonry", "sentry_network", "citadel",
 		"dragon_mastery", "broodmother", "sky_raiders", "inferno",
 		"weather_alert", "storm_scout", "stormcaller",
 		"deep_fortress", "total_war", "storm_dragon", "pathfinder", "artillery",
 	],
 	"brute": [
-		"surface_war", "arctic_training",
+		"surface_war", "arctic_training", "survival_instinct",
 		"longbow", "siege_master", "rapid_fire",
+		"arctic_gear", "volcano_wards", "storm_refuge", "eruption_drills",
 		"fortification", "stone_masonry", "sentry_network", "artillery",
 		"dragon_mastery", "broodmother", "sky_raiders", "inferno",
 		"weather_alert", "storm_scout", "stormcaller",
 		"total_war", "deep_fortress", "storm_dragon", "pathfinder", "citadel",
 	],
 	"industrial": [
-		"surface_war", "arctic_training",
+		"surface_war", "arctic_training", "survival_instinct",
 		"longbow", "guerrilla", "rapid_fire",
+		"arctic_gear", "volcano_wards", "storm_refuge", "eruption_drills",
 		"fortification", "stone_masonry", "sentry_network", "citadel",
 		"dragon_mastery", "broodmother", "sky_raiders", "tempest_wings",
 		"weather_alert", "storm_scout", "pathfinder",
@@ -203,14 +206,16 @@ func _pick_research() -> String:
 		# Build a generic plan now that a side is committed.
 		if has_war:
 			plan = [
-				"arctic_training", "longbow", "rapid_fire", "siege_master", "guerrilla",
+				"arctic_training", "survival_instinct", "longbow", "rapid_fire", "siege_master", "guerrilla",
+				"arctic_gear", "volcano_wards", "storm_refuge", "eruption_drills",
 				"fortification", "stone_masonry", "sentry_network", "citadel", "artillery",
 				"dragon_mastery", "broodmother", "sky_raiders", "inferno", "tempest_wings",
 				"weather_alert", "storm_scout", "stormcaller", "pathfinder",
 			]
 		else:
 			plan = [
-				"arctic_training", "ore_sonar", "reinforced_pack", "crystal_forge", "earth_shield",
+				"arctic_training", "survival_instinct", "ore_sonar", "reinforced_pack", "crystal_forge", "earth_shield",
+				"arctic_gear", "volcano_wards", "storm_refuge", "eruption_drills",
 				"fortification", "stone_masonry", "sentry_network", "citadel", "artillery",
 				"dragon_mastery", "broodmother", "sky_raiders", "inferno", "tempest_wings",
 				"weather_alert", "storm_scout", "stormcaller", "pathfinder",

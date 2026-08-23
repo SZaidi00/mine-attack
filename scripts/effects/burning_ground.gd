@@ -53,7 +53,7 @@ func _process(delta: float) -> void:
 
 
 func _tick_damage() -> void:
-	var damage: int = maxi(1, roundi(dps * TICK_INTERVAL))
+	var base_damage: int = maxi(1, roundi(dps * TICK_INTERVAL))
 	for unit in get_tree().get_nodes_in_group("units"):
 		if unit._state == Unit.State.DEAD:
 			continue
@@ -65,10 +65,15 @@ func _tick_damage() -> void:
 			# does raise an orange -X popup so the damage reads. The tick also
 			# ignites the unit: it keeps taking reduced burn ticks for a few
 			# seconds after leaving the patch.
+			var damage: int = base_damage
+			if damage_all_teams:
+				var reduction: float = ResearchManager.get_stat_bonus(unit.team, "environmental_damage_reduction") \
+					+ ResearchManager.get_stat_bonus(unit.team, "volcano_damage_reduction")
+				damage = maxi(1, roundi(base_damage * maxf(0.0, 1.0 - reduction)))
 			unit.take_damage(damage, null, true)
 			_spawn_fire_popup(unit, damage)
-			unit.apply_burn(dps * Constants.BURN_LINGER_DPS_RATIO, Constants.BURN_LINGER_DURATION)
-	_damage_structures(damage)
+			unit.apply_burn(dps * Constants.BURN_LINGER_DPS_RATIO, Constants.BURN_LINGER_DURATION, damage_all_teams)
+	_damage_structures(base_damage)
 
 
 func _spawn_fire_popup(unit: Node2D, amount: int) -> void:

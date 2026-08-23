@@ -1,5 +1,5 @@
 #!/bin/bash
-# Export all release presets (Web, macOS, Windows) into build/, then package
+# Export all release presets (Web, macOS, Windows, Linux) into build/, then package
 # the desktop builds as zips in the project root for easy upload.
 # Usage: tools/export_all.sh
 set -euo pipefail
@@ -23,17 +23,23 @@ fi
 # Remove previous artifacts so every run produces a completely fresh set
 # (stale bundle contents or archive entries can survive a plain overwrite).
 rm -rf build/MineAttack.app build/MineAttack.exe build/MineAttack.pck \
-	MineAttack-macOS.zip MineAttack-Windows.zip
+	build/MineAttack.x86_64 MineAttack-macOS.zip MineAttack-Windows.zip \
+	MineAttack-Linux.zip
 
 "$GODOT" --headless --path . --export-release "Web" build/MineAttack.html
 "$GODOT" --headless --path . --export-release "macOS" build/MineAttack.app
 "$GODOT" --headless --path . --export-release "Windows" build/MineAttack.exe
+"$GODOT" --headless --path . --export-release "Linux" build/MineAttack.x86_64
 
 echo "Packaging desktop builds for upload..."
 # ditto keeps the .app bundle's metadata intact so it still runs when unzipped.
 ditto -c -k --sequesterRsrc --keepParent build/MineAttack.app MineAttack-macOS.zip
 ( cd build && zip -q ../MineAttack-Windows.zip MineAttack.exe )
+# Ensure the Linux binary is executable before zipping it.
+chmod +x build/MineAttack.x86_64
+( cd build && zip -q ../MineAttack-Linux.zip MineAttack.x86_64 )
 
 echo "All exports complete:"
 ls -lh build/MineAttack.html build/MineAttack.app/Contents/MacOS/MineAttack build/MineAttack.exe \
-	MineAttack-macOS.zip MineAttack-Windows.zip | awk '{print "  " $5 "  " $9}'
+	build/MineAttack.x86_64 MineAttack-macOS.zip MineAttack-Windows.zip MineAttack-Linux.zip \
+	| awk '{print "  " $5 "  " $9}'

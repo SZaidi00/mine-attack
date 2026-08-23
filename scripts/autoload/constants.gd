@@ -320,6 +320,9 @@ const VOLCANO_BURN_RADIUS_CELLS: float = 1.0
 #   storm_exposure_enemy_mult→ enemy snowstorm exposure damage multiplier bonus
 #   storm_duration_bonus     → seconds added to snowstorm duration
 #   building_regen_hp_per_sec→ building HP regenerated per second out of combat
+#   environmental_damage_reduction → flat reduction to all snowstorm/volcano damage (0.2 = -20%)
+#   snowstorm_damage_reduction → additional reduction to snowstorm exposure damage only
+#   volcano_damage_reduction  → additional reduction to volcano meteor/burn damage only
 # Techs without effect keys are read through ResearchManager.has_branch() by
 # the systems that implement their hard-coded effects.
 const RESEARCH_QUEUE_MAX: int = 3
@@ -373,6 +376,15 @@ const RESEARCH_TECHS: Dictionary = {
 		"tree_pos": Vector2i(0, 20),
 		"levels": {
 			1: { "cost": 400, "time": 20.0, "snowstorm_speed": 0.2, "desc": "Units move 20% faster during snowstorms" },
+		},
+	},
+	# ── Survival discipline (rows 25-29) ──
+	"survival_instinct": {
+		"name": "Survival Instinct",
+		"unit": "",
+		"tree_pos": Vector2i(0, 25),
+		"levels": {
+			1: { "cost": 400, "time": 20.0, "environmental_damage_reduction": 0.2, "desc": "All units take 20% less damage from snowstorms and volcano events" },
 		},
 	},
 
@@ -585,6 +597,46 @@ const RESEARCH_TECHS: Dictionary = {
 			1: { "cost": 1200, "time": 35.0, "vision_in_storm_mult": 0.3, "desc": "Friendly units +30% vision during storms; miners auto-recall on storm warning" },
 		},
 	},
+	# ── Survival tier 2 (rows 25-26) ──
+	"arctic_gear": {
+		"name": "Arctic Gear",
+		"unit": "",
+		"tree_pos": Vector2i(1, 25),
+		"requires": { "survival_instinct": 1 },
+		"levels": {
+			1: { "cost": 700, "time": 25.0, "snowstorm_damage_reduction": 0.2, "desc": "Units take an additional 20% less snowstorm exposure damage" },
+		},
+	},
+	"volcano_wards": {
+		"name": "Volcano Wards",
+		"unit": "",
+		"tree_pos": Vector2i(1, 26),
+		"requires": { "survival_instinct": 1 },
+		"levels": {
+			1: { "cost": 700, "time": 25.0, "volcano_damage_reduction": 0.2, "desc": "Units take an additional 20% less volcano meteor and burn damage" },
+		},
+	},
+	# ── Survival tier 3 (rows 27-28) ──
+	"storm_refuge": {
+		"name": "Storm Refuge",
+		"unit": "",
+		"tree_pos": Vector2i(2, 27),
+		"requires_any": ["arctic_gear", "volcano_wards"],
+		"locks": "eruption_drills",
+		"levels": {
+			1: { "cost": 1200, "time": 35.0, "snowstorm_damage_reduction": 0.3, "desc": "Units take 30% less snowstorm exposure damage" },
+		},
+	},
+	"eruption_drills": {
+		"name": "Eruption Drills",
+		"unit": "",
+		"tree_pos": Vector2i(2, 28),
+		"requires_any": ["arctic_gear", "volcano_wards"],
+		"locks": "storm_refuge",
+		"levels": {
+			1: { "cost": 1200, "time": 35.0, "volcano_damage_reduction": 0.35, "weather_warning_bonus": 5.0, "desc": "Volcano warnings last 5s longer; units take 35% less volcano damage" },
+		},
+	},
 
 	# ═══════════════════════════════════════════════════════════════════════
 	# Tier 4 cross-path capstones
@@ -701,6 +753,18 @@ const STORMCALLER_EXPOSURE_MULT: float = 0.5
 const STORMCALLER_DURATION_BONUS: float = 5.0
 # pathfinder: friendly vision during storms.
 const PATHFINDER_VISION_MULT: float = 0.3
+
+# survival_instinct: base reduction to all environmental damage.
+const SURVIVAL_INSTINCT_DAMAGE_REDUCTION: float = 0.2
+# arctic_gear: additional snowstorm exposure damage reduction.
+const ARCTIC_GEAR_SNOWSTORM_REDUCTION: float = 0.2
+# volcano_wards: additional volcano meteor/burn damage reduction.
+const VOLCANO_WARDS_VOLCANO_REDUCTION: float = 0.2
+# storm_refuge: snowstorm exposure damage reduction.
+const STORM_REFUGE_SNOWSTORM_REDUCTION: float = 0.3
+# eruption_drills: volcano damage reduction and warning extension.
+const ERUPTION_DRILLS_VOLCANO_REDUCTION: float = 0.35
+const ERUPTION_DRILLS_WARNING_BONUS: float = 5.0
 
 # Cross-path capstones.
 const DEEP_FORTRESS_BUILDING_HP_BONUS: int = 1000

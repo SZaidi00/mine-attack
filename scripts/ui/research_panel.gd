@@ -42,6 +42,7 @@ const _DISCIPLINE_INFO: Dictionary = {
 	"fortification": { "name": "Fortification", "color": Color("#4A86C8") },
 	"dragon_mastery": { "name": "Dragon Mastery", "color": Color("#AF84FB") },
 	"arctic_training": { "name": "Weather", "color": Color("#7FC4E8") },
+	"survival_instinct": { "name": "Survival", "color": Color("#7FB37F") },
 }
 const _CROSS_PATH_NAME: String = "Cross-path"
 const _CROSS_PATH_COLOR: Color = Color("#C9D6E8")
@@ -94,6 +95,12 @@ const _TECH_ICONS: Dictionary = {
 	"storm_scout": preload("res://frost_mines_assets/icons/icon_snowstorm.png"),
 	"stormcaller": preload("res://frost_mines_assets/icons/icon_snowstorm.png"),
 	"pathfinder": preload("res://frost_mines_assets/icons/icon_snowstorm.png"),
+	# New Survival branch.
+	"survival_instinct": preload("res://frost_mines_assets/icons/icon_hp.png"),
+	"arctic_gear": preload("res://frost_mines_assets/icons/icon_snowstorm.png"),
+	"volcano_wards": preload("res://frost_mines_assets/icons/icon_lava.png"),
+	"storm_refuge": preload("res://frost_mines_assets/icons/icon_snowstorm.png"),
+	"eruption_drills": preload("res://frost_mines_assets/icons/icon_lava.png"),
 	# Cross-path capstones.
 	"deep_fortress": preload("res://frost_mines_assets/icons/icon_building.png"),
 	"total_war": preload("res://frost_mines_assets/icons/icon_attack.png"),

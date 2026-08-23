@@ -114,20 +114,8 @@ void fragment() {
 			}
 		}
 
-		// 4. Shelter cutouts.
+		// 4. Warm lantern-radius glow (vision range indicator, not a shelter cutout).
 		vec2 screen_px = uv / SCREEN_PIXEL_SIZE;
-		float shelter_atten = 1.0;
-		for (int i = 0; i < lantern_count; i++) {
-			float d = distance(screen_px, lantern_pos[i]);
-			float r = lantern_radius[i];
-			float inner = r * 0.34;
-			float a = 1.0 - smoothstep(inner, r, d);
-			shelter_atten -= a * 0.74;
-		}
-		shelter_atten = clamp(shelter_atten, 0.0, 1.0);
-		fog_density *= shelter_atten;
-
-		// 5. Warm shelter glow.
 		float glow = 0.0;
 		for (int i = 0; i < lantern_count; i++) {
 			float d = distance(screen_px, lantern_pos[i]);

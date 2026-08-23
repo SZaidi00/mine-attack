@@ -419,8 +419,8 @@ func take_damage(amount: int, attacker: Node2D = null, environmental: bool = fal
 
 ## Ignite from burning ground: keeps ticking reduced fire damage for a few
 ## seconds after the unit leaves the patch (see Constants.BURN_LINGER_*).
-func apply_burn(dps: float, duration: float) -> void:
-	_combat.apply_burn(dps, duration)
+func apply_burn(dps: float, duration: float, environmental: bool = false) -> void:
+	_combat.apply_burn(dps, duration, environmental)
 
 
 ## True while a lingering burn is still ticking on this unit.

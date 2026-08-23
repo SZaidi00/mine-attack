@@ -252,11 +252,11 @@ func _start_snowstorm_warning() -> void:
 	DebugLog.log_command("WeatherManager", "snowstorm_warning", "warning=%.0fs" % _warning_left)
 	AudioManager.play("alarm", Vector2.INF, -6.0)
 	weather_warning_started.emit(_warning_left)
-	# Pathfinder: auto-recall friendly miners to the nearest lantern at warning time.
+	# Pathfinder: auto-recall friendly miners to the mine entry at warning time.
 	if ResearchManager.has_branch(GameManager.Team.PLAYER, "pathfinder"):
-		_recall_miners_to_lanterns(GameManager.Team.PLAYER)
+		_recall_miners_to_shelter(GameManager.Team.PLAYER)
 	if ResearchManager.has_branch(GameManager.Team.ENEMY, "pathfinder"):
-		_recall_miners_to_lanterns(GameManager.Team.ENEMY)
+		_recall_miners_to_shelter(GameManager.Team.ENEMY)
 
 
 func _start_snowstorm() -> void:
@@ -377,11 +377,10 @@ func _should_damage_hq() -> bool:
 	# return GameManager.difficulty == GameManager.Difficulty.NIGHTMARE or GameManager.difficulty == GameManager.Difficulty.GODLY
 
 
-## Exposure damage to every surface unit outside a friendly lantern's radius
-## (the lantern's light is the shelter). Underground units and buildings are
-## unaffected. Damage scales with difficulty; Stormcaller increases enemy
-## exposure damage; Tempest Wings / Storm Dragon dragons are immune. Exposed
-## units also gain the frost overlay.
+## Exposure damage to every surface unit. Underground units and buildings are
+## unaffected. Damage scales with difficulty; Survival research reduces it;
+## Stormcaller on the enemy team increases it; Tempest Wings / Storm Dragon
+## dragons are immune. Exposed units also gain the frost overlay.
 func _apply_exposure_damage(step: float) -> void:
 	var seen: Dictionary = {}
 	for unit in get_tree().get_nodes_in_group("units"):
@@ -389,7 +388,7 @@ func _apply_exposure_damage(step: float) -> void:
 			continue
 		var id: int = unit.get_instance_id()
 		seen[id] = true
-		if is_unit_weather_immune(unit) or _is_lantern_protected(unit):
+		if is_unit_weather_immune(unit):
 			_set_frosted(unit, false)
 			continue
 		_set_frosted(unit, true)
@@ -397,6 +396,10 @@ func _apply_exposure_damage(step: float) -> void:
 		# Stormcaller on the *opposing* team makes this unit suffer more.
 		var enemy_team: GameManager.Team = GameManager.Team.ENEMY if unit.team == GameManager.Team.PLAYER else GameManager.Team.PLAYER
 		damage_per_sec *= (1.0 + ResearchManager.get_stat_bonus(enemy_team, "storm_exposure_enemy_mult"))
+		# Survival research reduces environmental/snowstorm damage for the owning team.
+		var reduction: float = ResearchManager.get_stat_bonus(unit.team, "environmental_damage_reduction") \
+			+ ResearchManager.get_stat_bonus(unit.team, "snowstorm_damage_reduction")
+		damage_per_sec *= maxf(0.0, 1.0 - reduction)
 		var accum: float = _damage_accum.get(id, 0.0) + damage_per_sec * step
 		var whole: int = int(accum)
 		if whole > 0:
@@ -411,40 +414,35 @@ func _apply_exposure_damage(step: float) -> void:
 			_damage_accum.erase(id)
 
 
-func _is_lantern_protected(unit: Unit) -> bool:
-	for lantern in get_tree().get_nodes_in_group("lanterns"):
-		if lantern.team != unit.team or not lantern.is_built():
-			continue
-		var shelter: float = lantern.vision_radius * GridWorld.CELL_SIZE
-		if lantern.global_position.distance_to(unit.global_position) <= shelter:
-			return true
-	return false
-
-
-## Pathfinder: when a storm warning begins, surface miners march to the nearest
-## built friendly lantern. Underground miners are left alone (they are already
-## sheltered from the storm).
-func _recall_miners_to_lanterns(team: GameManager.Team) -> void:
-	var lanterns: Array = []
-	for lantern in get_tree().get_nodes_in_group("lanterns"):
-		if lantern.team == team and lantern.is_built() and not lantern.is_underground_lantern:
-			lanterns.append(lantern)
-	if lanterns.is_empty():
+## Pathfinder: when a storm warning begins, surface miners march to the team's
+## mine entry (or building as a fallback). Underground miners are left alone
+## (they are already sheltered from the storm).
+func _recall_miners_to_shelter(team: GameManager.Team) -> void:
+	var target: Node2D = _find_shelter_target(team)
+	if target == null:
 		return
 	for unit in get_tree().get_nodes_in_group("units"):
 		if unit.team != team or unit._state == Unit.State.DEAD or unit.is_underground:
 			continue
 		if not unit.data.is_miner:
 			continue
-		var nearest: Node2D = null
-		var best_d2: float = INF
-		for lantern in lanterns:
-			var d2: float = unit.global_position.distance_squared_to(lantern.global_position)
-			if d2 < best_d2:
-				best_d2 = d2
-				nearest = lantern
-		if nearest != null:
-			unit.call("move_to", nearest.global_position)
+		unit.call("move_to", target.global_position)
+
+
+func _find_shelter_target(team: GameManager.Team) -> Node2D:
+	var building: Node2D = null
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.team == team:
+			building = b
+			break
+	var entry: Node2D = null
+	for e in get_tree().get_nodes_in_group("mine_entries"):
+		if e.team == team:
+			entry = e
+			break
+	if entry != null:
+		return entry
+	return building
 
 
 func _set_frosted(unit: Unit, frosted: bool) -> void:

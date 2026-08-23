@@ -94,7 +94,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `ai_mining.gd` — miner task assignment and ore selection (skips miners under shelter orders).
   - `ai_combat.gd` — attack waves, base defense, wall breach. Waves peel up to half their fighters onto remembered enemy towers/lanterns before marching on the base.
   - `ai_smart_behaviors.gd` — focus fire, wounded retreat, harassment, bait, combat predictor, aggression.
-  - `ai_awareness.gd` — faction scouting (swordsman at 1:00, 30s retry after death), defensive lantern placement/upgrades, snowstorm miner recall and lava evacuation (signal-driven; sheltered miners hold via `unit.shelter_in_place`).
+  - `ai_awareness.gd` — faction scouting (swordsman at 1:00, 30s retry after death), defensive lantern placement/upgrades, snowstorm/volcano miner recall to the mine entry/base and lava evacuation (signal-driven; sheltered miners hold via `unit.shelter_in_place`).
 
 ### `scripts/world/`
 
@@ -168,7 +168,7 @@ Miner upgrades unlock deeper layers (Level 1: layers 1–2, Level 2: layers 3–
 
 Placeable from the radial build menu:
 
-- **Lanterns** — surface and underground variants provide vision; surface lanterns shelter miners during snowstorms and upgrade T1→T2→T3.
+- **Lanterns** — surface and underground variants provide vision and upgrade T1→T2→T3.
 - **Towers** — static surface defenses; auto-attack and vision.
 - **Walls** — single-cell surface barriers that block movement and projectiles.
 - **Traps** — hidden area damage triggered by enemy units (miner-placed with Guerrilla research).
@@ -179,7 +179,7 @@ Open with `R`. The tree has multiple discipline roots; tier-2 branches can both 
 
 ### Weather and dynamic terrain
 
-- **Snowstorms** reduce vision and movement; units outside friendly lantern radius take frost damage.
+- **Snowstorms** reduce vision and movement; surface units take frost damage (underground units and buildings are safe). The Survival research discipline reduces environmental damage.
 - **Volcano eruptions** rain meteors on the surface, leaving burning ground (extinguished by overlapping snowstorms).
 - **Lava rises** from the bottom of the mine, forcing units upward and eventually turning flooded cells into magma rock/fresh ore.
 - **Cave-ins** drop 3×3 rock blocks that deal damage and push units.
@@ -239,8 +239,9 @@ Export presets in `export_presets.cfg`:
 - `Web` → `build/MineAttack.html`
 - `macOS` → `build/MineAttack.app`
 - `Windows` → `build/MineAttack.exe`
+- `Linux` → `build/MineAttack.x86_64`
 
-The script also packages `MineAttack-macOS.zip` (via `ditto`, preserving bundle metadata) and `MineAttack-Windows.zip`. Both `addons/*` and `tests/*` are excluded from exports.
+The script also packages `MineAttack-macOS.zip` (via `ditto`, preserving bundle metadata), `MineAttack-Windows.zip`, and `MineAttack-Linux.zip`. Both `addons/*` and `tests/*` are excluded from exports.
 
 ### Web export and local serve
 
@@ -255,9 +256,9 @@ Open `http://localhost:8080/MineAttack.html`. Web builds require cross-origin is
 
 This repository includes a pre-push hook in `.githooks/pre-push`. When enabled, pushes to `main` automatically:
 
-1. Run `tools/export_all.sh` to rebuild macOS and Windows zips.
+1. Run `tools/export_all.sh` to rebuild macOS, Windows, and Linux zips.
 2. Create a new GitHub release with an auto-incremented patch version (e.g. `v0.1.0` → `v0.1.1`).
-3. Attach `MineAttack-macOS.zip` and `MineAttack-Windows.zip` to the release.
+3. Attach `MineAttack-macOS.zip`, `MineAttack-Windows.zip`, and `MineAttack-Linux.zip` to the release.
 
 Enable the hook after cloning:
 

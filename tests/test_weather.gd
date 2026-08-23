@@ -1,8 +1,9 @@
 extends GutTest
 
-# Weather system (Revamp Phase 5): snowstorm warning → storm → end lifecycle,
-# the vision/speed multipliers, lantern-shelter exposure damage with the frost
-# overlay, and the fixed-length storm warning.
+# Weather system (Revamp Phase 5 + Survival discipline): snowstorm warning →
+# storm → end lifecycle, the vision/speed multipliers, exposure damage with the
+# frost overlay, Survival research damage reduction, and the fixed-length storm
+# warning.
 # Random scheduling is disabled for the whole suite — every storm is forced.
 
 const PLAYER: int = 0
@@ -219,14 +220,27 @@ func test_storm_damages_exposed_surface_units_only() -> void:
 	assert_false(exposed._frosted, "frost overlay clears when the storm ends")
 
 
-func test_friendly_lantern_shelters_units_from_storm() -> void:
+func test_friendly_lantern_no_longer_shelters_units_from_storm() -> void:
+	# Lanterns are vision-only; weather protection now comes from Survival research.
 	_build_surface_lantern(PLAYER, _grid.grid_to_world(Vector2i(-20, 0)))
 	var unit: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, _grid.grid_to_world(Vector2i(-19, 0)))
 	unit.stop()
 	WeatherManager.force_snowstorm_start()
 	await wait_seconds(1.5)
-	assert_eq(unit.hp, unit.data.max_hp, "a unit inside a friendly lantern's radius takes no storm damage")
-	assert_false(unit._frosted, "sheltered unit shows no frost overlay")
+	assert_lt(unit.hp, unit.data.max_hp, "a unit inside a friendly lantern's radius still takes storm damage")
+	assert_true(unit._frosted, "unit inside lantern radius still shows frost overlay")
+	WeatherManager.force_snowstorm_end()
+
+
+func test_survival_research_reduces_snowstorm_damage() -> void:
+	ResearchManager._levels[PLAYER]["survival_instinct"] = 1
+	var unit: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, _grid.grid_to_world(Vector2i(-20, 0)))
+	unit.stop()
+	WeatherManager.force_snowstorm_start()
+	await wait_seconds(1.5)
+	# Base 2 HP/s * 1.5s = 3 HP; with 20% reduction it should be ~2 HP lost.
+	assert_gt(unit.hp, unit.data.max_hp - 3, "Survival Instinct reduces snowstorm exposure damage")
+	assert_true(unit._frosted, "unit still shows frost overlay with Survival research")
 	WeatherManager.force_snowstorm_end()
 
 

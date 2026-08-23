@@ -190,9 +190,9 @@ func _get_mine_entry() -> Node2D:
 
 # ─── Weather & terrain response ───
 
-## Snowstorm warning (Phase 5/8): recall all surface miners into a friendly
-## lantern's shelter radius — the AI gets the same warning time as the
-## player. Underground miners are unaffected by the storm and keep digging.
+## Snowstorm warning (Phase 5/8): recall all surface miners to the team's mine
+## entry / base — the AI gets the same warning time as the player. Underground
+## miners are unaffected by the storm and keep digging.
 func _on_snowstorm_warning(_seconds: float) -> void:
 	if not GameManager.game_active:
 		return
@@ -289,23 +289,11 @@ func _run_shelter_upkeep() -> void:
 			unit.move_to(_shelter_target(unit))
 
 
-## Where a sheltered miner holds: inside the nearest built friendly lantern's
-## radius (storm shelter); the mine entrance or base as a fallback when no
-## lantern stands yet.
-func _shelter_target(unit: Unit) -> Vector2:
-	var best: Node2D = null
-	var best_dist: float = INF
-	for lantern in ai.get_tree().get_nodes_in_group("lanterns"):
-		if lantern.team != ai.team or lantern.is_underground_lantern or not lantern.is_built():
-			continue
-		var dist: float = lantern.global_position.distance_squared_to(unit.global_position)
-		if dist < best_dist:
-			best_dist = dist
-			best = lantern
-	if best != null:
-		return best.global_position
+## Where a sheltered miner holds: the mine entrance surface position, or the
+## base as a fallback. Lanterns no longer provide weather immunity.
+func _shelter_target(_unit: Unit) -> Vector2:
 	var entry: Node2D = _get_mine_entry()
 	if entry != null:
 		return entry.get_surface_position()
 	var building: Node2D = ai._combat._get_building()
-	return building.global_position if building != null else unit.global_position
+	return building.global_position if building != null else _unit.global_position

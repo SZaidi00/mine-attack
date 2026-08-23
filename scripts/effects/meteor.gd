@@ -78,7 +78,10 @@ func _apply_impact_damage() -> void:
 		if unit._state == Unit.State.DEAD or unit.is_underground:
 			continue
 		if unit.global_position.distance_to(global_position) <= impact_radius:
-			unit.take_damage(impact_damage, null, true)
+			var reduction: float = ResearchManager.get_stat_bonus(unit.team, "environmental_damage_reduction") \
+				+ ResearchManager.get_stat_bonus(unit.team, "volcano_damage_reduction")
+			var reduced: int = maxi(1, roundi(impact_damage * maxf(0.0, 1.0 - reduction)))
+			unit.take_damage(reduced, null, true)
 	for group in ["towers", "lanterns", "walls"]:
 		for node in get_tree().get_nodes_in_group(group):
 			if _is_protected_structure(node):
