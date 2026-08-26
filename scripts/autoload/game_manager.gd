@@ -81,6 +81,23 @@ func declare_winner(winner: Team) -> void:
 	game_over.emit(winner)
 
 
+## Resets all per-match autoload state two frames after the caller's scene
+## switch has completed. Resetting BEFORE the switch (while the old scene is
+## still alive) emits EconomyManager/ResearchManager signals whose listeners
+## queue deferred calls onto nodes the switch then frees mid-flush — which
+## segfaulted macOS release builds on Quit to Menu / Restart.
+## Difficulty and faction picks survive, as with the individual resets.
+func reset_after_scene_switch() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	reset()
+	FactionManager.reset()
+	EconomyManager.reset()
+	ResearchManager.reset()
+	WeatherManager.reset()
+	AIBeliefSystem.reset()
+
+
 func reset() -> void:
 	game_active = true
 	match_time = 0.0

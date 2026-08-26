@@ -36,16 +36,16 @@ const TRAIN_TIMES: Dictionary = {
 # source of truth.)
 
 const MINER_STATS: Dictionary = {
-	1: { "hp": 50, "speed": 60, "mine_dps": 10, "carry": 20, "max_layer": 2 },
-	2: { "hp": 75, "speed": 70, "mine_dps": 15, "carry": 30, "max_layer": 4 },
-	3: { "hp": 100, "speed": 80, "mine_dps": 25, "carry": 40, "max_layer": 7 }
+	1: { "hp": 50, "speed": 60, "mine_dps": 12, "carry": 20, "max_layer": 2 },
+	2: { "hp": 75, "speed": 70, "mine_dps": 24, "carry": 30, "max_layer": 4 },
+	3: { "hp": 100, "speed": 80, "mine_dps": 50, "carry": 40, "max_layer": 7 }
 }
 
 # Authoritative mining swing stats per upgrade level. DPS = damage * swings.
 const MINING_STATS: Dictionary = {
-	1: { "damage": 5, "swings": 2.0 },   # 10 dps
-	2: { "damage": 5, "swings": 3.0 },   # 15 dps
-	3: { "damage": 5, "swings": 5.0 },   # 25 dps
+	1: { "damage": 6, "swings": 2.0 },   # 12 dps
+	2: { "damage": 8, "swings": 3.0 },   # 24 dps
+	3: { "damage": 10, "swings": 5.0 },  # 50 dps
 }
 
 # How far an idle miner scans for dropped coin pickups (killed-miner cargo).
@@ -185,7 +185,7 @@ const PIGEON_LINGER_HOME_TIME: float = 5.0
 # die instantly (no cargo drop), underground lanterns are destroyed, and
 # every non-wall cell becomes indestructible LAVA. After LAVA_DURATION the
 # lava recedes into diggable MAGMA_ROCK (0 gold), with MAGMA_ORE_CHANCE per
-# cell of high-value FRESH_ORE instead — but only on layers 6 and 7.
+# cell of high-value FRESH_ORE instead — on layers 5, 6, and 7.
 const LAVA_MIN_INTERVAL: float = 70.0
 const LAVA_MAX_INTERVAL: float = 125.0
 const LAVA_WARNING_TIME: float = 5.0

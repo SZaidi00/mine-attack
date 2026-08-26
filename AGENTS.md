@@ -301,7 +301,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - **Ladders are vertical:** `MineEntry` uses the shaft column center; climb states rely on the ladder column check.
 - **Building footprint writes `_cells` directly:** `building.gd` mutates `GridWorld._cells` and `_astar` directly.
 - **Resources duplicated at spawn:** `building.gd` calls `data.duplicate(true)` so each unit gets mutable `UnitData`.
-- **Autoloads survive scene reload:** `hud.gd` resets `GameManager`, `FactionManager`, `EconomyManager`, `ResearchManager`, `WeatherManager`, `AIBeliefSystem` on restart/quit-to-menu (and `WeatherManager` + `AIBeliefSystem` again in `hud._ready`, since `GameManager.match_time` accumulates through the main menu).
+- **Autoloads survive scene reload:** on restart/quit-to-menu `hud.gd` defers the scene switch and then resets `GameManager`, `FactionManager`, `EconomyManager`, `ResearchManager`, `WeatherManager`, `AIBeliefSystem` via `GameManager.reset_after_scene_switch()` — resetting BEFORE the switch emits economy/research signals whose listeners queue deferred calls onto nodes the switch frees mid-flush, which segfaulted macOS release builds. `hud._ready` also resets `WeatherManager` + `AIBeliefSystem` directly (since `GameManager.match_time` accumulates through the main menu).
 - **Test harness teardown:** free `main.tscn` immediately with `_main.free()` in `after_all`, not `queue_free()`, to avoid node-name collisions.
 - **Web full-bleed:** web export uses custom head include for canvas sizing.
 - **Viewport stretch:** logical UI is 1920×1080; camera base zoom adapts to physical window size.

@@ -241,14 +241,17 @@ func _process(_delta: float) -> void:
 
 
 func _on_pause_restart() -> void:
+	# Restart the current match. Difficulty (GameManager) and faction picks
+	# (FactionManager) intentionally survive reset() so the rematch keeps the
+	# same selections; only per-match progress/identification is cleared.
 	get_tree().paused = false
-	GameManager.reset()
-	FactionManager.reset()
-	EconomyManager.reset()
-	ResearchManager.reset()
-	WeatherManager.reset()
-	AIBeliefSystem.reset()
-	get_tree().reload_current_scene()
+	# Defer the reload so the button press callback can finish cleanly.
+	get_tree().call_deferred("reload_current_scene")
+	# Reset AFTER the switch: resetting while the old scene is still alive emits
+	# EconomyManager/ResearchManager signals whose listeners queue deferred
+	# calls onto nodes the switch then frees mid-flush — that segfaults the
+	# macOS release build.
+	GameManager.reset_after_scene_switch()
 
 
 ## In-game Quit returns to the main menu (the home screen) instead of closing
@@ -257,13 +260,12 @@ func _on_pause_restart() -> void:
 ## next match start clean.
 func _quit_to_menu() -> void:
 	get_tree().paused = false
-	GameManager.reset()
-	FactionManager.reset()
-	EconomyManager.reset()
-	ResearchManager.reset()
-	WeatherManager.reset()
-	AIBeliefSystem.reset()
-	get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
+	# Defer the scene switch so the button press callback finishes before the
+	# current scene is freed; this avoids crashes on some builds when the UI
+	# node that emitted the signal is destroyed mid-callback.
+	get_tree().call_deferred("change_scene_to_file", "res://scenes/ui/main_menu.tscn")
+	# See _on_pause_restart: the resets must run after the switch, not before.
+	GameManager.reset_after_scene_switch()
 
 
 func _set_game_speed(speed: float) -> void:
@@ -712,12 +714,7 @@ func _on_game_over(winner: GameManager.Team) -> void:
 
 
 func _play_again() -> void:
-	# Autoloads survive scene reload, so reset global state before restarting.
-	get_tree().paused = false
-	GameManager.reset()
-	FactionManager.reset()
-	EconomyManager.reset()
-	ResearchManager.reset()
-	WeatherManager.reset()
-	AIBeliefSystem.reset()
-	get_tree().reload_current_scene()
+	# Return to the main menu so the player can pick difficulty/faction again.
+	# Global state is reset, but difficulty and faction selections survive
+	# (FactionManager keeps the ids; GameManager keeps the difficulty).
+	_quit_to_menu()

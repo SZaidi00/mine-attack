@@ -17,6 +17,9 @@ const _ARMY_MIX: Dictionary = { "swordsman": 0.4, "archer": 0.3, "wizard": 0.2, 
 @export var team: GameManager.Team = GameManager.Team.ENEMY
 
 var _economy_tick: float = 0.0
+# True while a deferred _run_economy is queued, so rapid economy signals
+# (deposits, upgrades) collapse into one tick instead of stacking up.
+var _economy_tick_queued: bool = false
 var _mining_tick: float = 0.0
 var _mining_interval: float = 1.0
 var _attack_tick: float = 0.0
@@ -84,8 +87,11 @@ func _ready() -> void:
 
 ## Deferred economy re-tick: miner_level_changed fires from inside
 ## _run_economy itself (re-entrancy), and the queue shouldn't mutate mid-emit.
+## The flag collapses repeat signals into one queued tick, and the tree check
+## keeps a tick queued before a scene switch from running on a torn-down scene.
 func _on_economy_signal(_signal_team: int) -> void:
-	if GameManager.game_active:
+	if GameManager.game_active and not _economy_tick_queued:
+		_economy_tick_queued = true
 		call_deferred("_run_economy")
 
 
@@ -149,6 +155,10 @@ func _process(delta: float) -> void:
 # -----------------------------------------------------------------------------
 
 func _run_economy() -> void:
+	_economy_tick_queued = false
+	if not is_inside_tree():
+		# Deferred tick landed after a scene switch tore the match down.
+		return
 	_economy._run_economy()
 
 

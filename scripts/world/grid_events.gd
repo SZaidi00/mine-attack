@@ -335,9 +335,9 @@ func _recede_cell(pos: Vector2i) -> void:
 		return
 	var layer: int = (pos.y - 1) / _Constants.ROWS_PER_LAYER + 1
 	var ml_req: int = grid._map_gen._layer_miner_level(layer)
-	# Fresh ore only appears on the deepest two layers; higher flooded
+	# Fresh ore only appears on the deepest three layers; higher flooded
 	# layers reset to empty magma rock.
-	var can_spawn_gold: bool = layer >= 6
+	var can_spawn_gold: bool = layer >= 5
 	# If this tile held an unmined gold deposit before the flood,
 	# restore it exactly as it was.
 	var backup: GridWorld.Cell = _lava_original_cells.get(pos)
