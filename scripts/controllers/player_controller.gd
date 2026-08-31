@@ -4,7 +4,6 @@ extends Node
 const _Constants = preload("res://scripts/autoload/constants.gd")
 const _REJECT_POPUP: PackedScene = preload("res://scenes/effects/reject_popup.tscn")
 const _LANTERN_SCENE: PackedScene = preload("res://scenes/lantern.tscn")
-const _GHOST_RING: Texture2D = preload("res://frost_mines_assets/effects/selection_ring.png")
 
 const PlayerSelection := preload("res://scripts/controllers/player_selection.gd")
 const PlayerCommands := preload("res://scripts/controllers/player_commands.gd")

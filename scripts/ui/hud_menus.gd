@@ -227,7 +227,7 @@ func _build_build_menu() -> void:
 	_build_cards.append(_add_build_card(grid, "tower", "Tower", _ICON_TOWER))
 	_build_cards.append(_add_build_card(grid, "wall", "Wall", _ICON_WALL))
 	_build_cards.append(_add_build_card(grid, "trap", "Trap", null, "◇"))
-	_build_cards.append(_add_build_card(grid, "pigeon", "Pigeon", null, "↗"))
+	_build_cards.append(_add_build_card(grid, "pigeon", "Pigeon", _make_pigeon_icon()))
 
 	var footer := Label.new()
 	footer.text = "Select a blueprint to place"
@@ -546,6 +546,45 @@ func _scaled_icon(texture: Texture2D, max_height: int) -> ImageTexture:
 	var img: Image = texture.get_image()
 	var scale: float = max_height / float(img.get_height())
 	img.resize(maxi(1, roundi(img.get_width() * scale)), max_height, Image.INTERPOLATE_NEAREST)
+	return ImageTexture.create_from_image(img)
+
+
+## The pigeon has no sprite asset (the in-game unit is code-drawn), so the
+## build-card icon is a tiny pixel-art bird generated here. 14x14 so the
+## nearest-neighbor upscale to _ICON_SIZE (42) lands on an exact 3x factor.
+func _make_pigeon_icon() -> ImageTexture:
+	var pixels: Array[String] = [
+		"..............",
+		"....ww........",
+		"...wwww....hh.",
+		"...wwww...hhek",
+		"..wwwwwbbbbb..",
+		"..wwbbbbbbbbb.",
+		".tttbbbbbbbb..",
+		".tt.bbbbbbb...",
+		"....bbbbbb....",
+		".....bbbb.....",
+		"......ll......",
+		"......ll......",
+		"..............",
+		"..............",
+	]
+	var palette: Dictionary = {
+		"w": Color(0.95, 0.96, 1.0),   # wing
+		"b": Color(0.72, 0.75, 0.84),  # body
+		"h": Color(0.85, 0.87, 0.94),  # head
+		"e": Color(0.08, 0.08, 0.12),  # eye
+		"k": Color(0.95, 0.72, 0.25),  # beak
+		"t": Color(0.55, 0.58, 0.68),  # tail
+		"l": Color(0.85, 0.60, 0.25),  # legs
+	}
+	var img: Image = Image.create(14, 14, false, Image.FORMAT_RGBA8)
+	for y in pixels.size():
+		var row: String = pixels[y]
+		for x in mini(row.length(), 14):
+			var key: String = row.substr(x, 1)
+			if palette.has(key):
+				img.set_pixel(x, y, palette[key])
 	return ImageTexture.create_from_image(img)
 
 

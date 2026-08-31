@@ -150,11 +150,18 @@ func _build_ui() -> void:
 	UIThemeTokens.apply_progress_bar_theme(_progress_bar, UIThemeTokens.ProgressVariant.BLUE)
 	vbox.add_child(_progress_bar)
 
-	# Queued items list.
+	# Queued items list: wrapped in a ScrollContainer so long queues scroll
+	# inside the panel instead of overflowing past its bottom edge.
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+
 	_queued_container = VBoxContainer.new()
 	_queued_container.add_theme_constant_override("separation", 5)
-	_queued_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(_queued_container)
+	_queued_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_queued_container)
 
 	_empty_label = Label.new()
 	_empty_label.text = "Queue clear"

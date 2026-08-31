@@ -154,6 +154,7 @@ func _ready() -> void:
 	_build_weather_banner()
 	_build_volcano_banner()
 	_build_faction_popup()
+	_build_toast_container()
 	_on_economy_changed(GameManager.Team.PLAYER)
 	_updates._sync_view_buttons()
 	_updates._sync_speed_buttons()
@@ -679,6 +680,69 @@ func _on_faction_identified_popup(team: GameManager.Team) -> void:
 	_faction_popup_tween.tween_interval(3.5)
 	_faction_popup_tween.tween_property(_faction_popup, "modulate:a", 0.0, 0.6)
 	_faction_popup_tween.tween_callback(func(): _faction_popup.visible = false)
+
+
+# Toast notifications: transient messages stacked at the left-center of the
+# screen (research completions, etc.). Each toast fades in, holds, fades out.
+var _toast_container: VBoxContainer = null
+const _TOAST_MAX_VISIBLE: int = 4
+
+
+func _build_toast_container() -> void:
+	_toast_container = VBoxContainer.new()
+	_toast_container.name = "ToastContainer"
+	_toast_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast_container.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	_toast_container.grow_horizontal = Control.GROW_DIRECTION_END
+	_toast_container.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_toast_container.position = Vector2(16.0, 0.0)
+	_toast_container.add_theme_constant_override("separation", 6)
+	add_child(_toast_container)
+	ResearchManager.research_completed.connect(_on_research_completed_toast)
+
+
+func _on_research_completed_toast(team: GameManager.Team, tech_id: String) -> void:
+	# Only the player's own research warrants a toast.
+	if team != GameManager.Team.PLAYER:
+		return
+	var tech: Dictionary = _Constants.RESEARCH_TECHS.get(tech_id, {})
+	var tech_name: String = tech.get("name", tech_id.capitalize())
+	var text: String = "Research complete: %s" % tech_name
+	if ResearchManager.get_max_level(tech_id) > 1:
+		text += " L%d" % ResearchManager.get_level(team, tech_id)
+	show_toast(text)
+
+
+## Stacks a transient toast at the left-center of the screen; it fades in,
+## holds a few seconds, then fades out and frees itself. The oldest toast is
+## dropped early when the stack is full.
+func show_toast(text: String) -> void:
+	if _toast_container == null:
+		return
+	while true:
+		var live: Array[Node] = []
+		for child in _toast_container.get_children():
+			if not child.is_queued_for_deletion():
+				live.append(child)
+		if live.size() < _TOAST_MAX_VISIBLE:
+			break
+		live[0].queue_free()
+	var toast := PanelContainer.new()
+	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast.add_theme_stylebox_override("panel", UIThemeTokens.make_panel_style())
+	var label := Label.new()
+	label.text = text
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
+	label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	toast.add_child(label)
+	_toast_container.add_child(toast)
+	toast.modulate.a = 0.0
+	var tween := create_tween()
+	tween.tween_property(toast, "modulate:a", 1.0, 0.25)
+	tween.tween_interval(3.5)
+	tween.tween_property(toast, "modulate:a", 0.0, 0.5)
+	tween.tween_callback(toast.queue_free)
 
 
 func _on_game_over(winner: GameManager.Team) -> void:

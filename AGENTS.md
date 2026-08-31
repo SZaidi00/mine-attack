@@ -88,7 +88,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `player_selection.gd` — single/box selection and unit/building picking.
   - `player_commands.gd` — right-click command resolution, train/upgrade/kill callbacks, stance/rally application.
   - `player_camera.gd` — zoom, pan, surface/underground view bookmarks, screen shake.
-  - `player_build_placement.gd` — lantern/tower/wall/trap placement ghost and validation.
+  - `player_build_placement.gd` — lantern/tower/wall/trap placement ghost and validation; towers and lanterns show a gold range/vision disc while placing (tower range includes research bonuses).
 - `ai_controller.gd` — tick fields, aggression state, scout memory; delegates to helpers.
   - `ai_economy.gd` — economy decisions, training (faction-flavored army mix), upgrades, research (faction branch preferences), miner culling.
   - `ai_mining.gd` — miner task assignment and ore selection (skips miners under shelter orders).
@@ -128,14 +128,14 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 ### `scripts/ui/`
 
 - `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners.
-- `hud.gd` — node references, signal wiring, game-over flow, lava/weather/volcano warning banners, faction-identified popup; delegates to helpers.
+- `hud.gd` — node references, signal wiring, game-over flow, lava/weather/volcano warning banners, faction-identified popup, research-completion toasts; delegates to helpers.
   - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
-  - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count).
+  - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists).
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
 - `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system.
 - `settings_panel.gd` — shared settings popup (SFX volume slider on the SFX bus) opened from the main menu and pause menu Settings buttons.
 - `research_panel.gd` — Doctrine Deck research overlay: spatial branch map with tech cards (icon, state badge, discipline-colored accent, active progress strip) and elbow/OR-dashed connectors, persistent detail rail (cost/time/prereq/exclusion + action button) and footer queue chips with cancel/respec/scan.
-- `training_queue_panel.gd` — Frosted Steel production module: active training with progress, queued items, capacity readout, Pause/Resume and Clear actions.
+- `training_queue_panel.gd` — Frosted Steel production module: active training with progress, scrollable queued-items list, capacity readout, Pause/Resume and Clear actions.
 - `unit_button.gd` — training buttons.
 - `layer_indicator.gd` — underground layer accessibility indicator.
 - `debug_overlay.gd` — runtime debug display.

@@ -17,6 +17,19 @@ class _TrapGhostMarker:
 			var dir: Vector2 = Vector2.RIGHT.rotated(i * TAU / 5.0)
 			draw_line(dir * 4.0, dir * 9.0, Color(1, 1, 1, 0.9), 2.0)
 
+
+## Code-drawn range preview: a translucent filled disc with a crisp gold
+## outline so the structure's reach (attack range for towers, vision for
+## lanterns) reads clearly against any terrain. Kept untinted — the structure
+## sprite carries the green/red placement-validity tint.
+class _RangeIndicator:
+	extends Node2D
+	var radius: float = 0.0
+
+	func _draw() -> void:
+		draw_circle(Vector2.ZERO, radius, Color(1.0, 0.85, 0.4, 0.08))
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 48, Color(1.0, 0.85, 0.4, 0.55), 2.0, true)
+
 var pc: PlayerController
 
 
@@ -25,14 +38,18 @@ func _init(p: PlayerController) -> void:
 
 
 func _update_ghost() -> void:
-	# Lantern placement ghost: snap to the cell under the cursor and tint it
-	# by placement validity (green = valid, red = invalid).
+	# Lantern placement ghost: snap to the cell under the cursor and tint the
+	# structure sprite by placement validity (green = valid, red = invalid).
+	# The range indicator keeps its own gold color so it stays readable.
 	if pc._build_mode != "" and pc._build_ghost != null:
 		var world: Vector2 = pc._commands._screen_to_world(pc.get_viewport().get_mouse_position())
 		var cell: Vector2i = pc._grid.world_to_grid(world)
 		pc._build_ghost.global_position = pc._grid.grid_to_world(cell)
 		var err: String = _placement_error(pc._build_mode, cell)
-		pc._build_ghost.modulate = Color(0.4, 1.0, 0.4, 0.55) if err == "" else Color(1.0, 0.35, 0.35, 0.55)
+		var tint := Color(0.4, 1.0, 0.4, 0.55) if err == "" else Color(1.0, 0.35, 0.35, 0.55)
+		var visual: Node2D = pc._build_ghost.get_node_or_null("GhostVisual")
+		if visual != null:
+			visual.modulate = tint
 
 
 func _handle_input(event: InputEvent) -> void:
@@ -58,13 +75,13 @@ func start_build_placement(kind: String) -> void:
 	pc._build_ghost = Node2D.new()
 	pc._build_ghost.name = "BuildGhost"
 	var texture: Texture2D
-	var ring_radius_cells: int = 0
+	var ring_radius_cells: float = 0.0
 	match kind:
 		"underground_lantern":
 			texture = preload("res://frost_mines_assets/props/lantern_underground.png")
 		"tower":
 			texture = preload("res://frost_mines_assets/props/tower_player.png")
-			ring_radius_cells = pc._Constants.TOWER_RANGE_CELLS
+			ring_radius_cells = _tower_attack_range_cells()
 		"wall":
 			texture = preload("res://frost_mines_assets/props/wall_player.png")
 		"trap":
@@ -73,23 +90,36 @@ func start_build_placement(kind: String) -> void:
 			texture = preload("res://frost_mines_assets/props/lantern_t1.png")
 			ring_radius_cells = pc._Constants.LANTERN_T1_VISION
 	var sprite: Sprite2D = Sprite2D.new()
+	sprite.name = "GhostVisual"
 	sprite.texture = texture
-	if kind == "lantern" or kind == "tower":
-		# Surface structures stand on the ground line at the bottom of the row.
-		sprite.position = Vector2(0, 16.0 - texture.get_height() / 2.0)
-	pc._build_ghost.add_child(sprite)
+	if texture != null:
+		if kind == "lantern" or kind == "tower":
+			# Surface structures stand on the ground line at the bottom of the row.
+			sprite.position = Vector2(0, 16.0 - texture.get_height() / 2.0)
+		pc._build_ghost.add_child(sprite)
 	if kind == "trap":
-		pc._build_ghost.add_child(_TrapGhostMarker.new())
-	if ring_radius_cells > 0:
-		# Faint ring showing the vision/attack radius the structure provides.
-		var ring: Sprite2D = Sprite2D.new()
-		ring.texture = pc._GHOST_RING
-		var diameter: float = ring_radius_cells * GridWorld.CELL_SIZE * 2.0
-		ring.scale = Vector2.ONE * (diameter / pc._GHOST_RING.get_width())
-		ring.modulate = Color(1.0, 0.85, 0.4, 0.3)
-		pc._build_ghost.add_child(ring)
+		var marker := _TrapGhostMarker.new()
+		marker.name = "GhostVisual"
+		pc._build_ghost.add_child(marker)
+	if ring_radius_cells > 0.0:
+		# Faint disc showing the vision/attack radius the structure provides.
+		var indicator := _RangeIndicator.new()
+		indicator.radius = ring_radius_cells * GridWorld.CELL_SIZE
+		pc._build_ghost.add_child(indicator)
 	pc.add_child(pc._build_ghost)
 	DebugLog.log_command("PlayerController", "build", "placement mode: " + kind)
+
+
+## The tower's actual attack range in cells, including the research
+## multipliers Tower._apply_research_bonuses() applies (Surface War, Sentry
+## Network), so the placement preview matches what the built tower reaches.
+func _tower_attack_range_cells() -> float:
+	var cells: float = pc._Constants.TOWER_RANGE_CELLS
+	var team: GameManager.Team = GameManager.Team.PLAYER
+	if ResearchManager.has_branch(team, "surface_war"):
+		cells *= pc._Constants.SURFACE_WAR_TOWER_RANGE_MULT
+	cells *= (1.0 + ResearchManager.get_stat_bonus(team, "tower_range_mult"))
+	return cells
 
 
 func _cancel_build_mode() -> void:
