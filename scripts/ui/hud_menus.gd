@@ -2,6 +2,7 @@ class_name HUDMenus
 extends RefCounted
 
 const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
+const SettingsPanel = preload("res://scripts/ui/settings_panel.gd")
 
 var hud: HUD
 
@@ -35,6 +36,7 @@ class _BuildCard:
 var _build_cards: Array[_BuildCard] = []
 var _selected_kind: String = ""
 var _dim: ColorRect = null
+var _settings_panel: Control = null
 
 
 func _init(h: HUD) -> void:
@@ -66,9 +68,10 @@ func _build_pause_menu() -> void:
 	title.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
 	vbox.add_child(title)
 
-	_add_pause_button(vbox, "Resume", func(): hud.get_tree().paused = false)
-	_add_pause_button(vbox, "Restart", hud._on_pause_restart)
-	_add_pause_button(vbox, "Quit to Menu", hud._quit_to_menu)
+	_add_pause_button(vbox, "Resume", func(): _close_settings(); hud.get_tree().paused = false)
+	_add_pause_button(vbox, "Settings", _toggle_settings)
+	_add_pause_button(vbox, "Restart", func(): _close_settings(); hud._on_pause_restart())
+	_add_pause_button(vbox, "Quit to Menu", func(): _close_settings(); hud._quit_to_menu())
 
 	var diff_row: HBoxContainer = HBoxContainer.new()
 	var diff_label: Label = Label.new()
@@ -103,6 +106,21 @@ func _build_pause_menu() -> void:
 		vbox.add_child(res_row)
 
 	hud.add_child(hud._pause_panel)
+
+	# Child of the pause panel so it hides automatically on any resume path
+	# (buttons or Space/Esc via hud's pause sync) and renders on top of it.
+	_settings_panel = SettingsPanel.create()
+	hud._pause_panel.add_child(_settings_panel)
+
+
+func _toggle_settings() -> void:
+	if _settings_panel != null:
+		_settings_panel.visible = not _settings_panel.visible
+
+
+func _close_settings() -> void:
+	if _settings_panel != null:
+		_settings_panel.visible = false
 
 
 func _add_pause_button(parent: Control, text: String, callback: Callable) -> void:

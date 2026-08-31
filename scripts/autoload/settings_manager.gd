@@ -4,6 +4,7 @@ extends Node
 ## The stretch setup (canvas_items/expand + stretch/scale 1.333333) keeps the
 ## logical layout at 1920x1080 for any 16:9 window size, so switching
 ## resolution only changes render sharpness, never the UI layout.
+## Also persists the SFX bus volume (all platforms) in the same config file.
 
 const CONFIG_PATH := "user://settings.cfg"
 
@@ -18,6 +19,9 @@ const RESOLUTIONS: Array[Vector2i] = [
 
 
 func _ready() -> void:
+	# Audio applies everywhere (web included); AudioManager loads first, so the
+	# SFX bus already exists by the time we run.
+	_apply_sfx_volume(_load_sfx_volume())
 	if not is_supported():
 		return
 	var available := get_available_resolutions()
@@ -80,3 +84,34 @@ func _save(size: Vector2i) -> void:
 	cfg.load(CONFIG_PATH)  # Preserve any other stored settings.
 	cfg.set_value("display", "resolution", size)
 	cfg.save(CONFIG_PATH)
+
+
+# ---------- Audio ----------
+
+## Linear SFX volume, 0.0 (muted) to 1.0 (full).
+func get_sfx_volume() -> float:
+	return _load_sfx_volume()
+
+
+func set_sfx_volume(volume: float) -> void:
+	volume = clampf(volume, 0.0, 1.0)
+	_apply_sfx_volume(volume)
+	var cfg := ConfigFile.new()
+	cfg.load(CONFIG_PATH)  # Preserve any other stored settings.
+	cfg.set_value("audio", "sfx_volume", volume)
+	cfg.save(CONFIG_PATH)
+
+
+func _apply_sfx_volume(volume: float) -> void:
+	var bus := AudioServer.get_bus_index("SFX")
+	if bus == -1:
+		return
+	AudioServer.set_bus_mute(bus, volume <= 0.0)
+	AudioServer.set_bus_volume_db(bus, linear_to_db(maxf(volume, 0.0001)))
+
+
+func _load_sfx_volume() -> float:
+	var cfg := ConfigFile.new()
+	if cfg.load(CONFIG_PATH) != OK:
+		return 1.0
+	return clampf(cfg.get_value("audio", "sfx_volume", 1.0), 0.0, 1.0)

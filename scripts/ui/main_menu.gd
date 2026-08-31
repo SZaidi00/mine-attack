@@ -6,6 +6,7 @@ extends Control
 ## the existing title → difficulty → faction → Play flow.
 
 const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
+const SettingsPanel = preload("res://scripts/ui/settings_panel.gd")
 
 const _SKY: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_sky.png")
 const _GROUND: Texture2D = preload("res://frost_mines_assets/backgrounds/surface_ground.png")
@@ -16,6 +17,7 @@ const _SWORDSMAN_PLAYER: Texture2D = preload("res://frost_mines_assets/units/swo
 const _SWORDSMAN_ENEMY: Texture2D = preload("res://frost_mines_assets/units/swordsman_enemy.png")
 
 var _difficulty_option: OptionButton
+var _settings_panel: Control
 # Phase 4: two-step menu — the main card leads into faction select.
 var _main_center: CenterContainer
 var _faction_center: CenterContainer
@@ -47,6 +49,8 @@ func _ready() -> void:
 	_build_card()
 	_build_side_status()
 	_build_faction_select()
+	_settings_panel = SettingsPanel.create()
+	add_child(_settings_panel)
 
 
 func _on_resized() -> void:
@@ -399,6 +403,7 @@ func _build_card() -> void:
 		vbox.add_child(res_row)
 
 	_add_menu_button(vbox, "Next", _show_faction_select, true)
+	_add_menu_button(vbox, "Settings", func(): _settings_panel.visible = true, false)
 	_add_menu_button(vbox, "Quit", func(): get_tree().quit(), false)
 
 	var hint := Label.new()
