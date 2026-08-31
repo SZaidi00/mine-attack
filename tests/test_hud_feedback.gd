@@ -108,19 +108,30 @@ func _find_range_indicator(ghost: Node2D) -> Node2D:
 func _toast_texts() -> Array[String]:
 	var texts: Array[String] = []
 	for toast in _hud._toast_container.get_children():
-		for child in toast.get_children():
-			if child is Label:
-				texts.append(child.text)
+		_collect_labels(toast, texts)
 	return texts
+
+
+func _collect_labels(node: Node, texts: Array[String]) -> void:
+	for child in node.get_children():
+		if child is Label:
+			texts.append(child.text)
+		_collect_labels(child, texts)
 
 
 func test_player_research_completion_shows_toast() -> void:
 	ResearchManager._levels[PLAYER]["deep_delve"] = 1
 	ResearchManager.research_completed.emit(PLAYER, "deep_delve")
 	var texts: Array[String] = _toast_texts()
-	assert_eq(texts.size(), 1, "one toast appears")
-	if texts.size() == 1:
-		assert_eq(texts[0], "Research complete: Deep Delve", "toast names the finished tech")
+	assert_eq(texts.size(), 2, "toast has an eyebrow caption and a title")
+	assert_has(texts, "RESEARCH COMPLETE", "eyebrow caption")
+	assert_has(texts, "Deep Delve", "toast names the finished tech")
+
+
+func test_toasts_stack_top_left_below_the_top_bar() -> void:
+	assert_eq(_hud._toast_container.anchor_left, 0.0, "left edge")
+	assert_eq(_hud._toast_container.anchor_top, 0.0, "top edge")
+	assert_true(_hud._toast_container.position.y >= 100.0, "below the top bar")
 
 
 func test_enemy_research_completion_shows_no_toast() -> void:

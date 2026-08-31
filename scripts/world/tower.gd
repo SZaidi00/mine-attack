@@ -355,6 +355,12 @@ func get_bounds_rect() -> Rect2:
 
 
 func _draw() -> void:
+	# Attack-range preview while selected (same gold disc as the placement
+	# ghost), drawn first so the tower and its bars render on top.
+	if selected and _is_built:
+		draw_circle(Vector2.ZERO, attack_range, Color(1.0, 0.85, 0.4, 0.08))
+		draw_arc(Vector2.ZERO, attack_range, 0, TAU, 48, Color(1.0, 0.85, 0.4, 0.45), 2.0, true)
+
 	var texture: Texture2D = _TEXTURES[team]
 	var tex_size: Vector2 = texture.get_size()
 	var alpha: float = 1.0 if _is_built else 0.55

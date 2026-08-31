@@ -109,7 +109,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 - `building.gd` — training queue (supports manual pause/clear from the HUD), deposits, building HP/destruction, faction identification polling.
 - `mine_entry.gd` — ladder teleport positions.
 - `ladder.gd` — ladder visuals/positioning.
-- `lantern.gd` / `tower.gd` / `wall_segment.gd` / `trap.gd` — placeable structures.
+- `lantern.gd` / `tower.gd` / `wall_segment.gd` / `trap.gd` — placeable structures; a selected tower shows its attack range as a gold disc.
 
 ### `scripts/units/`
 

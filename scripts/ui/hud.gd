@@ -682,8 +682,9 @@ func _on_faction_identified_popup(team: GameManager.Team) -> void:
 	_faction_popup_tween.tween_callback(func(): _faction_popup.visible = false)
 
 
-# Toast notifications: transient messages stacked at the left-center of the
-# screen (research completions, etc.). Each toast fades in, holds, fades out.
+# Toast notifications: transient cards stacked in the top-left corner below
+# the top bar (research completions, etc.). Each toast fades in, holds, fades
+# out.
 var _toast_container: VBoxContainer = null
 const _TOAST_MAX_VISIBLE: int = 4
 
@@ -692,11 +693,11 @@ func _build_toast_container() -> void:
 	_toast_container = VBoxContainer.new()
 	_toast_container.name = "ToastContainer"
 	_toast_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_toast_container.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	_toast_container.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_toast_container.grow_horizontal = Control.GROW_DIRECTION_END
-	_toast_container.grow_vertical = Control.GROW_DIRECTION_BOTH
-	_toast_container.position = Vector2(16.0, 0.0)
-	_toast_container.add_theme_constant_override("separation", 6)
+	_toast_container.grow_vertical = Control.GROW_DIRECTION_END
+	_toast_container.position = Vector2(16.0, 120.0)
+	_toast_container.add_theme_constant_override("separation", 8)
 	add_child(_toast_container)
 	ResearchManager.research_completed.connect(_on_research_completed_toast)
 
@@ -707,16 +708,32 @@ func _on_research_completed_toast(team: GameManager.Team, tech_id: String) -> vo
 		return
 	var tech: Dictionary = _Constants.RESEARCH_TECHS.get(tech_id, {})
 	var tech_name: String = tech.get("name", tech_id.capitalize())
-	var text: String = "Research complete: %s" % tech_name
 	if ResearchManager.get_max_level(tech_id) > 1:
-		text += " L%d" % ResearchManager.get_level(team, tech_id)
-	show_toast(text)
+		tech_name += " L%d" % ResearchManager.get_level(team, tech_id)
+	show_toast(tech_name, "RESEARCH COMPLETE")
 
 
-## Stacks a transient toast at the left-center of the screen; it fades in,
-## holds a few seconds, then fades out and frees itself. The oldest toast is
-## dropped early when the stack is full.
-func show_toast(text: String) -> void:
+## Frosted card with a gold accent bar on the left edge.
+func _make_toast_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = UIThemeTokens.COLOR_PANEL_BG
+	style.border_color = UIThemeTokens.COLOR_TEXT_GOLD
+	style.border_width_left = 3
+	style.set_corner_radius_all(UIThemeTokens.RADIUS_BUTTON)
+	style.content_margin_left = 12
+	style.content_margin_top = 8
+	style.content_margin_right = 14
+	style.content_margin_bottom = 8
+	style.shadow_color = Color(0, 0, 0, 0.4)
+	style.shadow_size = 6
+	style.shadow_offset = Vector2(0, 2)
+	return style
+
+
+## Stacks a transient toast in the top-left corner; it fades in, holds a few
+## seconds, then fades out and frees itself. The oldest toast is dropped early
+## when the stack is full. eyebrow is an optional small caption above the title.
+func show_toast(title: String, eyebrow: String = "") -> void:
 	if _toast_container == null:
 		return
 	while true:
@@ -729,13 +746,24 @@ func show_toast(text: String) -> void:
 		live[0].queue_free()
 	var toast := PanelContainer.new()
 	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	toast.add_theme_stylebox_override("panel", UIThemeTokens.make_panel_style())
-	var label := Label.new()
-	label.text = text
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
-	label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
-	toast.add_child(label)
+	toast.add_theme_stylebox_override("panel", _make_toast_style())
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 1)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	toast.add_child(vbox)
+	if eyebrow != "":
+		var eyebrow_label := Label.new()
+		eyebrow_label.text = eyebrow
+		eyebrow_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		eyebrow_label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
+		eyebrow_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_DIM)
+		vbox.add_child(eyebrow_label)
+	var title_label := Label.new()
+	title_label.text = title
+	title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
+	title_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	vbox.add_child(title_label)
 	_toast_container.add_child(toast)
 	toast.modulate.a = 0.0
 	var tween := create_tween()
