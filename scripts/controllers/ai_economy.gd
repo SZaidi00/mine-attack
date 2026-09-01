@@ -61,8 +61,11 @@ func _run_economy() -> void:
 	# otherwise army production stalls completely for the whole time the AI
 	# saves up 1500 for miner level 3. Miner training is fully exempt (miners
 	# pay for themselves).
+	# Dead-miner triage: with no miners alive there is nothing to upgrade, and
+	# every coin must flow into re-staffing the mine (the welfare trickle in
+	# EconomyManager guarantees this eventually succeeds).
 	var reserve: int = 0
-	if _Constants.MINER_UPGRADE_COSTS.has(level + 1):
+	if miners > 0 and _Constants.MINER_UPGRADE_COSTS.has(level + 1):
 		reserve = _Constants.MINER_UPGRADE_COSTS[level + 1]
 	if reserve > 0 and coin >= reserve:
 		EconomyManager.upgrade_miner(ai.team)

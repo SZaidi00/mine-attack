@@ -73,7 +73,7 @@ Global singletons. All hold per-match state that survives scene reloads; `hud.gd
 - `constants.gd` — balance numbers, costs, train times, upgrade tables, vision/fog constants, dynamic-terrain event tuning (`LAVA_*`/`CAVEIN_*`/`MAGMA_*`/`ORE_*`), weather tuning (`SNOWSTORM_*`), volcano tuning (`VOLCANO_*`), research branch tree (`RESEARCH_TECHS`) and branch-effect tuning, input action `StringName`s. Source of truth for all numeric balance.
 - `game_manager.gd` — `Team`/`Difficulty` enums (Easy, Normal, Hard, Nightmare, Godly), team colors, difficulty modifiers, game speed, match timer, win/loss, soft pause.
 - `faction_manager.gd` — faction picks (Arcane, Brute, Industrial), hidden-faction identification, faction-modified costs and starting bonuses.
-- `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined.
+- `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (AI scaled by the difficulty coin multiplier), so a wiped economy can always re-staff.
 - `research_manager.gd` — timed branch research tree: mutually-exclusive tiers, one-time 500g respec, active research slot with queue, Ore Sonar scan.
 - `audio_manager.gd` — synthesized SFX and ambience.
 - `settings_manager.gd` — window resolution persistence (desktop only) and SFX bus volume persistence (all platforms), both in `user://settings.cfg`.
@@ -92,7 +92,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 - `ai_controller.gd` — tick fields, aggression state, scout memory; delegates to helpers.
   - `ai_economy.gd` — economy decisions, training (faction-flavored army mix), upgrades, research (faction branch preferences), miner culling.
   - `ai_mining.gd` — miner task assignment and ore selection (skips miners under shelter orders).
-  - `ai_combat.gd` — attack waves, base defense, wall breach. Waves peel up to half their fighters onto remembered enemy towers/lanterns before marching on the base.
+  - `ai_combat.gd` — attack waves, base defense, wall breach. Waves peel up to half their fighters onto remembered enemy towers/lanterns before marching on the base. The combat-predictor veto (smarts tier 2+) lapses when no wave has marched for `ENEMY_WAVE_DESPERATION_DELAY` (difficulty-scaled) or the AI is at the population cap, so the AI always keeps attacking eventually.
   - `ai_smart_behaviors.gd` — focus fire, wounded retreat, harassment, bait, combat predictor, aggression.
   - `ai_awareness.gd` — faction scouting (swordsman at 1:00, 30s retry after death), defensive lantern placement/upgrades, snowstorm/volcano miner recall to the mine entry/base and lava evacuation (signal-driven; sheltered miners hold via `unit.shelter_in_place`).
 

@@ -53,6 +53,9 @@ var _scout: Unit = null
 var _next_scout_time: float = _Constants.ENEMY_SCOUT_TIME
 
 var _aggression_level: String = "balanced"  # "defend", "balanced", "push"
+# match_time of the last wave that actually marched (any launch path). The
+# combat-predictor veto lapses once this grows stale (ENEMY_WAVE_DESPERATION_DELAY).
+var _last_wave_launched_at: float = 0.0
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 

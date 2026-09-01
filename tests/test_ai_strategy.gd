@@ -23,6 +23,9 @@ func before_all() -> void:
 	get_tree().current_scene = _main
 	_units = _main.get_node("Units")
 	_ai = _main.get_node("AIController")
+	# Flush the buildings' deferred starting-miner spawns so tests run against
+	# the real match-start state (2 miners per side).
+	await get_tree().process_frame
 
 
 func after_all() -> void:
@@ -183,3 +186,71 @@ func test_wave_threshold_scales_with_difficulty() -> void:
 	var sixth: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(-440, 16))
 	_ai._launch_wave_if_ready()
 	assert_eq(sixth.get("_target_building"), _building_for(PLAYER), "6 fighters must launch on Hard")
+
+
+# ─── Anti-stall: combat-predictor veto escapes ───
+
+func test_wave_veto_holds_when_outmatched_and_not_desperate() -> void:
+	# Normal (smarts 2): the combat-predictor veto is active.
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+	_ai._aggression_level = "balanced"  # threshold 7
+	var fighters: Array = []
+	for i in range(7):
+		fighters.append(_spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(-440, 16)))
+	for i in range(20):
+		_spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(430, 16))
+	_ai._last_wave_launched_at = GameManager.match_time  # fresh: no desperation
+	_ai._launch_wave_if_ready()
+	for f in fighters:
+		assert_null(f.get("_target_building"), "a decisive-loss sim must veto the wave while the AI can still mass")
+
+
+func test_desperate_wave_launches_despite_losing_sim() -> void:
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+	_ai._aggression_level = "balanced"  # threshold 7
+	var player_building: Node2D = _building_for(PLAYER)
+	var fighters: Array = []
+	for i in range(7):
+		fighters.append(_spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(-440, 16)))
+	for i in range(20):
+		_spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(430, 16))
+	# No wave has marched for longer than the (difficulty-scaled) desperation delay.
+	_ai._last_wave_launched_at = GameManager.match_time \
+		- Constants.ENEMY_WAVE_DESPERATION_DELAY * GameManager.get_ai_wave_multiplier() - 1.0
+	_ai._launch_wave_if_ready()
+	for f in fighters:
+		assert_eq(f.get("_target_building"), player_building, "a desperate AI must march even into a losing fight")
+
+
+func test_pop_cap_wave_launches_despite_losing_sim() -> void:
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+	_ai._aggression_level = "balanced"  # threshold 7
+	var player_building: Node2D = _building_for(PLAYER)
+	var fighters: Array = []
+	for i in range(7):
+		fighters.append(_spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(-440, 16)))
+	for i in range(20):
+		_spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, Vector2(430, 16))
+	_ai._last_wave_launched_at = GameManager.match_time  # not desperate: pop cap is the escape under test
+	EconomyManager.add_population(ENEMY, Constants.MAX_UNITS - 2)
+	_ai._launch_wave_if_ready()
+	for f in fighters:
+		assert_eq(f.get("_target_building"), player_building, "a pop-capped army cannot grow — it must march despite the sim")
+
+
+func test_dead_economy_skips_miner_upgrade_and_restaffs() -> void:
+	for unit in get_tree().get_nodes_in_group("enemy"):
+		if unit.data.is_miner and unit._state != Unit.State.DEAD:
+			unit.kill()
+	_drain_enemy_queue()
+	_set_enemy_coin(1500)  # enough for the L2/L3 upgrade — but there is nothing to upgrade
+	var level_before: int = EconomyManager.get_miner_level(ENEMY)
+	_ai._run_economy()
+	assert_eq(EconomyManager.get_miner_level(ENEMY), level_before,
+		"with zero miners the AI must not sink coin into miner upgrades")
+	var queue: Array = _building_for(ENEMY).call("get_queue")
+	var has_miner: bool = false
+	for entry in queue:
+		if entry.id == "miner":
+			has_miner = true
+	assert_true(has_miner, "a wiped economy must re-staff miners before anything else")

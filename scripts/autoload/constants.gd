@@ -9,6 +9,12 @@ const STARTING_COIN: int = 500
 const STARTING_MINERS: int = 2
 const MAX_UNITS: int = 100
 # The training queue is uncapped — limited only by coin and population.
+# Welfare trickle (EconomyManager): a team with zero living miners and not
+# enough coin to buy one gains WELFARE_COIN every WELFARE_INTERVAL seconds of
+# game time, so a wiped economy can always re-staff eventually. The AI's amount
+# is scaled by the difficulty coin multiplier (rates, never rules).
+const WELFARE_COIN: int = 10
+const WELFARE_INTERVAL: float = 30.0
 
 # ─── UNIT COSTS ───
 const COSTS: Dictionary = {
@@ -842,6 +848,11 @@ const ENEMY_ECON_PRESSURE_RATIO: float = 1.2
 const ENEMY_TIMING_ATTACK_ARMY: int = 4
 # Combat predictor: seconds of abstract focus-fire exchange simulated per call.
 const ENEMY_COMBAT_SIM_DURATION: float = 2.0
+# Anti-stall: the combat-predictor veto (smarts tier 2+) is ignored once no
+# wave has marched for this many seconds — scaled by the difficulty "wave"
+# attack-tempo multiplier, so harder difficulties get desperate sooner. A wave
+# sent into a losing fight still deals damage; sitting at home forever does not.
+const ENEMY_WAVE_DESPERATION_DELAY: float = 120.0
 # AI-team miners re-scan for diggable cells this often while waiting at an
 # exhausted mine (player miners keep the shared 5s retry in unit.gd).
 const ENEMY_MINER_RESCAN_INTERVAL: float = 2.0

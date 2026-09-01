@@ -39,10 +39,18 @@ func _launch_wave_if_ready(threshold_override: int = -1) -> void:
 	# loss — hold and keep massing. Only organic threshold launches can be
 	# vetoed (counter-attacks/timing attacks already picked their moment),
 	# and the all-in against a nearly-dead enemy base always goes.
+	# Two anti-stall escapes keep the AI proactive even while outmatched:
+	# desperation (no wave has marched for ENEMY_WAVE_DESPERATION_DELAY, scaled
+	# by the difficulty attack tempo) and pop-cap pressure (the army cannot
+	# grow any further, so holding only lets the enemy catch up).
 	if GameManager.get_ai_smarts() >= 2 and threshold_override < 0:
 		var hp_ratio: float = float(target.get("_hp")) / maxf(1.0, float(target.get("max_hp")))
-		if hp_ratio >= 0.25 and ai._smart._simulate_combat() < 0.6:
+		var desperation_delay: float = _Constants.ENEMY_WAVE_DESPERATION_DELAY * GameManager.get_ai_wave_multiplier()
+		var desperate: bool = GameManager.match_time - ai._last_wave_launched_at >= desperation_delay
+		var capped: bool = EconomyManager.get_population(ai.team) >= _Constants.MAX_UNITS - 2
+		if not desperate and not capped and hp_ratio >= 0.25 and ai._smart._simulate_combat() < 0.6:
 			return
+	ai._last_wave_launched_at = GameManager.match_time
 	# Peel a vanguard onto remembered enemy towers/lanterns (see
 	# _wave_structure_assignments); the rest march on the base.
 	var assignments: Dictionary = _wave_structure_assignments(free_fighters.size())

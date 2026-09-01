@@ -45,6 +45,43 @@ var _coin_mined: Dictionary = {
 	GameManager.Team.ENEMY: 0,
 }
 
+# Welfare trickle accumulator (game-time seconds since the last payout).
+var _welfare_elapsed: float = 0.0
+
+
+func _process(delta: float) -> void:
+	if not GameManager.game_active:
+		return
+	# Only during a live match — the main menu has no units, so both teams
+	# would look like wiped economies there.
+	if get_tree().root.get_node_or_null("Main") == null:
+		return
+	_welfare_elapsed += delta
+	if _welfare_elapsed < _Constants.WELFARE_INTERVAL:
+		return
+	_welfare_elapsed = 0.0
+	for team: GameManager.Team in [GameManager.Team.PLAYER, GameManager.Team.ENEMY]:
+		if _count_live_miners(team) > 0:
+			continue
+		if get_coin(team) >= FactionManager.get_unit_cost(team, "miner"):
+			continue
+		var amount: int = _Constants.WELFARE_COIN
+		if team == GameManager.Team.ENEMY:
+			# Rates, never rules: same difficulty scaling as deposit income.
+			amount = roundi(amount * GameManager.get_ai_coin_multiplier())
+		DebugLog.log_command("EconomyManager", "welfare", "team=%s amount=%d" % ["PLAYER" if team == GameManager.Team.PLAYER else "ENEMY", amount])
+		add_coin(team, amount)
+
+
+func _count_live_miners(team: GameManager.Team) -> int:
+	var group: String = "player" if team == GameManager.Team.PLAYER else "enemy"
+	var n: int = 0
+	for unit in get_tree().get_nodes_in_group(group):
+		var data = unit.get("data")
+		if data != null and data.is_miner and unit.get("_state") != Unit.State.DEAD:
+			n += 1
+	return n
+
 
 func _ready() -> void:
 	pass
@@ -73,6 +110,7 @@ func reset() -> void:
 		GameManager.Team.PLAYER: 0,
 		GameManager.Team.ENEMY: 0,
 	}
+	_welfare_elapsed = 0.0
 	coin_changed.emit(GameManager.Team.PLAYER)
 	coin_changed.emit(GameManager.Team.ENEMY)
 	population_changed.emit(GameManager.Team.PLAYER)
