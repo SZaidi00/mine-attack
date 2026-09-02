@@ -51,6 +51,9 @@ var _last_ai_mined: int = -1
 var _awareness_tick: float = 0.0
 var _scout: Unit = null
 var _next_scout_time: float = _Constants.ENEMY_SCOUT_TIME
+# Re-scouting (tier 2+): once the enemy faction is identified, a swordsman
+# re-visits every ENEMY_RESCOUT_INTERVAL to refresh tower/army intel.
+var _next_rescout_time: float = 0.0
 
 var _aggression_level: String = "balanced"  # "defend", "balanced", "push"
 # match_time of the last wave that actually marched (any launch path). The
@@ -92,6 +95,7 @@ func _ready() -> void:
 	# immediately.
 	_last_wave_launched_at = GameManager.match_time
 	_next_scout_time = GameManager.match_time + _Constants.ENEMY_SCOUT_TIME
+	_next_rescout_time = GameManager.match_time + _Constants.ENEMY_RESCOUT_INTERVAL
 	# Pre-queued upgrades: re-run the economy the moment money lands or a
 	# miner level completes instead of waiting out the decision tick.
 	EconomyManager.coin_changed.connect(_on_economy_signal)
@@ -101,6 +105,10 @@ func _ready() -> void:
 	WeatherManager.snowstorm_ended.connect(_awareness._on_snowstorm_ended)
 	WeatherManager.volcano_warning_started.connect(_awareness._on_volcano_warning)
 	WeatherManager.volcano_ended.connect(_awareness._on_volcano_ended)
+	# Weather offense: strike while the enemy is weakened (storm blindness,
+	# post-eruption scatter).
+	WeatherManager.snowstorm_started.connect(_awareness._on_snowstorm_started_offense)
+	WeatherManager.volcano_ended.connect(_awareness._on_volcano_ended_offense)
 	_grid.lava_warning_started.connect(_awareness._on_lava_warning)
 	_grid.lava_receded.connect(_awareness._on_lava_receded)
 
@@ -315,8 +323,12 @@ func _run_scouting() -> void:
 	_awareness._run_scouting()
 
 
-func _run_lantern_placement() -> void:
-	_awareness._run_lantern_placement()
+func _run_lantern_placement() -> bool:
+	return _awareness._run_lantern_placement()
+
+
+func _run_tower_placement() -> bool:
+	return _awareness._run_tower_placement()
 
 
 func _simulate_combat(duration: float = -1.0) -> float:

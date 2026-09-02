@@ -47,6 +47,8 @@ var _coin_mined: Dictionary = {
 
 # Welfare trickle accumulator (game-time seconds since the last payout).
 var _welfare_elapsed: float = 0.0
+# Baseline income accumulator (game-time seconds since the last trickle).
+var _baseline_elapsed: float = 0.0
 
 
 func _process(delta: float) -> void:
@@ -57,20 +59,29 @@ func _process(delta: float) -> void:
 	if get_tree().root.get_node_or_null("Main") == null:
 		return
 	_welfare_elapsed += delta
-	if _welfare_elapsed < _Constants.WELFARE_INTERVAL:
-		return
-	_welfare_elapsed = 0.0
-	for team: GameManager.Team in [GameManager.Team.PLAYER, GameManager.Team.ENEMY]:
-		if _count_live_miners(team) > 0:
-			continue
-		if get_coin(team) >= FactionManager.get_unit_cost(team, "miner"):
-			continue
-		var amount: int = _Constants.WELFARE_COIN
-		if team == GameManager.Team.ENEMY:
-			# Rates, never rules: same difficulty scaling as deposit income.
-			amount = roundi(amount * GameManager.get_ai_coin_multiplier())
-		DebugLog.log_command("EconomyManager", "welfare", "team=%s amount=%d" % ["PLAYER" if team == GameManager.Team.PLAYER else "ENEMY", amount])
-		add_coin(team, amount)
+	if _welfare_elapsed >= _Constants.WELFARE_INTERVAL:
+		_welfare_elapsed = 0.0
+		for team: GameManager.Team in [GameManager.Team.PLAYER, GameManager.Team.ENEMY]:
+			if _count_live_miners(team) > 0:
+				continue
+			if get_coin(team) >= FactionManager.get_unit_cost(team, "miner"):
+				continue
+			var amount: int = _Constants.WELFARE_COIN
+			if team == GameManager.Team.ENEMY:
+				# Rates, never rules: same difficulty scaling as deposit income.
+				amount = roundi(amount * GameManager.get_ai_coin_multiplier())
+			DebugLog.log_command("EconomyManager", "welfare", "team=%s amount=%d" % ["PLAYER" if team == GameManager.Team.PLAYER else "ENEMY", amount])
+			add_coin(team, amount)
+	# Baseline income: both teams trickle from match start, no eligibility
+	# gates — the early game always moves. Same difficulty scaling as welfare.
+	_baseline_elapsed += delta
+	if _baseline_elapsed >= _Constants.BASELINE_INCOME_INTERVAL:
+		_baseline_elapsed = 0.0
+		for team: GameManager.Team in [GameManager.Team.PLAYER, GameManager.Team.ENEMY]:
+			var amount: int = _Constants.BASELINE_INCOME_COIN
+			if team == GameManager.Team.ENEMY:
+				amount = roundi(amount * GameManager.get_ai_coin_multiplier())
+			add_coin(team, amount)
 
 
 func _count_live_miners(team: GameManager.Team) -> int:
@@ -111,6 +122,7 @@ func reset() -> void:
 		GameManager.Team.ENEMY: 0,
 	}
 	_welfare_elapsed = 0.0
+	_baseline_elapsed = 0.0
 	coin_changed.emit(GameManager.Team.PLAYER)
 	coin_changed.emit(GameManager.Team.ENEMY)
 	population_changed.emit(GameManager.Team.PLAYER)

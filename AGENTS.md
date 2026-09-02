@@ -71,9 +71,9 @@ Autoloads (load order from `project.godot`): `Constants`, `GameManager`, `Factio
 Global singletons. All hold per-match state that survives scene reloads; `hud.gd` resets them on Play Again / Quit to Menu.
 
 - `constants.gd` — balance numbers, costs, train times, upgrade tables, vision/fog constants, dynamic-terrain event tuning (`LAVA_*`/`CAVEIN_*`/`MAGMA_*`/`ORE_*`), weather tuning (`SNOWSTORM_*`), volcano tuning (`VOLCANO_*`), research branch tree (`RESEARCH_TECHS`) and branch-effect tuning, input action `StringName`s. Source of truth for all numeric balance.
-- `game_manager.gd` — `Team`/`Difficulty` enums (Easy, Normal, Hard, Nightmare, Godly), team colors, difficulty modifiers, game speed, match timer, win/loss, soft pause.
+- `game_manager.gd` — `Team`/`Difficulty` enums (Easy, Normal, Hard, Nightmare, Godly), team colors, difficulty modifiers, game speed, match timer, win/loss, soft pause. Rolls the AI's per-match opener (`AI_OPENERS`: balanced/rush/boom/turtle, faction-weighted) which shifts wave thresholds, the miner quota, and build order.
 - `faction_manager.gd` — faction picks (Arcane, Brute, Industrial), hidden-faction identification, faction-modified costs and starting bonuses.
-- `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (AI scaled by the difficulty coin multiplier), so a wiped economy can always re-staff.
+- `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Baseline income: both teams trickle `BASELINE_INCOME_COIN` every `BASELINE_INCOME_INTERVAL` from match start, no eligibility gates (AI scaled by the difficulty coin multiplier). Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (same AI scaling), so a wiped economy can always re-staff.
 - `research_manager.gd` — timed branch research tree: mutually-exclusive tiers, one-time 500g respec, active research slot with queue, Ore Sonar scan.
 - `audio_manager.gd` — synthesized SFX and ambience.
 - `settings_manager.gd` — window resolution persistence (desktop only) and SFX bus volume persistence (all platforms), both in `user://settings.cfg`.
@@ -94,7 +94,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `ai_mining.gd` — miner task assignment and ore selection (skips miners under shelter orders).
   - `ai_combat.gd` — attack waves, base defense, wall breach. Waves hunt visible enemy field units in range before marching, and peel up to half their fighters onto remembered enemy towers/lanterns before marching on the base. The combat-predictor veto (smarts tier 2+) lapses when no wave has marched for `ENEMY_WAVE_DESPERATION_DELAY` (difficulty-scaled) or the AI is at the population cap; desperation also drops the launch threshold to `ENEMY_DESPERATE_WAVE_SIZE`, so an out-produced AI always keeps attacking eventually.
   - `ai_smart_behaviors.gd` — focus fire, wounded retreat, mine-entry raids (a squad camps the enemy mine entry and ambushes deposit trips), bait, combat predictor (counts remembered enemy towers), wave retreat/recall, post-defense counterattack, aggression.
-  - `ai_awareness.gd` — faction scouting (swordsman at 1:00, 30s retry after death), defensive lantern placement/upgrades, snowstorm/volcano miner recall to the mine entry/base and lava evacuation (signal-driven; sheltered miners hold via `unit.shelter_in_place`).
+  - `ai_awareness.gd` — faction scouting (swordsman at 1:00, 30s retry after death) that becomes periodic re-scouting once the faction is identified (tier 2+, skipped while an own pigeon patrols or while defending), defensive lantern placement/upgrades, AI tower placement (mirrors the player-side placement rules; turtle openers build towers first), weather-offense timing (tier 2+: strikes on snowstorm start / volcano end via the timing-attack override), snowstorm/volcano miner recall to the mine entry/base and lava evacuation (signal-driven; sheltered miners hold via `unit.shelter_in_place`).
 
 ### `scripts/world/`
 
@@ -285,7 +285,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself.
-- Category coverage: AI awareness/belief/faction strategy/micro/pressure/retaliation/smarts/strategy, building queue, defend leash, dragon, dynamic terrain, economy, factions, fog of war, grid world, kill units, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather.
+- Category coverage: AI awareness/belief/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, defend leash, dragon, dynamic terrain, economy, factions, fog of war, grid world, kill units, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
 
 ## Security and deployment considerations
 

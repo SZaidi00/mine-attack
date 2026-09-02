@@ -104,10 +104,13 @@ func _run_economy() -> void:
 
 	# Queue decisions (respecting queue size and population cap). Deeper miner
 	# levels justify a larger mining crew to exploit the newly unlocked layers.
+	# The match's rolled opener shifts the quota (boom expands first, rush
+	# skimps on miners to field fighters sooner).
 	var queue_size: int = building.call("get_queue").size()
 	if queue_size < 3 and population < _Constants.MAX_UNITS:
 		coin = EconomyManager.get_coin(ai.team)
-		var miner_target: int = 5 + level * 2
+		var miner_target: int = 5 + level * 2 + int(GameManager.get_ai_opener_data().miner_delta)
+		miner_target = maxi(3, miner_target)
 		# Industrial (Revamp Phase 8): fast expand — a bigger mining crew.
 		var faction: FactionData = FactionManager.get_faction(ai.team)
 		if faction != null and faction.faction_id == "industrial":

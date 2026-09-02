@@ -15,6 +15,13 @@ const MAX_UNITS: int = 100
 # is scaled by the difficulty coin multiplier (rates, never rules).
 const WELFARE_COIN: int = 10
 const WELFARE_INTERVAL: float = 30.0
+# Baseline income: both teams trickle a little coin every interval from match
+# start, so the early game never stalls waiting on the first deposit trips.
+# The AI's share scales with the difficulty coin multiplier (rates, never
+# rules). Welfare (above) remains the anti-death-spiral rescue for wiped
+# economies.
+const BASELINE_INCOME_COIN: int = 5
+const BASELINE_INCOME_INTERVAL: float = 10.0
 
 # ─── UNIT COSTS ───
 const COSTS: Dictionary = {
@@ -892,6 +899,15 @@ const ENEMY_SCOUT_RETRY_DELAY: float = 30.0
 const ENEMY_LANTERN_INTERVAL: float = 5.0
 const ENEMY_LANTERN_BUFFER: int = 150
 const ENEMY_LANTERN_UPGRADE_BUFFER: int = 400
+# AI tower placement: same reserve rule as lanterns. Turtle openers build
+# towers first on a leaner buffer; other openers wait for a lantern and a
+# bigger cushion. Towers also unlock AI pigeon scouts (autonomous patrol).
+const ENEMY_TOWER_BUFFER: int = 400
+const ENEMY_TOWER_EARLY_BUFFER: int = 200
+# Re-scouting (tier 2+): after the enemy faction is identified, a swordsman
+# periodically re-visits the enemy base to refresh tower/army intel — skipped
+# while an own pigeon is out (pigeons auto-patrol) or while defending.
+const ENEMY_RESCOUT_INTERVAL: float = 75.0
 
 # ─── UNIT MICRO ───
 # Ranged fighters kite (step back while firing) when an enemy melee threat

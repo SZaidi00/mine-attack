@@ -130,8 +130,9 @@ func _wave_structure_assignments(free_count: int) -> Dictionary:
 
 ## Minimum army size before a wave launches, by aggression level, scaled by
 ## the difficulty attack tempo (higher difficulties march with smaller
-## armies). A nearly-dead enemy base triggers an all-in with whatever is on
-## hand.
+## armies) and the match's rolled opener (rush marches sooner, boom/turtle
+## mass longer). A nearly-dead enemy base triggers an all-in with whatever is
+## on hand.
 func _wave_threshold(target: Node2D) -> int:
 	var hp_ratio: float = float(target.get("_hp")) / maxf(1.0, float(target.get("max_hp")))
 	if hp_ratio < 0.25:
@@ -144,7 +145,8 @@ func _wave_threshold(target: Node2D) -> int:
 			base = 7
 		_:
 			base = 12  # defend: only march with a real army
-	return maxi(3, int(round(base * GameManager.get_ai_wave_multiplier())))
+	var opener_mult: float = float(GameManager.get_ai_opener_data().wave_threshold_mult)
+	return maxi(3, int(round(base * GameManager.get_ai_wave_multiplier() * opener_mult)))
 
 
 func _defend_building() -> void:

@@ -1,9 +1,10 @@
 extends GutTest
 
 # AI awareness (Revamp Phase 8): faction scouting (first swordsman at 1:00,
-# replacement 30s after it dies, both sides can be scouted), defensive
-# lantern placement/upgrades, and weather/terrain responses (snowstorm
-# recall, lava evacuation).
+# replacement 30s after it dies, both sides can be scouted) becoming periodic
+# re-scouting once the faction is known, defensive lantern placement/upgrades,
+# AI tower placement, and weather/terrain responses (snowstorm recall, lava
+# evacuation).
 
 const PLAYER: int = 0
 const ENEMY: int = 1
@@ -42,18 +43,26 @@ func before_each() -> void:
 	ResearchManager.reset()
 	FactionManager.reset()
 	GameManager.game_active = true
+	GameManager.ai_opener = "balanced"
 	_ai._scout = null
+	_ai._aggression_level = "balanced"
 	_ai._next_scout_time = Constants.ENEMY_SCOUT_TIME
+	_ai._next_rescout_time = Constants.ENEMY_RESCOUT_INTERVAL
 
 
 func after_each() -> void:
 	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+	GameManager.ai_opener = "balanced"
 	FactionManager.set_player_faction("")
 	FactionManager.enemy_faction_id = ""
 	var lanterns: Array = get_tree().get_nodes_in_group("lanterns")
 	for lantern in lanterns:
 		if lantern.team == ENEMY:
 			lantern.free()
+	var towers: Array = get_tree().get_nodes_in_group("towers")
+	for tower in towers:
+		if tower.team == ENEMY:
+			tower.free()
 
 
 func _spawn_unit(tres_path: String, team: int, pos: Vector2) -> Node2D:
@@ -79,6 +88,32 @@ func _enemy_lanterns() -> Array:
 		if lantern.team == ENEMY:
 			result.append(lantern)
 	return result
+
+
+func _enemy_towers() -> Array:
+	var result: Array = []
+	for tower in get_tree().get_nodes_in_group("towers"):
+		if tower.team == ENEMY:
+			result.append(tower)
+	return result
+
+
+## Structure fixtures skip placement validation — they only need to exist in
+## the group with the right team. after_each frees the ENEMY ones.
+func _spawn_lantern(team: int, pos: Vector2) -> Node2D:
+	var lantern: Node2D = load("res://scenes/lantern.tscn").instantiate()
+	lantern.set("team", team)
+	lantern.position = pos
+	_main.get_node("Structures").add_child(lantern)
+	return lantern
+
+
+func _spawn_tower(team: int, pos: Vector2) -> Node2D:
+	var tower: Node2D = load("res://scenes/tower.tscn").instantiate()
+	tower.set("team", team)
+	tower.position = pos
+	_main.get_node("Structures").add_child(tower)
+	return tower
 
 
 # ─── Scouting ───
@@ -116,12 +151,49 @@ func test_dead_scout_is_replaced_after_retry_delay() -> void:
 	assert_eq(_ai._scout, second, "a new scout is sent once the delay expires")
 
 
-func test_scouting_stops_once_faction_identified() -> void:
+func test_identified_faction_switches_to_periodic_rescouting() -> void:
 	GameManager.match_time = Constants.ENEMY_SCOUT_TIME + 1.0
 	FactionManager.identify_faction(PLAYER)
-	_spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, _building_for(ENEMY).global_position + Vector2(-80, 16))
+	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, _building_for(ENEMY).global_position + Vector2(-80, 16))
 	_ai._run_scouting()
-	assert_null(_ai._scout, "no scouting once the faction is known")
+	assert_null(_ai._scout, "the re-scout still waits out its interval")
+	assert_eq(swordsman._state, Unit.State.IDLE)
+	GameManager.match_time += Constants.ENEMY_RESCOUT_INTERVAL + 1.0
+	_ai._run_scouting()
+	assert_eq(_ai._scout, swordsman, "once due, a swordsman re-visits to refresh tower/army intel")
+	assert_eq(swordsman._target_building, _building_for(PLAYER), "the re-scout heads for the player building")
+	assert_almost_eq(_ai._next_rescout_time, GameManager.match_time + Constants.ENEMY_RESCOUT_INTERVAL, 0.01,
+		"the next re-scout is scheduled a full interval out")
+
+
+func test_rescout_is_a_tier_two_behavior() -> void:
+	GameManager.set_difficulty(GameManager.Difficulty.EASY)  # smarts 0
+	FactionManager.identify_faction(PLAYER)
+	_ai._next_rescout_time = 0.0  # overdue
+	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, _building_for(ENEMY).global_position + Vector2(-80, 16))
+	_ai._run_scouting()
+	assert_null(_ai._scout, "the easy AI never re-scouts")
+	assert_eq(swordsman._state, Unit.State.IDLE, "the swordsman stays home")
+
+
+func test_rescout_skipped_while_own_pigeon_patrols() -> void:
+	FactionManager.identify_faction(PLAYER)
+	_ai._next_rescout_time = 0.0
+	_spawn_unit("res://scripts/resources/units/pigeon.tres", ENEMY, _building_for(ENEMY).global_position + Vector2(-40, -30))
+	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, _building_for(ENEMY).global_position + Vector2(-80, 16))
+	_ai._run_scouting()
+	assert_null(_ai._scout, "a patrolling pigeon already refreshes intel — no swordsman run")
+	assert_eq(swordsman._state, Unit.State.IDLE)
+
+
+func test_rescout_skipped_while_defending() -> void:
+	FactionManager.identify_faction(PLAYER)
+	_ai._next_rescout_time = 0.0
+	_ai._aggression_level = "defend"
+	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, _building_for(ENEMY).global_position + Vector2(-80, 16))
+	_ai._run_scouting()
+	assert_null(_ai._scout, "defend mode keeps every body at home")
+	assert_eq(swordsman._state, Unit.State.IDLE)
 
 
 func test_enemy_units_identify_player_faction_at_player_base() -> void:
@@ -172,6 +244,49 @@ func test_ai_upgrades_oldest_lantern_to_t2() -> void:
 		if lantern.tier == 2:
 			upgraded += 1
 	assert_eq(upgraded, 1, "with full slots and a comfortable bank, one lantern is upgraded to T2")
+
+
+# ─── Tower placement ───
+
+func test_ai_builds_tower_with_vision_and_a_comfortable_bank() -> void:
+	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
+	EconomyManager.add_coin(ENEMY, 800)  # 1300 ≥ 300 cost + 400 buffer + 500 L2 reserve
+	assert_true(_ai._run_tower_placement(), "with vision secured and a cushion, the AI fortifies")
+	var towers: Array = _enemy_towers()
+	assert_eq(towers.size(), 1, "the tower stands")
+	assert_eq(EconomyManager.get_coin(ENEMY), 1000, "the 300g tower cost is paid")
+	var cell: Vector2i = _grid.world_to_grid(towers[0].global_position)
+	assert_eq(cell.y, 0, "towers stand on the surface row")
+	assert_true(cell.x >= 2, "the tower is on the AI's half of the map")
+
+
+func test_ai_tower_waits_for_lantern_vision() -> void:
+	EconomyManager.add_coin(ENEMY, 5000)
+	assert_false(_ai._run_tower_placement(), "non-turtle openers secure lantern vision before static defense")
+	assert_eq(_enemy_towers().size(), 0)
+
+
+func test_turtle_opener_builds_towers_first() -> void:
+	GameManager.ai_opener = "turtle"
+	EconomyManager.add_coin(ENEMY, 600)  # 1100 ≥ 300 cost + 200 early buffer + 500 L2 reserve
+	assert_true(_ai._run_tower_placement(), "turtle leads with towers on a leaner buffer, no lantern needed")
+	assert_eq(_enemy_towers().size(), 1)
+
+
+func test_ai_tower_respects_the_coin_buffer() -> void:
+	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
+	EconomyManager.add_coin(ENEMY, 100)  # 600 - 500 reserve < 300 cost + 400 buffer
+	assert_false(_ai._run_tower_placement(), "a lean bank keeps the AI saving, not turtling")
+	assert_eq(_enemy_towers().size(), 0)
+
+
+func test_ai_tower_count_respects_the_cap() -> void:
+	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
+	_spawn_tower(ENEMY, Vector2(800, 16))
+	_spawn_tower(ENEMY, Vector2(840, 16))
+	EconomyManager.add_coin(ENEMY, 5000)
+	assert_false(_ai._run_tower_placement(), "TOWER_MAX_COUNT towers is enough")
+	assert_eq(_enemy_towers().size(), 2)
 
 
 # ─── Weather & terrain response ───

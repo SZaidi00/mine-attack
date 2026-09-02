@@ -694,4 +694,5 @@ func _on_play() -> void:
 	GameManager.set_difficulty(_difficulty_option.selected as GameManager.Difficulty)
 	FactionManager.set_player_faction(_selected_faction_id)
 	FactionManager.pick_random_enemy_faction()
+	GameManager.roll_ai_opener()
 	get_tree().change_scene_to_file("res://scenes/main.tscn")

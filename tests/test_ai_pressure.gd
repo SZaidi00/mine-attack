@@ -40,6 +40,7 @@ func after_all() -> void:
 func before_each() -> void:
 	EconomyManager.reset()
 	ResearchManager.reset()
+	GameManager.game_active = true  # the weather-strike gate checks this
 	_ai._raiders.clear()
 	_ai._aggression_level = "balanced"
 	_ai._last_wave_desperate = false
@@ -339,3 +340,62 @@ func test_sim_ignores_unbuilt_and_unknown_towers() -> void:
 	unknown.set("_is_built", true)
 	var after: float = _ai._simulate_combat()
 	assert_eq(after, before, "unbuilt and unscouted towers must not enter the sim")
+
+
+# ─── Weather-offense timing ───
+
+func test_snowstorm_start_triggers_a_timing_attack() -> void:
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+	_ai._aggression_level = "balanced"
+	var fighters: Array = []
+	for i in range(Constants.ENEMY_TIMING_ATTACK_ARMY):
+		fighters.append(_spawn_fighter(ENEMY, Vector2(700 + i * 8, 16)))
+	WeatherManager.snowstorm_started.emit()
+	for f in fighters:
+		assert_eq(f.get("_target_building"), _building_for(PLAYER),
+			"a starting storm shrinks enemy vision: the AI strikes with what it has")
+
+
+func test_volcano_end_triggers_a_timing_attack() -> void:
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+	_ai._aggression_level = "balanced"
+	var fighters: Array = []
+	for i in range(Constants.ENEMY_TIMING_ATTACK_ARMY):
+		fighters.append(_spawn_fighter(ENEMY, Vector2(700 + i * 8, 16)))
+	WeatherManager.volcano_ended.emit()
+	for f in fighters:
+		assert_eq(f.get("_target_building"), _building_for(PLAYER),
+			"right after an eruption the surface is burned and scattered: the AI pounces")
+
+
+func test_weather_strike_needs_a_real_army() -> void:
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+	_ai._aggression_level = "balanced"
+	var fighters: Array = []
+	for i in range(Constants.ENEMY_TIMING_ATTACK_ARMY - 1):
+		fighters.append(_spawn_fighter(ENEMY, Vector2(700 + i * 8, 16)))
+	WeatherManager.snowstorm_started.emit()
+	for f in fighters:
+		assert_null(f.get("_target_building"), "fewer than ENEMY_TIMING_ATTACK_ARMY fighters never make a timing attack")
+
+
+func test_weather_strike_holds_in_defend_mode() -> void:
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+	_ai._aggression_level = "defend"
+	var fighters: Array = []
+	for i in range(Constants.ENEMY_TIMING_ATTACK_ARMY + 2):
+		fighters.append(_spawn_fighter(ENEMY, Vector2(700 + i * 8, 16)))
+	WeatherManager.snowstorm_started.emit()
+	for f in fighters:
+		assert_null(f.get("_target_building"), "defend mode does not chase weather windows")
+
+
+func test_weather_strike_is_a_tier_two_behavior() -> void:
+	GameManager.set_difficulty(GameManager.Difficulty.EASY)  # smarts 0
+	_ai._aggression_level = "balanced"
+	var fighters: Array = []
+	for i in range(Constants.ENEMY_TIMING_ATTACK_ARMY + 2):
+		fighters.append(_spawn_fighter(ENEMY, Vector2(700 + i * 8, 16)))
+	WeatherManager.snowstorm_started.emit()
+	for f in fighters:
+		assert_null(f.get("_target_building"), "the easy AI never times attacks off weather")

@@ -35,6 +35,28 @@ const DIFFICULTY_MODIFIERS: Dictionary = {
 	Difficulty.GODLY: { "coin": 2.5, "train_time": 0.45, "upgrade_speed": 2.5, "push_ratio": 1.0, "defend_ratio": 0.15, "retaliation": 1.0, "smarts": 3, "wave": 0.55, "snowstorm_speed": 0.5, "snowstorm_interval": 0.5, "snowstorm_damage": 2.0, "volcano_interval": 0.55, "volcano_damage": 2.0, "volcano_duration": 1.35, "volcano_meteor_rate": 1.6 },
 }
 
+# AI openers: one is rolled per real match (main_menu Play, restart, Play
+# Again) so two matches never play out identically. Faction-flavored weights
+# (Brute rushes, Arcane turtles into tech, Industrial booms) lean the roll
+# without making it deterministic. "balanced" is the neutral default tests
+# rely on — the opener only changes when roll_ai_opener() runs.
+#   wave_threshold_mult: scales the wave size thresholds (rush marches with
+#                        smaller armies, boom/turtle mass longer).
+#   miner_delta:         shifts the miner training quota (boom expands first).
+#   tower_first:         turtle openers build towers before lantern upgrades.
+const AI_OPENERS: Dictionary = {
+	"balanced": { "wave_threshold_mult": 1.0, "miner_delta": 0, "tower_first": false },
+	"rush": { "wave_threshold_mult": 0.7, "miner_delta": -1, "tower_first": false },
+	"boom": { "wave_threshold_mult": 1.2, "miner_delta": 2, "tower_first": false },
+	"turtle": { "wave_threshold_mult": 1.3, "miner_delta": 0, "tower_first": true },
+}
+const _AI_OPENER_WEIGHTS: Dictionary = {
+	"": { "balanced": 25, "rush": 25, "boom": 25, "turtle": 25 },
+	"brute": { "balanced": 25, "rush": 45, "boom": 10, "turtle": 20 },
+	"arcane": { "balanced": 20, "rush": 15, "boom": 25, "turtle": 40 },
+	"industrial": { "balanced": 25, "rush": 20, "boom": 45, "turtle": 10 },
+}
+
 const COLOR_PLAYER: Color = Color("#3B82F6")
 const COLOR_ENEMY: Color = Color("#B91C1C")
 const COLOR_ICE: Color = Color("#DCECF5")
@@ -56,6 +78,9 @@ var difficulty: Difficulty = Difficulty.NORMAL
 # Player-chosen game speed (1x/2x/3x/5x/10x). Like difficulty, survives reset()
 # so Play Again keeps the choice. The win slow-mo overrides it temporarily.
 var game_speed: float = 1.0
+# The AI's opener for the current match (key into AI_OPENERS). "balanced" is
+# the neutral default; real matches reroll it via roll_ai_opener().
+var ai_opener: String = "balanced"
 # Soft pause (separate from the tree-pausing pause menu): a temporary 0x speed
 # the player can toggle from the HUD without bringing up the exit menu. It is
 # cleared on match reset so Play Again does not start paused.
@@ -98,6 +123,33 @@ func reset_after_scene_switch() -> void:
 	ResearchManager.reset()
 	WeatherManager.reset()
 	AIBeliefSystem.reset()
+	roll_ai_opener()
+
+
+## Rolls the AI's opener for a new match, weighted by the enemy faction's
+## personality (Brute rushes, Arcane turtles, Industrial booms). Called from
+## the main menu's Play flow and after every restart/quit scene switch, so no
+## two matches play out identically; tests keep the "balanced" default.
+func roll_ai_opener() -> void:
+	var faction: FactionData = FactionManager.get_faction(Team.ENEMY)
+	var faction_id: String = faction.faction_id if faction != null else ""
+	var weights: Dictionary = _AI_OPENER_WEIGHTS.get(faction_id, _AI_OPENER_WEIGHTS[""])
+	var total: int = 0
+	for w in weights.values():
+		total += int(w)
+	var roll: int = randi() % total
+	for opener_id in weights:
+		roll -= int(weights[opener_id])
+		if roll < 0:
+			ai_opener = opener_id
+			DebugLog.log_command("GameManager", "roll_ai_opener", ai_opener)
+			return
+	ai_opener = "balanced"
+
+
+## The active opener's effect table (see AI_OPENERS).
+func get_ai_opener_data() -> Dictionary:
+	return AI_OPENERS.get(ai_opener, AI_OPENERS["balanced"])
 
 
 func reset() -> void:
