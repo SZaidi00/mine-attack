@@ -33,24 +33,36 @@ func _launch_wave_if_ready(threshold_override: int = -1) -> void:
 		if (unit._state == Unit.State.IDLE or unit._state == Unit.State.MOVE) and not unit.is_underground:
 			free_fighters.append(unit)
 	var threshold: int = threshold_override if threshold_override >= 0 else _wave_threshold(target)
+	# Anti-stall escapes (smarts tier 2+, organic launches only) keep the AI
+	# proactive even while outmatched: desperation (no wave has marched for
+	# ENEMY_WAVE_DESPERATION_DELAY, scaled by the difficulty attack tempo) and
+	# pop-cap pressure (the army cannot grow any further, so holding only lets
+	# the enemy catch up). Desperation also drops the size threshold to
+	# ENEMY_DESPERATE_WAVE_SIZE — an out-produced AI stuck below the defend-mode
+	# threshold must still raid with whatever it has instead of never attacking.
+	var desperate: bool = false
+	var capped: bool = false
+	if GameManager.get_ai_smarts() >= 2 and threshold_override < 0:
+		var desperation_delay: float = _Constants.ENEMY_WAVE_DESPERATION_DELAY * GameManager.get_ai_wave_multiplier()
+		desperate = GameManager.match_time - ai._last_wave_launched_at >= desperation_delay
+		capped = EconomyManager.get_population(ai.team) >= _Constants.MAX_UNITS - 2
+		if desperate:
+			threshold = mini(threshold, _Constants.ENEMY_DESPERATE_WAVE_SIZE)
 	if total < threshold:
 		return
 	# Combat-predictor veto (smarts tier 2+): don't march into a decisive
 	# loss — hold and keep massing. Only organic threshold launches can be
 	# vetoed (counter-attacks/timing attacks already picked their moment),
 	# and the all-in against a nearly-dead enemy base always goes.
-	# Two anti-stall escapes keep the AI proactive even while outmatched:
-	# desperation (no wave has marched for ENEMY_WAVE_DESPERATION_DELAY, scaled
-	# by the difficulty attack tempo) and pop-cap pressure (the army cannot
-	# grow any further, so holding only lets the enemy catch up).
 	if GameManager.get_ai_smarts() >= 2 and threshold_override < 0:
 		var hp_ratio: float = float(target.get("_hp")) / maxf(1.0, float(target.get("max_hp")))
-		var desperation_delay: float = _Constants.ENEMY_WAVE_DESPERATION_DELAY * GameManager.get_ai_wave_multiplier()
-		var desperate: bool = GameManager.match_time - ai._last_wave_launched_at >= desperation_delay
-		var capped: bool = EconomyManager.get_population(ai.team) >= _Constants.MAX_UNITS - 2
-		if not desperate and not capped and hp_ratio >= 0.25 and ai._smart._simulate_combat() < 0.6:
+		if not desperate and not capped and hp_ratio >= 0.25 and ai._smart._simulate_combat() < _Constants.ENEMY_WAVE_VETO_SIM_RATIO:
 			return
 	ai._last_wave_launched_at = GameManager.match_time
+	ai._last_wave_desperate = desperate
+	# A launch sweeps every free fighter, raiders included — the raid squad
+	# re-forms on the next harass tick after the wave is out.
+	ai._raiders.clear()
 	# Peel a vanguard onto remembered enemy towers/lanterns (see
 	# _wave_structure_assignments); the rest march on the base.
 	var assignments: Dictionary = _wave_structure_assignments(free_fighters.size())
@@ -58,10 +70,40 @@ func _launch_wave_if_ready(threshold_override: int = -1) -> void:
 	var peel_count: int = assignments["peel_count"]
 	for i in range(free_fighters.size()):
 		var unit: Unit = free_fighters[i]
-		if i < peel_count:
+		# Wave hunting (tier 2+): engage a visible enemy field unit in range
+		# instead of beelining the base — the wave fights the army it meets
+		# on the way instead of marching past it.
+		var hunt: Unit = _wave_hunt_target(unit)
+		if hunt != null:
+			unit.attack_unit(hunt)
+		elif i < peel_count:
 			unit.attack_building(structures[i % structures.size()])
 		else:
 			unit.attack_building(target)
+
+
+## Wave hunting: the nearest visible enemy surface fighter within
+## ENEMY_WAVE_HUNT_RANGE that this unit can damage, or null (march on the
+## base). Reads live team vision, so the wave only reacts to armies it can
+## actually see coming.
+func _wave_hunt_target(unit: Unit) -> Unit:
+	if GameManager.get_ai_smarts() < 2 or ai._grid == null:
+		return null
+	var best: Unit = null
+	var best_d2: float = _Constants.ENEMY_WAVE_HUNT_RANGE * _Constants.ENEMY_WAVE_HUNT_RANGE
+	var other_team_name: String = "player" if ai.team == GameManager.Team.ENEMY else "enemy"
+	for other in ai.get_tree().get_nodes_in_group(other_team_name):
+		if not other.data.is_fighter or other._state == Unit.State.DEAD or other.is_underground:
+			continue
+		if not unit.can_damage_unit(other):
+			continue
+		if not ai._grid.is_visible_to(ai.team, other.global_position):
+			continue
+		var d2: float = unit.combat_distance_squared_to(other)
+		if d2 < best_d2:
+			best_d2 = d2
+			best = other
+	return best
 
 
 ## Strategic structure targeting: enemy towers and lanterns the team
@@ -191,6 +233,22 @@ func _nearest_enemy_unit(pos: Vector2, max_dist: float) -> Unit:
 	var other_team_name: String = "player" if ai.team == GameManager.Team.ENEMY else "enemy"
 	for unit in ai.get_tree().get_nodes_in_group(other_team_name):
 		if unit._state == Unit.State.DEAD:
+			continue
+		var d: float = unit.global_position.distance_squared_to(pos)
+		if d < best_d:
+			best_d = d
+			best = unit
+	return best
+
+
+## Fighter-only variant: the post-defense counterattack tracks real threats,
+## so a scouting pigeon or a stray miner walking by never trips it.
+func _nearest_enemy_fighter(pos: Vector2, max_dist: float) -> Unit:
+	var best: Unit = null
+	var best_d: float = max_dist * max_dist
+	var other_team_name: String = "player" if ai.team == GameManager.Team.ENEMY else "enemy"
+	for unit in ai.get_tree().get_nodes_in_group(other_team_name):
+		if not unit.data.is_fighter or unit._state == Unit.State.DEAD:
 			continue
 		var d: float = unit.global_position.distance_squared_to(pos)
 		if d < best_d:

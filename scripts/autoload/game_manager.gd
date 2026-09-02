@@ -15,8 +15,10 @@ enum Difficulty { EASY, NORMAL, HARD, NIGHTMARE, GODLY }
 #   retaliation:   chance a damaged AI sieger peels off to fight back.
 #   smarts:        behavior tier (0-3) gating the AI's smart behaviors —
 #                  1: focus-fire defense + wounded retreat,
-#                  2: + counter-attack windows + miner harassment,
-#                  3: + counter-composition army mix.
+#                  2: + counter-attack windows, miner raids, wave hunting and
+#                     retreat, counter-composition army mix (NORMAL and up),
+#                  3: currently the full suite — harder difficulties
+#                     differentiate on rates, not extra behaviors.
 #   wave:          attack-tempo multiplier (lower = earlier, more frequent
 #                  waves); scales the wave size thresholds and the wave tick.
 #   snowstorm_speed:   surface movement multiplier during snowstorms (lower on

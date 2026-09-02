@@ -191,21 +191,87 @@ func _apply_aggression_behavior() -> void:
 					unit.garrison_home()
 
 
-## Smarts tier 2+: send a small raiding party (growing with army size) to
-## kill enemy miners caught on the surface (combat can't cross layers, so only
-## deposit-trip miners are valid targets). Raiders prefer the fattest cargo
-## bags — the fair-play version of ore denial: raiders can never enter the
-## enemy mine, so they hit the deposit trips carrying the most coin. Raiding
-## the economy forces the enemy to defend instead of turtling safely
-## underground. Never runs while defending, and never strips the wave below
-## critical mass. Raiders in ATTACK are ignored by the wave and defense logic
-## (both only command IDLE/MOVE units); when their target dies they go IDLE
-## and are re-swept naturally.
+## Smarts tier 2+, 1s tactics tick: wave-level retreat and recall. Two jobs:
+## 1. While the base is under attack, wave fighters still marching or sieging
+##    far away come home — an army that keeps sieging while its own base burns
+##    is the classic dumb-AI tell. (The scout and the raid squad keep their
+##    missions; the defense sweep handles everyone already home.)
+## 2. An active wave the combat predictor says is being wiped pulls back to
+##    heal and remass instead of fighting to zero. Desperate waves (launched
+##    knowing the sim was bad, to deal damage) and all-ins against a
+##    nearly-dead enemy base commit and never retreat. The veto gates the
+##    relaunch afterwards, so a retreated wave re-masses instead of yo-yoing.
+func _retreat_losing_wave() -> void:
+	if GameManager.get_ai_smarts() < 2:
+		return
+	var building: Node2D = ai._combat._get_building()
+	if building == null:
+		return
+	if ai._combat._nearest_enemy_fighter(building.global_position, 650) != null:
+		for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
+			if not unit.data.is_fighter or unit._state != Unit.State.ATTACK:
+				continue
+			if unit == ai._scout or ai._raiders.has(unit):
+				continue
+			if unit.global_position.distance_to(building.global_position) > 700.0:
+				unit.garrison_home()
+		return
+	var wave_age: float = GameManager.match_time - ai._last_wave_launched_at
+	if wave_age < _Constants.ENEMY_WAVE_RETREAT_MIN_AGE or wave_age > _Constants.ENEMY_WAVE_ACTIVE_WINDOW:
+		return
+	if ai._last_wave_desperate:
+		return
+	var target: Node2D = ai._combat._get_enemy_building()
+	if target != null:
+		var hp_ratio: float = float(target.get("_hp")) / maxf(1.0, float(target.get("max_hp")))
+		if hp_ratio < 0.25:
+			return  # all-in: the nearly-dead enemy base must be finished
+	if ai._smart._simulate_combat() >= _Constants.ENEMY_WAVE_RETREAT_SIM_RATIO:
+		return
+	for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
+		if not unit.data.is_fighter or unit._state != Unit.State.ATTACK:
+			continue
+		if unit == ai._scout or ai._raiders.has(unit):
+			continue
+		unit.garrison_home()
+
+
+## Smarts tier 2+, 1s tactics tick: post-defense counterattack. While enemy
+## fighters are inside the base defense radius the flag holds; the moment the
+## threat clears — attackers dead or fled, army out of position walking home —
+## the gathered army strikes immediately instead of waiting out the wave timer.
+func _check_defense_counterattack() -> void:
+	if GameManager.get_ai_smarts() < 2:
+		return
+	var building: Node2D = ai._combat._get_building()
+	if building == null:
+		return
+	if ai._combat._nearest_enemy_fighter(building.global_position, 650) != null:
+		ai._base_threatened = true
+		return
+	if not ai._base_threatened:
+		return
+	ai._base_threatened = false
+	ai._combat._launch_wave_if_ready(_Constants.ENEMY_TIMING_ATTACK_ARMY)
+
+
+## Smarts tier 2+: miner raids. Fighters cannot enter the enemy mine, so
+## instead of chasing individual deposit trips (the old harass never caught
+## one — exposed miners surface for seconds), a small squad camps between the
+## enemy mine entry and the enemy base and ambushes every deposit trip
+## walking past. Forcing miners to hide or die is economic damage even when
+## nothing gets killed. Formation runs on the slow harass tick; management
+## (_manage_raid) runs on the 1s tactics tick so the squad reacts in time.
+## Never runs while defending, and never strips the wave below critical mass.
+## A wave launch sweeps the raiders up (they are free IDLE/MOVE fighters), so
+## raiding is what the army does BETWEEN waves, not instead of them.
 func _run_harassment() -> void:
 	if GameManager.get_ai_smarts() < 2:
 		return
 	if ai._aggression_level == "defend":
 		return
+	if not ai._raiders.is_empty():
+		return  # a raid is already out — _manage_raid owns it
 	var target_building: Node2D = ai._combat._get_enemy_building()
 	if target_building == null:
 		return
@@ -219,27 +285,98 @@ func _run_harassment() -> void:
 			free_fighters.append(unit)
 	if total < ai._combat._wave_threshold(target_building) + 2:
 		return
-	# Exposed enemy miners: fattest cargo bags first (ore denial — kill the
-	# deposit trips carrying the most coin), tiebreak nearest to our base
-	# (shortest raid trip).
+	var camp: Vector2 = _raid_camp_point()
+	if camp == Vector2.INF:
+		return
+	# Send the fighters nearest the camp (shortest walk, least time exposed),
+	# fanned out a little so the squad doesn't stack on one pixel.
+	free_fighters.sort_custom(func(a: Unit, b: Unit) -> bool:
+		return a.global_position.distance_squared_to(camp) < b.global_position.distance_squared_to(camp))
+	var raid_count: int = mini(_Constants.ENEMY_RAID_SIZE, free_fighters.size())
 	var building: Node2D = ai._combat._get_building()
-	if building == null:
+	var inward: float = signf(building.global_position.x - camp.x) if building != null else 1.0
+	for i in range(raid_count):
+		var raider: Unit = free_fighters[i]
+		raider.move_to(camp + Vector2(inward * float(i) * 40.0, 0.0))
+		if raider._state == Unit.State.MOVE:
+			ai._raiders.append(raider)
+	if not ai._raiders.is_empty():
+		ai._raid_started_at = GameManager.match_time
+
+
+## 1s raid upkeep (tactics tick): prune losses, pull the squad out when the
+## defense converges on the camp or the raid outstays its welcome, disband it
+## when the army flips to defend, and walk drifted raiders back to the camp
+## (idle auto-engagement legitimately chases a kill a short way off).
+func _manage_raid() -> void:
+	if GameManager.get_ai_smarts() < 2:
 		return
+	if ai._raiders.is_empty():
+		return
+	for raider in ai._raiders.duplicate():
+		if not is_instance_valid(raider) or raider._state == Unit.State.DEAD:
+			ai._raiders.erase(raider)
+	if ai._raiders.is_empty():
+		return
+	if ai._aggression_level == "defend":
+		_disband_raid(true)
+		return
+	var camp: Vector2 = _raid_camp_point()
+	if camp == Vector2.INF:
+		_disband_raid(true)
+		return
+	# Local odds check from the camp (the raiders' own eyes, roughly their
+	# vision radius): if the defense shows up in force, the raid goes home
+	# instead of trading 3 fighters for a miner.
+	var defenders: int = 0
 	var other_team_name: String = "player" if ai.team == GameManager.Team.ENEMY else "enemy"
-	var exposed_miners: Array = []
 	for unit in ai.get_tree().get_nodes_in_group(other_team_name):
-		if unit.data.is_miner and unit._state != Unit.State.DEAD and not unit.is_underground:
-			exposed_miners.append(unit)
-	if exposed_miners.is_empty():
+		if not unit.data.is_fighter or unit._state == Unit.State.DEAD or unit.is_underground:
+			continue
+		if unit.global_position.distance_to(camp) <= _Constants.ENEMY_RAID_RETREAT_RADIUS:
+			defenders += 1
+	if defenders >= ai._raiders.size() + _Constants.ENEMY_RAID_RETREAT_ODDS:
+		_disband_raid(true)
 		return
-	exposed_miners.sort_custom(func(a: Unit, b: Unit) -> bool:
-		if a.carried_coin != b.carried_coin:
-			return a.carried_coin > b.carried_coin
-		return a.global_position.distance_squared_to(building.global_position) \
-			< b.global_position.distance_squared_to(building.global_position))
-	var raider_count: int = mini(2 + total / 15, free_fighters.size())
-	for i in range(raider_count):
-		(free_fighters[i] as Unit).attack_unit(exposed_miners.front())
+	if GameManager.match_time - ai._raid_started_at >= _Constants.ENEMY_RAID_MAX_DURATION:
+		_disband_raid(true)
+		return
+	for raider in ai._raiders:
+		# _hold_post marks a raider garrisoned home (wounded retreat): leave it
+		# to heal and be swept into the next wave instead of walking back.
+		if raider._hold_post:
+			continue
+		if raider._state == Unit.State.IDLE and raider.global_position.distance_to(camp) > 500.0:
+			raider.move_to(camp)
+
+
+## Ends the raid. send_home garrisons the squad at the base (retreat); without
+## it the raiders simply become regular army again where they stand.
+func _disband_raid(send_home: bool) -> void:
+	if send_home:
+		for raider in ai._raiders:
+			if is_instance_valid(raider) and raider._state != Unit.State.DEAD:
+				raider.garrison_home()
+	ai._raiders.clear()
+
+
+## Where the raid camps: on the deposit route between the enemy mine entry and
+## the enemy base, biased toward the entry so the squad isn't parked under the
+## base's defenders. Returns Vector2.INF when neither landmark exists.
+func _raid_camp_point() -> Vector2:
+	var entry: Node2D = null
+	for e in ai.get_tree().get_nodes_in_group("mine_entries"):
+		if e.get("team") != ai.team:
+			entry = e
+			break
+	var building: Node2D = ai._combat._get_enemy_building()
+	if entry != null and building != null:
+		return entry.get_surface_position().lerp(building.global_position, 0.35)
+	if building != null:
+		# No entry landmark: hover off the enemy base toward the map center.
+		var inward: float = -1.0 if building.global_position.x > 0.0 else 1.0
+		return building.global_position + Vector2(inward * 400.0, 0.0)
+	return Vector2.INF
 
 
 ## Smarts tier 2+: bait and switch. A lone surface miner is sent strolling
@@ -292,11 +429,17 @@ func _run_bait() -> void:
 
 ## Abstract combat predictor (no pathfinding): both armies are reduced to
 ## {hp, dps, hits_air, air} buckets and exchange 0.1s focus-fire steps for
-## `duration` seconds — each side pours its DPS into the lowest-HP enemy it
-## can damage (dragon immunity respected: only archer/wizard DPS touches
-## dragons; their DPS still hits ground targets too). Returns
+## `duration` seconds (default ENEMY_COMBAT_SIM_DURATION) — each side pours
+## its DPS into the lowest-HP enemy it can damage (dragon immunity respected:
+## only archer/wizard DPS touches dragons; their DPS still hits ground targets
+## too). Built enemy towers join their owner's side (they hit air too): the
+## wave veto must see a turtled defense, or waves keep suiciding into towers
+## the sim pretends don't exist. Only REMEMBERED enemy towers count (fog-honest
+## intel, same rule as the wave's structure peel). Returns
 ## ai_hp_remaining / max(player_hp_remaining, 1).
-func _simulate_combat(duration: float = 2.0) -> float:
+func _simulate_combat(duration: float = -1.0) -> float:
+	if duration <= 0.0:
+		duration = _Constants.ENEMY_COMBAT_SIM_DURATION
 	var ai_army: Array = []
 	var player_army: Array = []
 	for unit in ai.get_tree().get_nodes_in_group("units"):
@@ -313,6 +456,22 @@ func _simulate_combat(duration: float = 2.0) -> float:
 			ai_army.append(bucket)
 		else:
 			player_army.append(bucket)
+	for tower in ai.get_tree().get_nodes_in_group("towers"):
+		if not tower.is_built():
+			continue  # invulnerable while under construction — no combat weight
+		if tower.team != ai.team:
+			if ai._grid == null or not ai._grid.is_remembered_by(ai.team, tower.global_position):
+				continue  # never scouted: the AI honestly doesn't know it's there
+		var tower_bucket: Dictionary = {
+			"hp": float(tower.hp),
+			"dps": float(tower.damage) / maxf(tower.attack_cooldown, 0.05),
+			"hits_air": true,  # tower targeting has no air exclusion
+			"air": false,
+		}
+		if tower.team == ai.team:
+			ai_army.append(tower_bucket)
+		else:
+			player_army.append(tower_bucket)
 	var steps: int = maxi(1, int(duration / 0.1))
 	for i in range(steps):
 		_sim_focus_step(ai_army, player_army)

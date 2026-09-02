@@ -35,7 +35,7 @@ var _last_player_fighters: int = -1
 # base; the trap springs when enemy fighters come out to swat it.
 var _bait_tick: float = 0.0
 var _bait_miner: Unit = null
-# Scout memory (smarts >= 3): exponential moving average of the enemy army's
+# Scout memory (smarts >= 2): exponential moving average of the enemy army's
 # composition shares, resampled each aggression tick. The counter-composition
 # mix reads the memory instead of the live count, so production counters the
 # remembered army and doesn't jitter mid-fight.
@@ -56,6 +56,17 @@ var _aggression_level: String = "balanced"  # "defend", "balanced", "push"
 # match_time of the last wave that actually marched (any launch path). The
 # combat-predictor veto lapses once this grows stale (ENEMY_WAVE_DESPERATION_DELAY).
 var _last_wave_launched_at: float = 0.0
+# True when the last wave launched via the desperation escape — it knew the
+# sim was bad and went anyway, so the wave-retreat check leaves it alone.
+var _last_wave_desperate: bool = false
+# Miner-raid squad (smarts >= 2): fighters ordered to camp the enemy mine
+# entry. Cleared when the raid disbands or a wave sweeps the raiders up.
+var _raiders: Array = []
+var _raid_started_at: float = 0.0
+# Post-defense counterattack (smarts >= 2): true while enemy fighters are
+# inside the base defense radius; the moment the threat clears (fled or died)
+# the gathered army strikes back immediately instead of waiting for the timer.
+var _base_threatened: bool = false
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -75,6 +86,12 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	# match_time accumulates through the main menu, so anchor both clocks to
+	# match start: without this a player idling in the menu made the AI start
+	# "desperate" (veto disabled from second 0) and sent the 1:00 scout out
+	# immediately.
+	_last_wave_launched_at = GameManager.match_time
+	_next_scout_time = GameManager.match_time + _Constants.ENEMY_SCOUT_TIME
 	# Pre-queued upgrades: re-run the economy the moment money lands or a
 	# miner level completes instead of waiting out the decision tick.
 	EconomyManager.coin_changed.connect(_on_economy_signal)
@@ -139,6 +156,11 @@ func _process(delta: float) -> void:
 			_tactics_tick = 0.0
 			_smart._retreat_wounded()
 			_smart._run_focus_fire()
+			# Tier-2 behaviors gate themselves; they run on the fast tactics
+			# tick (not the 20s harass tick) so raids and waves react in time.
+			_smart._retreat_losing_wave()
+			_smart._check_defense_counterattack()
+			_smart._manage_raid()
 	if smarts >= 2:
 		_harass_tick += delta
 		if _harass_tick >= _Constants.ENEMY_HARASS_INTERVAL:
@@ -269,6 +291,18 @@ func _run_harassment() -> void:
 	_smart._run_harassment()
 
 
+func _manage_raid() -> void:
+	_smart._manage_raid()
+
+
+func _retreat_losing_wave() -> void:
+	_smart._retreat_losing_wave()
+
+
+func _check_defense_counterattack() -> void:
+	_smart._check_defense_counterattack()
+
+
 func _run_bait() -> void:
 	_smart._run_bait()
 
@@ -285,7 +319,7 @@ func _run_lantern_placement() -> void:
 	_awareness._run_lantern_placement()
 
 
-func _simulate_combat(duration: float = 2.0) -> float:
+func _simulate_combat(duration: float = -1.0) -> float:
 	return _smart._simulate_combat(duration)
 
 

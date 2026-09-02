@@ -92,8 +92,8 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 - `ai_controller.gd` — tick fields, aggression state, scout memory; delegates to helpers.
   - `ai_economy.gd` — economy decisions, training (faction-flavored army mix), upgrades, research (faction branch preferences), miner culling.
   - `ai_mining.gd` — miner task assignment and ore selection (skips miners under shelter orders).
-  - `ai_combat.gd` — attack waves, base defense, wall breach. Waves peel up to half their fighters onto remembered enemy towers/lanterns before marching on the base. The combat-predictor veto (smarts tier 2+) lapses when no wave has marched for `ENEMY_WAVE_DESPERATION_DELAY` (difficulty-scaled) or the AI is at the population cap, so the AI always keeps attacking eventually.
-  - `ai_smart_behaviors.gd` — focus fire, wounded retreat, harassment, bait, combat predictor, aggression.
+  - `ai_combat.gd` — attack waves, base defense, wall breach. Waves hunt visible enemy field units in range before marching, and peel up to half their fighters onto remembered enemy towers/lanterns before marching on the base. The combat-predictor veto (smarts tier 2+) lapses when no wave has marched for `ENEMY_WAVE_DESPERATION_DELAY` (difficulty-scaled) or the AI is at the population cap; desperation also drops the launch threshold to `ENEMY_DESPERATE_WAVE_SIZE`, so an out-produced AI always keeps attacking eventually.
+  - `ai_smart_behaviors.gd` — focus fire, wounded retreat, mine-entry raids (a squad camps the enemy mine entry and ambushes deposit trips), bait, combat predictor (counts remembered enemy towers), wave retreat/recall, post-defense counterattack, aggression.
   - `ai_awareness.gd` — faction scouting (swordsman at 1:00, 30s retry after death), defensive lantern placement/upgrades, snowstorm/volcano miner recall to the mine entry/base and lava evacuation (signal-driven; sheltered miners hold via `unit.shelter_in_place`).
 
 ### `scripts/world/`
@@ -285,7 +285,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself.
-- Category coverage: AI awareness/belief/faction strategy/micro/retaliation/smarts/strategy, building queue, defend leash, dragon, dynamic terrain, economy, factions, fog of war, grid world, kill units, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather.
+- Category coverage: AI awareness/belief/faction strategy/micro/pressure/retaliation/smarts/strategy, building queue, defend leash, dragon, dynamic terrain, economy, factions, fog of war, grid world, kill units, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather.
 
 ## Security and deployment considerations
 

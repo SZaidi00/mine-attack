@@ -2,8 +2,9 @@ extends GutTest
 
 # AI smarts: the difficulty "smarts" tier gates behavior quality (rates stay
 # fair-play below GODLY). Tier 1 = focus-fire defense + wounded retreat,
-# tier 2 = + counter-attack windows + miner harassment, tier 3 = +
-# counter-composition army mix. GODLY gets everything plus stacked rates.
+# tier 2 = + counter-attack windows + miner raids + wave hunting/retreat +
+# counter-composition army mix. Tier 3 is currently the full suite; harder
+# difficulties differentiate on rates. GODLY gets everything plus stacked rates.
 
 const PLAYER: int = 0
 const ENEMY: int = 1
@@ -115,48 +116,42 @@ func test_wounded_retreat_skipped_on_easy() -> void:
 	assert_eq(fighter._state, Unit.State.IDLE, "tier 0 never retreats")
 
 
-# ─── Miner harassment (smarts >= 2) ───
+# ─── Miner raids (smarts >= 2) ───
+# Fighters can't enter the enemy mine, so the raid squad camps the enemy mine
+# entry and ambushes deposit trips. Raid upkeep/retreat lives in
+# test_ai_pressure.gd; here: formation and the tier gate.
 
-func test_harassment_raids_exposed_surface_miners() -> void:
-	GameManager.set_difficulty(GameManager.Difficulty.HARD)
+func test_raid_forms_and_camps_enemy_mine_entry() -> void:
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
 	_ai._aggression_level = "balanced"  # wave threshold 7, raid needs 9 fighters
-	var raiders: Array = []
+	_ai._raiders.clear()
 	for i in range(9):
-		raiders.append(_spawn_fighter(ENEMY, Vector2(700 + i * 8, 16)))
-	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(600, 16))
+		_spawn_fighter(ENEMY, Vector2(700 + i * 8, 16))
 	_ai._run_harassment()
-	var hunting: int = 0
-	for r in raiders:
-		if r.get("_target_unit") == miner:
-			hunting += 1
-	assert_eq(hunting, 2, "two raiders must be sent after the exposed miner")
+	assert_eq(_ai._raiders.size(), Constants.ENEMY_RAID_SIZE, "a raid squad must form above critical mass")
+	var entry: Node2D = null
+	for e in get_tree().get_nodes_in_group("mine_entries"):
+		if e.get("team") == PLAYER:
+			entry = e
+	var camp: Vector2 = entry.get_surface_position().lerp(_building_for(PLAYER).global_position, 0.35)
+	for raider in _ai._raiders:
+		assert_eq(raider._state, Unit.State.MOVE, "raiders must walk to the camp")
+		assert_lt(raider.get("_post_point").distance_to(camp), 200.0,
+			"the raid camps the deposit route by the enemy mine entry")
 
 
 func test_harassment_skipped_on_easy() -> void:
 	GameManager.set_difficulty(GameManager.Difficulty.EASY)
 	_ai._aggression_level = "balanced"
+	_ai._raiders.clear()
 	for i in range(9):
 		_spawn_fighter(ENEMY, Vector2(700 + i * 8, 16))
 	_spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(600, 16))
 	_ai._run_harassment()
+	assert_true(_ai._raiders.is_empty(), "tier 0/1 never raids the economy")
 	for unit in get_tree().get_nodes_in_group("enemy"):
 		if unit.data.is_fighter:
 			assert_null(unit.get("_target_unit"), "tier 0/1 never raids the economy")
-
-
-func test_harassment_ignores_underground_miners() -> void:
-	GameManager.set_difficulty(GameManager.Difficulty.HARD)
-	_ai._aggression_level = "balanced"
-	for i in range(9):
-		_spawn_fighter(ENEMY, Vector2(700 + i * 8, 16))
-	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(600, 16))
-	miner.is_underground = true
-	_ai._run_harassment()
-	for unit in get_tree().get_nodes_in_group("enemy"):
-		if unit.data.is_fighter:
-			# Other surface miners (e.g. the starting crew) may legitimately be
-			# raided — the assertion is that the underground one never is.
-			assert_ne(unit.get("_target_unit"), miner, "combat cannot cross layers — underground miners are safe from raids")
 
 
 # ─── Counter-attack window (smarts >= 2) ───
@@ -190,7 +185,7 @@ func test_no_counterattack_without_losses() -> void:
 		assert_null(f.get("_target_building"), "no losses, no counter-attack — the wave keeps gathering")
 
 
-# ─── Counter-composition army mix (smarts >= 3) ───
+# ─── Counter-composition army mix (smarts >= 2) ───
 
 func test_counter_mix_punishes_missing_anti_air() -> void:
 	GameManager.set_difficulty(GameManager.Difficulty.NIGHTMARE)
@@ -215,14 +210,17 @@ func test_counter_mix_default_against_anti_air() -> void:
 	assert_eq(mix, _ai._ARMY_MIX, "a balanced player army with anti-air gets the default mix")
 
 
-func test_counter_mix_ignored_below_tier_3() -> void:
+func test_counter_mix_applies_on_normal() -> void:
 	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+	_ai._player_comp_memory.clear()
 	for i in range(4):
-		_spawn_fighter(PLAYER, Vector2(-600 - i * 8, 16))
-	# _pick_fighter_to_train only counter-picks at tier 3; the mix helper is
-	# still callable, but the trainer must use the base mix at tier 2.
+		_spawn_fighter(PLAYER, Vector2(-600 - i * 8, 16))  # all melee, zero anti-air
+	_ai._sample_player_composition()  # feed the scout memory the mix reads
+	# Counter-picking starts at tier 2 (Normal): against a melee-heavy player
+	# army the mix shifts to ranged, so archer (share 0.4) beats the base-mix
+	# swordsman pick.
 	var first: String = _ai._pick_fighter_to_train(1000)
-	assert_eq(first, "swordsman", "tier 2 training must follow the base mix, not the counter-pick")
+	assert_eq(first, "archer", "tier 2 training must counter-pick the remembered player army")
 
 
 # ─── Godly difficulty ───

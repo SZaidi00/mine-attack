@@ -834,7 +834,7 @@ const ENEMY_AGGRESSION_INTERVAL: float = 10.0
 const ENEMY_ATTACK_WAVE_INTERVAL: float = 18.0
 # Smart-behavior tuning (gated by the difficulty "smarts" tier — see
 # GameManager.DIFFICULTY_MODIFIERS).
-const ENEMY_HARASS_INTERVAL: float = 20.0  # seconds between miner-raid attempts
+const ENEMY_HARASS_INTERVAL: float = 20.0  # seconds between miner-raid formations (tier 2+)
 const ENEMY_WOUNDED_HP_RATIO: float = 0.3  # fighters below this HP fraction retreat to heal
 const ENEMY_COUNTERATTACK_DROP: int = 3  # player fighter losses per sample that open a counter-attack window
 # Predictive retreat: also retreat when predicted time-to-death beats the trip
@@ -848,11 +848,36 @@ const ENEMY_ECON_PRESSURE_RATIO: float = 1.2
 const ENEMY_TIMING_ATTACK_ARMY: int = 4
 # Combat predictor: seconds of abstract focus-fire exchange simulated per call.
 const ENEMY_COMBAT_SIM_DURATION: float = 2.0
+# Wave veto (tier 2+): organic launches below this simulated outcome ratio hold
+# and keep massing instead of marching into a decisive loss.
+const ENEMY_WAVE_VETO_SIM_RATIO: float = 0.5
 # Anti-stall: the combat-predictor veto (smarts tier 2+) is ignored once no
 # wave has marched for this many seconds — scaled by the difficulty "wave"
 # attack-tempo multiplier, so harder difficulties get desperate sooner. A wave
 # sent into a losing fight still deals damage; sitting at home forever does not.
-const ENEMY_WAVE_DESPERATION_DELAY: float = 120.0
+# Desperation also drops the launch threshold to ENEMY_DESPERATE_WAVE_SIZE so an
+# out-produced AI still raids with whatever it has instead of never attacking.
+const ENEMY_WAVE_DESPERATION_DELAY: float = 90.0
+const ENEMY_DESPERATE_WAVE_SIZE: int = 3
+# Wave hunting (tier 2+): at launch, each fighter engages a visible enemy
+# field unit within this range instead of beelining the enemy base — waves
+# fight the army they meet on the way instead of marching past it.
+const ENEMY_WAVE_HUNT_RANGE: float = 1000.0
+# Wave retreat (tier 2+): an active wave (launched within the active window,
+# older than the minimum age) that the combat predictor says is being wiped
+# pulls back home to heal and remass instead of fighting to zero. Desperate
+# waves and all-ins against a nearly-dead enemy base never retreat.
+const ENEMY_WAVE_RETREAT_SIM_RATIO: float = 0.35
+const ENEMY_WAVE_RETREAT_MIN_AGE: float = 4.0
+const ENEMY_WAVE_ACTIVE_WINDOW: float = 45.0
+# Miner raids (tier 2+): a small squad camps the enemy mine entry to ambush
+# deposit trips (fighters cannot enter the enemy mine, so the raid lives on
+# the surface). The squad retreats home when outnumbered at the camp or when
+# the raid outstays its welcome, and joins the next wave naturally.
+const ENEMY_RAID_SIZE: int = 3
+const ENEMY_RAID_MAX_DURATION: float = 30.0
+const ENEMY_RAID_RETREAT_RADIUS: float = 550.0
+const ENEMY_RAID_RETREAT_ODDS: int = 2  # retreat when local defenders exceed raiders by this many
 # AI-team miners re-scan for diggable cells this often while waiting at an
 # exhausted mine (player miners keep the shared 5s retry in unit.gd).
 const ENEMY_MINER_RESCAN_INTERVAL: float = 2.0

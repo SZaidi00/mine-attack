@@ -112,18 +112,18 @@ func test_kill_selected_only_kills_the_selection() -> void:
 
 
 func test_ai_culls_surplus_miners_at_population_cap() -> void:
-	# Boxed in at the cap, the AI disbands miners beyond 3 so the freed slots
+	# Boxed in at the cap, the AI disbands miners beyond 5 so the freed slots
 	# can become fighters.
-	for i in range(5):
+	for i in range(8):
 		_spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(440 + i * 20, 80))
 	EconomyManager.add_population(ENEMY, 100)
 	# The free starting miners trickle out of the training queue over the
 	# first seconds of a match, so don't assume they've spawned — measure.
 	var miners_before: int = _count_live_miners(ENEMY)
-	assert_true(miners_before >= 5, "scenario needs surplus miners")
+	assert_true(miners_before > 5, "scenario needs surplus miners")
 	_main.get_node("AIController")._run_economy()
-	assert_eq(_count_live_miners(ENEMY), 3, "AI keeps 3 miners and culls the rest")
-	assert_eq(EconomyManager.get_population(ENEMY), 100 - (miners_before - 3), "culled slots are freed")
+	assert_eq(_count_live_miners(ENEMY), 5, "AI keeps 5 miners and culls the rest")
+	assert_eq(EconomyManager.get_population(ENEMY), 100 - (miners_before - 5), "culled slots are freed")
 
 
 func test_ai_does_not_cull_below_cap() -> void:

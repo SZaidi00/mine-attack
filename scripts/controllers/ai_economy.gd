@@ -93,10 +93,13 @@ func _run_economy() -> void:
 		ResearchManager.scan(ai.team)
 
 	# Population pressure: training pauses at the cap, so when the AI is
-	# boxed in it disbands surplus miners (keeping 3 for income) to free
+	# boxed in it disbands surplus miners (keeping 5 for income) to free
 	# slots for fighters. No refund — the population slot is the resource.
-	if population >= _Constants.MAX_UNITS - 2 and miners > 3:
-		_cull_miners(miners - 3)
+	# The floor is 5, not bare subsistence: a culled-to-nothing economy
+	# rebuilds a wiped wave far too slowly (welfare needs ZERO living miners,
+	# so a broke AI with idle miners gets nothing) and stalls the late game.
+	if population >= _Constants.MAX_UNITS - 2 and miners > 5:
+		_cull_miners(miners - 5)
 		miners = _count_miners()
 
 	# Queue decisions (respecting queue size and population cap). Deeper miner
@@ -122,9 +125,9 @@ func _run_economy() -> void:
 
 ## Picks the fighter type furthest below its target share of the army that the
 ## budget affords, so the AI trains a combined-arms force per _ARMY_MIX.
-## Smarts tier 3 counter-picks the player's composition (_effective_army_mix).
+## Smarts tier 2+ counter-picks the player's composition (_effective_army_mix).
 func _pick_fighter_to_train(budget: int) -> String:
-	var mix: Dictionary = _effective_army_mix() if GameManager.get_ai_smarts() >= 3 else _faction_army_mix()
+	var mix: Dictionary = _effective_army_mix() if GameManager.get_ai_smarts() >= 2 else _faction_army_mix()
 	var counts: Dictionary = {}
 	for unit_id in mix:
 		counts[unit_id] = 0
@@ -168,7 +171,7 @@ func _faction_army_mix() -> Dictionary:
 
 
 ## Army mix for training, counter-picked against the player's composition
-## (smarts tier 3 only): dragons punish an army light on archers/wizards
+## (smarts tier 2+): dragons punish an army light on archers/wizards
 ## (the only units that can hurt flyers), and ranged units punish a
 ## melee-heavy army by kiting it. Reads the EMA scout memory
 ## (_sample_player_composition) rather than the live count, so production

@@ -165,11 +165,15 @@ func test_bait_sends_miner_and_springs_trap() -> void:
 	for f in fighters:
 		assert_null(f.get("_target_building"), "no launch before the trap springs")
 	# A defender comes out to swat the bait: the trap springs.
-	_spawn_fighter(PLAYER, bait.global_position + Vector2(50, 0))
+	var defender: Node2D = _spawn_fighter(PLAYER, bait.global_position + Vector2(50, 0))
 	_ai._run_bait()
 	assert_null(_ai._bait_miner, "the bait is released once the trap springs")
 	for f in fighters:
-		assert_eq(f.get("_target_building"), player_building, "the gathered army must launch at the undefended base")
+		# Wave hunting (tier 2+): the sprung trap first engages the visible
+		# defender that came out — it IS the hunt target — then the survivors
+		# march on the undefended base on the next launch.
+		assert_eq(f.get("_target_unit"), defender, "the sprung trap must engage the defender that came out")
+		assert_eq(f._state, Unit.State.ATTACK, "the gathered army must launch the moment the trap springs")
 
 
 # ─── Combat predictor ───
