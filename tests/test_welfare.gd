@@ -87,12 +87,12 @@ func test_welfare_waits_a_full_interval() -> void:
 
 
 func test_welfare_scales_for_ai_with_difficulty() -> void:
-	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)  # coin x1.15
+	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)  # coin x1.3
 	_kill_all_miners(ENEMY)
 	_set_coin(ENEMY, 0)
 	EconomyManager._process(Constants.WELFARE_INTERVAL)
 	assert_eq(EconomyManager.get_coin(ENEMY),
-		roundi(Constants.WELFARE_COIN * 1.15) + roundi(Constants.BASELINE_INCOME_COIN * 1.15),
+		roundi(Constants.WELFARE_COIN * 1.3) + roundi(Constants.BASELINE_INCOME_COIN * 1.3),
 		"the AI payout scales with the difficulty coin multiplier")
 
 
@@ -121,11 +121,11 @@ func test_welfare_skipped_when_miner_affordable() -> void:
 
 func test_baseline_income_pays_both_teams_from_start() -> void:
 	# Fresh wallets after reset (500/500), miners alive on both sides — the
-	# baseline pays regardless. NORMAL: the AI share is roundi(5 * 1.15) = 6.
+	# baseline pays regardless. NORMAL: the AI share is roundi(5 * 1.3) = 7.
 	EconomyManager._process(Constants.BASELINE_INCOME_INTERVAL)
 	assert_eq(EconomyManager.get_coin(PLAYER), 500 + Constants.BASELINE_INCOME_COIN,
 		"the player trickles from match start, no eligibility gates")
-	assert_eq(EconomyManager.get_coin(ENEMY), 500 + roundi(Constants.BASELINE_INCOME_COIN * 1.15),
+	assert_eq(EconomyManager.get_coin(ENEMY), 500 + roundi(Constants.BASELINE_INCOME_COIN * 1.3),
 		"the AI trickles too, scaled by the difficulty coin multiplier")
 
 
@@ -142,7 +142,7 @@ func test_baseline_income_repeats_each_interval() -> void:
 
 
 func test_baseline_income_scales_for_ai_with_difficulty() -> void:
-	GameManager.set_difficulty(GameManager.Difficulty.HARD)  # coin x1.4
+	GameManager.set_difficulty(GameManager.Difficulty.HARD)  # coin x1.55
 	EconomyManager._process(Constants.BASELINE_INCOME_INTERVAL)
-	assert_eq(EconomyManager.get_coin(ENEMY), 500 + roundi(Constants.BASELINE_INCOME_COIN * 1.4),
+	assert_eq(EconomyManager.get_coin(ENEMY), 500 + roundi(Constants.BASELINE_INCOME_COIN * 1.55),
 		"the AI baseline scales with difficulty")

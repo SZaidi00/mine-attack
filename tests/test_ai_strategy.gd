@@ -1,10 +1,17 @@
 extends GutTest
 
-# AI strategy: the economy tick must bank for miner upgrades (the old free
-# spending kept the wallet under 500 forever, so miners never passed level 1),
-# while fighter training trickles on against a 60% partial bank so the army
-# never stalls, and attacks launch as gathered waves — smaller and more often
-# on higher difficulties — instead of feeding one fighter at a time.
+# AI strategy: the economy tick saves for ONE purchase at a time in build
+# order (first lantern → L2 miners → first tower) and holds fighter spending
+# while a save goal is active — the old 60%-partial-bank rule let continuous
+# fighter spending pin the wallet just under the fund forever, so the AI never
+# teched or fortified. Two exemptions: miner training (miners fund the save)
+# and a skeleton standing army (ENEMY_DESPERATE_WAVE_SIZE fighters) so the AI
+# never teches naked. Miner upgrades wait for a real crew (blowing the 500g
+# opening wallet on an upgrade for 2 miners left the AI broke for minutes).
+# Miner and fighter training interleave one-per-queue-slot so the early army
+# grows in parallel with the mining crew, and attacks launch as gathered waves
+# — smaller and more often on higher difficulties — instead of feeding one
+# fighter at a time.
 
 const PLAYER: int = 0
 const ENEMY: int = 1
@@ -45,6 +52,13 @@ func after_each() -> void:
 	# GameManager is an autoload: never leak a difficulty choice into the
 	# next test script.
 	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
+	# Structure fixtures are added to the scene, not autofree'd.
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		if lantern.team == ENEMY:
+			lantern.free()
+	for tower in get_tree().get_nodes_in_group("towers"):
+		if tower.team == ENEMY:
+			tower.free()
 
 
 func _spawn_unit(tres_path: String, team: int, pos: Vector2) -> Node2D:
@@ -57,6 +71,24 @@ func _spawn_unit(tres_path: String, team: int, pos: Vector2) -> Node2D:
 	return unit
 
 
+## Structure fixtures skip placement validation — they only need to exist in
+## the group with the right team. after_each frees the ENEMY ones.
+func _spawn_lantern(team: int, pos: Vector2) -> Node2D:
+	var lantern: Node2D = load("res://scenes/lantern.tscn").instantiate()
+	lantern.set("team", team)
+	lantern.position = pos
+	_main.get_node("Structures").add_child(lantern)
+	return lantern
+
+
+func _spawn_tower(team: int, pos: Vector2) -> Node2D:
+	var tower: Node2D = load("res://scenes/tower.tscn").instantiate()
+	tower.set("team", team)
+	tower.position = pos
+	_main.get_node("Structures").add_child(tower)
+	return tower
+
+
 func _building_for(team: int) -> Node2D:
 	for b in get_tree().get_nodes_in_group("buildings"):
 		if b.get("team") == team:
@@ -65,34 +97,110 @@ func _building_for(team: int) -> Node2D:
 
 
 func test_ai_banks_and_buys_miner_upgrade() -> void:
+	# A full crew (5: 2 starting + 3) — upgrades wait for bodies now.
+	for i in range(3):
+		_spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(430 + i * 8, 16))
 	EconomyManager.add_coin(ENEMY, 600)  # 500 start + 600 = 1100, level 1
 	_ai._run_economy()
-	assert_eq(EconomyManager.get_miner_level(ENEMY), 2, "AI must buy the L2 miner upgrade as soon as it can afford it")
+	assert_eq(EconomyManager.get_miner_level(ENEMY), 2, "AI must buy the L2 miner upgrade as soon as a full crew can afford it")
 
 
-func test_fighter_training_dips_into_partial_bank() -> void:
-	# Fill the miner quota so the queue decision falls through to fighters.
+func test_miner_upgrade_waits_for_a_real_crew() -> void:
+	_set_enemy_coin(1500)
+	_ai._run_economy()
+	assert_eq(EconomyManager.get_miner_level(ENEMY), 1,
+		"two miners are a crew-in-progress: the 500g upgrade waits while bodies come first")
+	for i in range(3):
+		_spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(430 + i * 8, 16))
+	_set_enemy_coin(1500)
+	_ai._run_economy()
+	assert_eq(EconomyManager.get_miner_level(ENEMY), 2,
+		"with a full crew the upgrade buys the moment the bank completes")
+
+
+func test_miner_and_fighter_training_interleave() -> void:
+	# No active save goal: both structures already stand and the crew is too
+	# small for the L2 goal, so the tick spends freely.
+	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
+	_spawn_tower(ENEMY, Vector2(800, 16))
+	_drain_enemy_queue()
+	_set_enemy_coin(600)
+	_ai._run_economy()
+	var queue: Array = _building_for(ENEMY).call("get_queue")
+	assert_eq(queue.size(), 1, "scenario needs exactly the miner queued")
+	assert_eq(queue[0].id, "miner", "below the quota, a miner goes in first")
+	_set_enemy_coin(600)  # organic upgrade/research buys may have skimmed tick 1
+	_ai._run_economy()
+	queue = _building_for(ENEMY).call("get_queue")
+	assert_eq(queue.size(), 2, "the next tick queues a second unit")
+	assert_ne(queue[1].id, "miner", "never a miner behind a miner: the army grows in parallel")
+
+
+func test_fighter_training_holds_while_saving() -> void:
+	# Fill the miner quota so the queue decision falls through to fighters,
+	# and field the skeleton army (3) so the save-goal hold actually applies.
 	for i in range(7):
 		_spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(430 + i * 8, 16))
+	for i in range(3):
+		_spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(700 + i * 8, 16))
 	_drain_enemy_queue()
-	_set_enemy_coin(400)  # below the 500 L2 reserve, above the 300 partial bank
+	_set_enemy_coin(400)  # covers a fighter twice over, but the first-lantern fund is open
+	_ai._run_economy()
+	var queue: Array = _building_for(ENEMY).call("get_queue")
+	assert_true(queue.is_empty(), "past the skeleton army, fighter spending holds while saving for the first lantern")
+
+
+func test_save_goal_keeps_a_skeleton_army() -> void:
+	# Same save goal, but only 2 fighters standing: the AI still trains up to
+	# the raid/defense minimum so it never teches naked.
+	for i in range(7):
+		_spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(430 + i * 8, 16))
+	for i in range(2):
+		_spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, Vector2(700 + i * 8, 16))
+	_drain_enemy_queue()
+	_set_enemy_coin(400)
 	_ai._run_economy()
 	var queue: Array = _building_for(ENEMY).call("get_queue")
 	var has_fighter: bool = false
 	for entry in queue:
 		if entry.id != "miner":
 			has_fighter = true
-	assert_true(has_fighter, "a 100-coin fighter must fit a 400-coin wallet via the 60% partial bank")
+	assert_true(has_fighter, "below the skeleton army floor the AI keeps training fighters even mid-save")
 
 
-func test_fighter_training_holds_below_partial_bank() -> void:
+func test_fighter_training_flows_with_no_save_goal() -> void:
+	# Build order complete (lantern + tower standing, L2 miners): free spending.
+	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
+	_spawn_tower(ENEMY, Vector2(800, 16))
 	for i in range(7):
 		_spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(430 + i * 8, 16))
+	EconomyManager.add_coin(ENEMY, 1000)
+	EconomyManager.upgrade_miner(ENEMY)  # L2 — the save-goal ladder is done
 	_drain_enemy_queue()
-	_set_enemy_coin(200)  # below the 300 partial bank: banking takes priority
+	_set_enemy_coin(400)
 	_ai._run_economy()
 	var queue: Array = _building_for(ENEMY).call("get_queue")
-	assert_true(queue.is_empty(), "below the partial bank (and at miner quota) nothing is queued")
+	var has_fighter: bool = false
+	for entry in queue:
+		if entry.id != "miner":
+			has_fighter = true
+	assert_true(has_fighter, "with no save goal a 400-coin wallet trains a fighter")
+
+
+func test_save_goal_follows_the_build_order() -> void:
+	_ai._aggression_level = "balanced"
+	for i in range(3):
+		_spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(430 + i * 8, 16))
+	assert_eq(_ai._economy._current_save_goal(5, 1), Lantern.cost_for(false, 1),
+		"vision first: the save ladder opens with the first lantern")
+	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
+	assert_eq(_ai._economy._current_save_goal(5, 1), Constants.MINER_UPGRADE_COSTS[2],
+		"with vision up, a full crew saves for the L2 economy")
+	assert_eq(_ai._economy._current_save_goal(5, 2), FactionManager.get_tower_cost(ENEMY),
+		"with the L2 economy running, the AI fortifies")
+	_spawn_tower(ENEMY, Vector2(800, 16))
+	assert_eq(_ai._economy._current_save_goal(5, 2), 0,
+		"build order complete: the wallet opens for fighters and tech")
 
 
 ## Removes everything the enemy building has queued (e.g. from the AI's own
@@ -114,15 +222,18 @@ func _set_enemy_coin(amount: int) -> void:
 
 
 func test_ai_eventually_affords_upgrade_while_training_miners() -> void:
-	# Simulate income ticks: even while training miners every tick, the bank
+	# Simulate income ticks: even while training units every tick, the bank
 	# must grow to 500 and buy the upgrade (the old AI drained the wallet).
+	# A full crew (5) is required for the upgrade to buy at all.
+	for i in range(3):
+		_spawn_unit("res://scripts/resources/units/miner.tres", ENEMY, Vector2(430 + i * 8, 16))
 	EconomyManager.spend_coin(ENEMY, 450)  # 50 left
 	for i in range(20):
 		if EconomyManager.get_miner_level(ENEMY) >= 2:
 			break
 		EconomyManager.add_coin(ENEMY, 100)  # mining income
 		_ai._run_economy()
-	assert_eq(EconomyManager.get_miner_level(ENEMY), 2, "bank must grow to 500 despite ongoing miner training")
+	assert_eq(EconomyManager.get_miner_level(ENEMY), 2, "bank must grow to 500 despite ongoing training")
 
 
 func test_army_mix_prefers_frontline_then_diversifies() -> void:

@@ -54,40 +54,44 @@ func _run_economy() -> void:
 	var level: int = EconomyManager.get_miner_level(ai.team)
 	var population: int = EconomyManager.get_population(ai.team)
 
-	# Bank for the next miner upgrade: without a reserve the training drain
-	# keeps the wallet under 500/1500 forever and miners never advance past
-	# level 1. Fighter upgrades and research may only spend coin on top of the
-	# full reserve. Fighter *training* budgets against a partial bank (60%) —
-	# otherwise army production stalls completely for the whole time the AI
-	# saves up 1500 for miner level 3. Miner training is fully exempt (miners
-	# pay for themselves).
-	# Dead-miner triage: with no miners alive there is nothing to upgrade, and
-	# every coin must flow into re-staffing the mine (the welfare trickle in
-	# EconomyManager guarantees this eventually succeeds).
-	var reserve: int = 0
-	if miners > 0 and _Constants.MINER_UPGRADE_COSTS.has(level + 1):
-		reserve = _Constants.MINER_UPGRADE_COSTS[level + 1]
-	if reserve > 0 and coin >= reserve:
-		EconomyManager.upgrade_miner(ai.team)
+	# Save goals: the AI saves for ONE purchase at a time, in build order
+	# (_current_save_goal). While a goal is active, fighter spending holds —
+	# any partial-bank rule lets continuous fighter spending pin the wallet
+	# just below the goal forever, so the fund never completes (the old
+	# 60%-partial-bank trap: the wallet oscillated ~300–400 against the
+	# 500g L2 fund for the whole match, so the AI never teched or fortified).
+	# Two exemptions: miner training (miners fund the save) and a skeleton
+	# standing army (ENEMY_DESPERATE_WAVE_SIZE fighters) so the AI can still
+	# defend and desperation-raid while it banks.
+	var save_goal: int = _current_save_goal(miners, level)
 
-	# Fighter upgrades once the economy is comfortable (keep a coin reserve so
-	# training never stalls); cheapest first so the army scales steadily.
-	coin = EconomyManager.get_coin(ai.team)
-	for unit_id in ["swordsman", "archer", "wizard", "dragon"]:
-		var upgrade_cost: int = EconomyManager.get_fighter_upgrade_cost(ai.team, unit_id)
-		if upgrade_cost > 0 and coin - reserve >= upgrade_cost + 250:
-			EconomyManager.upgrade_fighter(ai.team, unit_id)
-			coin -= upgrade_cost
+	# Miner upgrades buy the moment a real crew exists
+	# (ENEMY_MINER_UPGRADE_MIN_CREW — bodies before pickaxe quality; the old AI
+	# blew its 500g opening wallet on the L2 upgrade for 2 miners and stayed
+	# broke for minutes) and the wallet covers the cost. L3 has no save goal —
+	# it buys organically whenever the wallet is fat (pop cap, post-wave
+	# lulls).
+	if miners >= _Constants.ENEMY_MINER_UPGRADE_MIN_CREW and _Constants.MINER_UPGRADE_COSTS.has(level + 1):
+		if coin >= int(_Constants.MINER_UPGRADE_COSTS[level + 1]):
+			EconomyManager.upgrade_miner(ai.team)
 
-	# Research tree: one timed slot per team plus a FIFO queue, bought with the
-	# same reserve rule as fighter upgrades. Research time is not difficulty-scaled
-	# — the difficulty multipliers already speed up the income that pays for it.
-	if ResearchManager.get_queue_size(ai.team) < _Constants.RESEARCH_QUEUE_MAX:
-		var tech: String = _pick_research()
-		if tech != "":
-			var data: Dictionary = ResearchManager.get_next_level_data(ai.team, tech)
-			if EconomyManager.get_coin(ai.team) - reserve >= int(data.cost) + 250:
-				ResearchManager.start_research(ai.team, tech)
+	# Fighter upgrades and research are luxuries bought only with no active
+	# save goal, keeping a cushion so training never stalls; cheapest first so
+	# the army scales steadily. Research time is not difficulty-scaled — the
+	# difficulty multipliers already speed up the income that pays for it.
+	if save_goal == 0:
+		coin = EconomyManager.get_coin(ai.team)
+		for unit_id in ["swordsman", "archer", "wizard", "dragon"]:
+			var upgrade_cost: int = EconomyManager.get_fighter_upgrade_cost(ai.team, unit_id)
+			if upgrade_cost > 0 and coin >= upgrade_cost + 250:
+				EconomyManager.upgrade_fighter(ai.team, unit_id)
+				coin -= upgrade_cost
+		if ResearchManager.get_queue_size(ai.team) < _Constants.RESEARCH_QUEUE_MAX:
+			var tech: String = _pick_research()
+			if tech != "":
+				var data: Dictionary = ResearchManager.get_next_level_data(ai.team, tech)
+				if EconomyManager.get_coin(ai.team) >= int(data.cost) + 250:
+					ResearchManager.start_research(ai.team, tech)
 	# The scan is free — fire it whenever the cooldown is up.
 	if ResearchManager.can_scan(ai.team):
 		ResearchManager.scan(ai.team)
@@ -106,8 +110,8 @@ func _run_economy() -> void:
 	# levels justify a larger mining crew to exploit the newly unlocked layers.
 	# The match's rolled opener shifts the quota (boom expands first, rush
 	# skimps on miners to field fighters sooner).
-	var queue_size: int = building.call("get_queue").size()
-	if queue_size < 3 and population < _Constants.MAX_UNITS:
+	var queue: Array = building.call("get_queue")
+	if queue.size() < 3 and population < _Constants.MAX_UNITS:
 		coin = EconomyManager.get_coin(ai.team)
 		var miner_target: int = 5 + level * 2 + int(GameManager.get_ai_opener_data().miner_delta)
 		miner_target = maxi(3, miner_target)
@@ -115,15 +119,55 @@ func _run_economy() -> void:
 		var faction: FactionData = FactionManager.get_faction(ai.team)
 		if faction != null and faction.faction_id == "industrial":
 			miner_target += 2
-		if miners < miner_target and coin >= FactionManager.get_unit_cost(ai.team, "miner"):
+		# Interleave: never queue a miner behind another queued miner —
+		# economy and army grow in parallel. The old miners-first-then-
+		# fighters rule starved the early army for minutes on a fresh match's
+		# low income. Exception: a wiped/nearly-wiped crew (<=1 miner) re-
+		# staffs at full speed before any fighter spending.
+		var miner_queued: bool = false
+		for entry in queue:
+			if entry.id == "miner":
+				miner_queued = true
+				break
+		if miners < miner_target and (not miner_queued or miners <= 1) and coin >= FactionManager.get_unit_cost(ai.team, "miner"):
 			building.call("queue_unit", "miner")
+		elif save_goal > 0 and _count_fighters() >= _Constants.ENEMY_DESPERATE_WAVE_SIZE:
+			pass  # holding for the current save goal — the fund must complete
 		else:
-			var pick: String = _pick_fighter_to_train(coin - int(reserve * 0.6))
+			# No save goal: free spending. Saving: fighters are held, except a
+			# skeleton army (raid/defense minimum) — teching with zero fighters
+			# for minutes hands the enemy free reign.
+			var pick: String = _pick_fighter_to_train(coin)
 			if pick != "":
 				building.call("queue_unit", pick)
 
-	# Pigeon scouts: train from towers when affordable and under the cap.
-	_try_train_pigeon(reserve)
+	# Pigeon scouts: train from towers when affordable and off the save-goal
+	# fund.
+	_try_train_pigeon(save_goal)
+
+
+## The price the AI is currently saving toward (0 = free spending). One goal
+## at a time, in build order: first lantern → L2 miners → first tower. Turtle
+## openers lead with the tower; rush openers never save for one (theirs come
+## organically from surplus). L3 miners is deliberately NOT a goal — it buys
+## from surplus whenever the wallet is fat. The structure goals mirror the
+## placement gates in ai_awareness (non-turtle towers wait for miner level 2),
+## or the goal would never complete and fighter spending would hold forever.
+func _current_save_goal(miners: int, level: int) -> int:
+	if miners <= 1 or ai._aggression_level == "defend":
+		return 0  # triage / fighting for its life: every coin is a body
+	var opener: Dictionary = GameManager.get_ai_opener_data()
+	var has_lantern: bool = not ai._awareness._own_surface_lanterns().is_empty()
+	var has_tower: bool = ai._awareness._own_tower_count() > 0
+	if bool(opener.tower_first) and not has_tower:
+		return ai._awareness._tower_cost()
+	if not has_lantern:
+		return Lantern.cost_for(false, 1)
+	if level == 1 and miners >= _Constants.ENEMY_MINER_UPGRADE_MIN_CREW:
+		return int(_Constants.MINER_UPGRADE_COSTS[2])
+	if not has_tower and bool(opener.get("tower_save", true)) and (bool(opener.tower_first) or level >= 2):
+		return ai._awareness._tower_cost()
+	return 0
 
 
 ## Picks the fighter type furthest below its target share of the army that the

@@ -133,9 +133,12 @@ func _pick_scout() -> Unit:
 
 ## Places surface lanterns covering the base + mine entrance (revamp.md 9.2):
 ## T1 early (cheap vision), then upgrades the oldest lantern to T2 once the
-## economy comfortably affords it. Uses the same reserve rule as the economy
-## tick so lantern spending never stalls the miner upgrades. Returns true when
-## a lantern was placed or upgraded this tick.
+## economy comfortably affords it. The FIRST lantern is a save-goal purchase
+## (cost only — vision is survival): the economy's build order holds fighter
+## spending until the wallet covers it. Further lanterns are surplus buys
+## (buffer + a 60% partial bank on the miner-upgrade reserve); upgrades keep
+## the full-reserve rule. Returns true when a lantern was placed or upgraded
+## this tick.
 func _run_lantern_placement() -> bool:
 	var building: Node2D = ai._combat._get_building()
 	if building == null:
@@ -148,7 +151,10 @@ func _run_lantern_placement() -> bool:
 	var coin: int = EconomyManager.get_coin(ai.team)
 	if lanterns.size() < _Constants.LANTERN_MAX_COUNT:
 		var cost: int = Lantern.cost_for(false, 1)
-		if coin - reserve < cost + _Constants.ENEMY_LANTERN_BUFFER:
+		var needed: int = cost
+		if not lanterns.is_empty():
+			needed += _Constants.ENEMY_LANTERN_BUFFER + int(reserve * 0.6)
+		if coin < needed:
 			return false
 		var cell: Vector2i = _pick_lantern_cell(building)
 		if cell == Vector2i(-9999, -9999):
@@ -185,34 +191,37 @@ func _run_lantern_placement() -> bool:
 ## Static defense: the AI builds towers guarding its base and mine entrance,
 ## mirroring the player-side placement rules (_tower_placement_error in
 ## player_build_placement.gd) on the AI's half of the map. Turtle openers
-## build on a leaner buffer; other openers wait until a lantern stands and a
-## bigger cushion exists. Towers also unlock pigeon scouts (autonomous patrol,
-## trained from the tower by the economy tick). Returns true when a tower was
-## placed this tick.
+## build immediately; other openers wait for a lantern and the L2 economy
+## (mirroring the save-goal build order in ai_economy). The first tower is a
+## save-goal purchase (cost only); later towers are surplus buys. Towers also
+## unlock pigeon scouts (autonomous patrol, trained from the tower by the
+## economy tick). Returns true when a tower was placed this tick.
 func _run_tower_placement() -> bool:
 	var building: Node2D = ai._combat._get_building()
 	if building == null:
 		return false
 	var max_count: int = _Constants.TOWER_MAX_COUNT \
 		+ int(ResearchManager.get_stat_bonus(ai.team, "tower_max_count_bonus"))
-	var count: int = 0
-	for tower in ai.get_tree().get_nodes_in_group("towers"):
-		if tower.team == ai.team:
-			count += 1
+	var count: int = _own_tower_count()
 	if count >= max_count:
 		return false
 	var opener: Dictionary = GameManager.get_ai_opener_data()
-	if not opener.tower_first and _own_surface_lanterns().is_empty():
-		return false  # vision before static defense
-	var cost: int = FactionManager.get_tower_cost(ai.team)
-	if ResearchManager.has_branch(ai.team, "siege_master"):
-		cost = roundi(cost * _Constants.SIEGE_MASTER_TOWER_COST_MULT)
+	if not opener.tower_first:
+		if _own_surface_lanterns().is_empty():
+			return false  # vision before static defense
+		if EconomyManager.get_miner_level(ai.team) < 2:
+			return false  # economy before fortification (save-goal order)
+	var cost: int = _tower_cost()
 	var reserve: int = 0
 	var level: int = EconomyManager.get_miner_level(ai.team)
 	if _Constants.MINER_UPGRADE_COSTS.has(level + 1):
 		reserve = _Constants.MINER_UPGRADE_COSTS[level + 1]
-	var buffer: int = _Constants.ENEMY_TOWER_EARLY_BUFFER if opener.tower_first else _Constants.ENEMY_TOWER_BUFFER
-	if EconomyManager.get_coin(ai.team) - reserve < cost + buffer:
+	# First tower: cost only (the economy saves for it). Later towers add the
+	# buffer and the 60% partial bank.
+	var needed: int = cost
+	if count > 0:
+		needed += _Constants.ENEMY_TOWER_BUFFER + int(reserve * 0.6)
+	if EconomyManager.get_coin(ai.team) < needed:
 		return false
 	var cell: Vector2i = _pick_tower_cell(building)
 	if cell == Vector2i(-9999, -9999):
@@ -327,6 +336,23 @@ func _own_surface_lanterns() -> Array:
 		if lantern.team == ai.team and not lantern.is_underground_lantern:
 			result.append(lantern)
 	return result
+
+
+func _own_tower_count() -> int:
+	var n: int = 0
+	for tower in ai.get_tree().get_nodes_in_group("towers"):
+		if tower.team == ai.team:
+			n += 1
+	return n
+
+
+## Faction/research-adjusted tower price — single source for the placement
+## gate and the economy's save goal (_current_save_goal in ai_economy).
+func _tower_cost() -> int:
+	var cost: int = FactionManager.get_tower_cost(ai.team)
+	if ResearchManager.has_branch(ai.team, "siege_master"):
+		cost = roundi(cost * _Constants.SIEGE_MASTER_TOWER_COST_MULT)
+	return cost
 
 
 func _get_mine_entry() -> Node2D:

@@ -222,11 +222,24 @@ func test_ai_builds_lantern_when_affordable() -> void:
 	assert_true(cell.x >= 2, "the lantern is on the AI's half of the map")
 
 
-func test_ai_lantern_respects_coin_buffer() -> void:
-	# 200 cost + 500 L2 reserve + 150 buffer = 850 needed; 700 is not enough.
-	EconomyManager.add_coin(ENEMY, 200)  # 500 start + 200 = 700
-	_ai._run_lantern_placement()
-	assert_eq(_enemy_lanterns().size(), 0, "no lantern while the reserve + buffer aren't met")
+func test_first_lantern_needs_only_its_cost() -> void:
+	# The first lantern is a save-goal purchase: cost only, no bank.
+	EconomyManager.spend_coin(ENEMY, 350)  # 500 start - 350 = 150 < 200
+	assert_false(_ai._run_lantern_placement(), "below cost even the first lantern waits")
+	EconomyManager.add_coin(ENEMY, 100)  # 250 ≥ 200
+	assert_true(_ai._run_lantern_placement(), "the first lantern buys at cost — vision is survival")
+	assert_eq(_enemy_lanterns().size(), 1)
+
+
+func test_additional_lanterns_share_the_upgrade_bank() -> void:
+	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
+	# Second lantern onwards competes with the upgrade fund on the 60% partial
+	# bank: 200 cost + 150 buffer + 300 (0.6 × 500 L2 reserve) = 650.
+	EconomyManager.add_coin(ENEMY, 100)  # 600
+	assert_false(_ai._run_lantern_placement(), "600 is short of the partial-bank price for lantern #2")
+	EconomyManager.add_coin(ENEMY, 50)  # 650
+	assert_true(_ai._run_lantern_placement(), "at 650 the second lantern goes in")
+	assert_eq(_enemy_lanterns().size(), 2)
 
 
 func test_ai_upgrades_oldest_lantern_to_t2() -> void:
@@ -248,13 +261,14 @@ func test_ai_upgrades_oldest_lantern_to_t2() -> void:
 
 # ─── Tower placement ───
 
-func test_ai_builds_tower_with_vision_and_a_comfortable_bank() -> void:
+func test_ai_builds_tower_with_vision_and_the_l2_economy() -> void:
 	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
-	EconomyManager.add_coin(ENEMY, 800)  # 1300 ≥ 300 cost + 400 buffer + 500 L2 reserve
-	assert_true(_ai._run_tower_placement(), "with vision secured and a cushion, the AI fortifies")
+	EconomyManager.add_coin(ENEMY, 800)  # 1300
+	EconomyManager.upgrade_miner(ENEMY)  # L2 economy stands (800 left)
+	assert_true(_ai._run_tower_placement(), "with vision and the L2 economy, the AI fortifies")
 	var towers: Array = _enemy_towers()
 	assert_eq(towers.size(), 1, "the tower stands")
-	assert_eq(EconomyManager.get_coin(ENEMY), 1000, "the 300g tower cost is paid")
+	assert_eq(EconomyManager.get_coin(ENEMY), 500, "the 300g tower cost is paid")
 	var cell: Vector2i = _grid.world_to_grid(towers[0].global_position)
 	assert_eq(cell.y, 0, "towers stand on the surface row")
 	assert_true(cell.x >= 2, "the tower is on the AI's half of the map")
@@ -266,18 +280,29 @@ func test_ai_tower_waits_for_lantern_vision() -> void:
 	assert_eq(_enemy_towers().size(), 0)
 
 
+func test_non_turtle_towers_wait_for_the_l2_economy() -> void:
+	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
+	EconomyManager.add_coin(ENEMY, 5000)  # rich, but still on L1 miners
+	assert_false(_ai._run_tower_placement(), "economy before fortification: no tower at miner level 1")
+	assert_eq(_enemy_towers().size(), 0)
+
+
 func test_turtle_opener_builds_towers_first() -> void:
 	GameManager.ai_opener = "turtle"
-	EconomyManager.add_coin(ENEMY, 600)  # 1100 ≥ 300 cost + 200 early buffer + 500 L2 reserve
-	assert_true(_ai._run_tower_placement(), "turtle leads with towers on a leaner buffer, no lantern needed")
+	EconomyManager.add_coin(ENEMY, 600)  # 1100 ≥ 300 cost
+	assert_true(_ai._run_tower_placement(), "turtle leads with towers: no lantern, no L2 needed")
 	assert_eq(_enemy_towers().size(), 1)
 
 
-func test_ai_tower_respects_the_coin_buffer() -> void:
+func test_first_tower_needs_only_its_cost() -> void:
 	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
-	EconomyManager.add_coin(ENEMY, 100)  # 600 - 500 reserve < 300 cost + 400 buffer
-	assert_false(_ai._run_tower_placement(), "a lean bank keeps the AI saving, not turtling")
-	assert_eq(_enemy_towers().size(), 0)
+	EconomyManager.add_coin(ENEMY, 500)  # 1000
+	EconomyManager.upgrade_miner(ENEMY)  # L2 economy stands (500 left)
+	EconomyManager.spend_coin(ENEMY, 250)  # 250 < 300
+	assert_false(_ai._run_tower_placement(), "below cost the first tower waits")
+	EconomyManager.add_coin(ENEMY, 100)  # 350 ≥ 300
+	assert_true(_ai._run_tower_placement(), "the first tower buys at cost once the L2 economy stands")
+	assert_eq(_enemy_towers().size(), 1)
 
 
 func test_ai_tower_count_respects_the_cap() -> void:
@@ -286,6 +311,19 @@ func test_ai_tower_count_respects_the_cap() -> void:
 	_spawn_tower(ENEMY, Vector2(840, 16))
 	EconomyManager.add_coin(ENEMY, 5000)
 	assert_false(_ai._run_tower_placement(), "TOWER_MAX_COUNT towers is enough")
+	assert_eq(_enemy_towers().size(), 2)
+
+
+func test_second_tower_shares_the_upgrade_bank() -> void:
+	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
+	_spawn_tower(ENEMY, Vector2(800, 16))
+	EconomyManager.add_coin(ENEMY, 500)  # 1000
+	EconomyManager.upgrade_miner(ENEMY)  # L2 (500 left) — non-turtle towers need it
+	# Tower #2 is a surplus buy: 300 cost + 400 buffer + 900 (0.6 × 1500 L3 reserve) = 1600.
+	EconomyManager.add_coin(ENEMY, 1000)  # 1500
+	assert_false(_ai._run_tower_placement(), "the second tower waits for the partial bank")
+	EconomyManager.add_coin(ENEMY, 100)  # 1600
+	assert_true(_ai._run_tower_placement(), "at 1600 the second tower goes in")
 	assert_eq(_enemy_towers().size(), 2)
 
 

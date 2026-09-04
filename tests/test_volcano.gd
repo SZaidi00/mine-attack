@@ -260,7 +260,13 @@ func test_survival_reduces_burn_patch_damage() -> void:
 	var protected: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _grid.grid_to_world(Vector2i(-21, 0)))
 	protected.stop()
 	_spawn_burn_patch(unprotected.global_position, 100.0, 2.0)
-	await wait_seconds(0.7)
+	# Measure exactly one patch tick: the tick timer starts at 0, so the first
+	# tick lands on the patch's first frame and the next at TICK_INTERVAL
+	# (0.5s). A 0.2s window catches exactly one full-power tick — before any
+	# lingering-burn tick (BURN_TICK_INTERVAL 0.5s) and before an AI-retasked
+	# miner can walk out of the 40px radius. A longer window made the
+	# comparison frame-phase flaky.
+	await wait_seconds(0.2)
 	var unprotected_damage: float = unprotected.data.max_hp - unprotected.hp
 	var protected_damage: float = protected.data.max_hp - protected.hp
 	assert_gt(unprotected_damage, protected_damage, "Survival Instinct reduces burn patch damage")

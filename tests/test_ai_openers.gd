@@ -3,10 +3,11 @@ extends GutTest
 # AI openers (GameManager.roll_ai_opener): one of balanced/rush/boom/turtle is
 # rolled per real match, weighted by the enemy faction's personality. The
 # opener shifts the wave-size threshold (ai_combat._wave_threshold), the miner
-# quota (ai_economy), and the build order (ai_awareness: towers before
-# lanterns — tower tests live in test_ai_awareness.gd). "balanced" is the
-# neutral default the rest of the suite relies on; these tests set ai_opener
-# directly and verify each lever moves.
+# quota (ai_economy), and the build order (the ai_economy save ladder +
+# ai_awareness placement: turtle saves for towers first, rush never saves for
+# one — tower tests live in test_ai_awareness.gd). "balanced" is the neutral
+# default the rest of the suite relies on; these tests set ai_opener directly
+# and verify each lever moves.
 
 const PLAYER: int = 0
 const ENEMY: int = 1
@@ -55,6 +56,13 @@ func after_each() -> void:
 	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
 	GameManager.ai_opener = "balanced"
 	FactionManager.enemy_faction_id = ""
+	# Structure fixtures are added to the scene, not autofree'd.
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		if lantern.team == ENEMY:
+			lantern.free()
+	for tower in get_tree().get_nodes_in_group("towers"):
+		if tower.team == ENEMY:
+			tower.free()
 
 
 func _spawn_unit(tres_path: String, team: int, pos: Vector2) -> Node2D:
@@ -69,6 +77,16 @@ func _spawn_unit(tres_path: String, team: int, pos: Vector2) -> Node2D:
 
 func _spawn_fighter(team: int, pos: Vector2) -> Node2D:
 	return _spawn_unit("res://scripts/resources/units/swordsman.tres", team, pos)
+
+
+## Structure fixtures skip placement validation — they only need to exist in
+## the group with the right team. after_each frees the ENEMY ones.
+func _spawn_lantern(team: int, pos: Vector2) -> Node2D:
+	var lantern: Node2D = load("res://scenes/lantern.tscn").instantiate()
+	lantern.set("team", team)
+	lantern.position = pos
+	_main.get_node("Structures").add_child(lantern)
+	return lantern
 
 
 func _building_for(team: int) -> Node2D:
@@ -141,6 +159,23 @@ func test_boom_opener_expands_the_miner_quota() -> void:
 	GameManager.ai_opener = "boom"
 	_ai._run_economy()
 	assert_true(_queued_ids().has("miner"), "boom expands the mining crew first")
+
+
+# ─── Save-goal build order ───
+
+func test_turtle_opener_saves_for_the_tower_first() -> void:
+	GameManager.ai_opener = "turtle"
+	assert_eq(_ai._economy._current_save_goal(3, 1), FactionManager.get_tower_cost(ENEMY),
+		"turtle fortifies before it buys vision or the L2 economy")
+
+
+func test_rush_opener_never_saves_for_a_tower() -> void:
+	# Lantern standing, L2 economy running: any other opener would now save
+	# for the first tower — rush keeps training fighters instead.
+	_spawn_lantern(ENEMY, Vector2(_building_for(ENEMY).global_position.x - 160, 16))
+	GameManager.ai_opener = "rush"
+	assert_eq(_ai._economy._current_save_goal(5, 2), 0,
+		"rush spends every coin on the attack; towers come only from surplus")
 
 
 # ─── The roll ───

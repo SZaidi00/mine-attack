@@ -893,17 +893,24 @@ const ENEMY_MINER_RESCAN_INTERVAL: float = 2.0
 # out this long after the previous scout dies.
 const ENEMY_SCOUT_TIME: float = 60.0
 const ENEMY_SCOUT_RETRY_DELAY: float = 30.0
-# AI lantern placement (Phase 8): decision cadence and coin buffers kept on
-# top of the miner-upgrade reserve (build T1 early, upgrade to T2 only when
-# the economy is comfortable).
+# AI lantern placement (Phase 8): decision cadence, plus coin buffers for
+# second-and-later lanterns and upgrades (the first lantern is a save-goal
+# purchase at cost — the economy's build order in ai_economy holds fighter
+# spending until the wallet covers it). Surplus buys add a 60% partial bank
+# on the miner-upgrade reserve; upgrades keep the full-reserve rule.
 const ENEMY_LANTERN_INTERVAL: float = 5.0
 const ENEMY_LANTERN_BUFFER: int = 150
 const ENEMY_LANTERN_UPGRADE_BUFFER: int = 400
-# AI tower placement: same reserve rule as lanterns. Turtle openers build
-# towers first on a leaner buffer; other openers wait for a lantern and a
-# bigger cushion. Towers also unlock AI pigeon scouts (autonomous patrol).
+# AI tower placement: same save-goal rule as lanterns (first tower at cost,
+# later towers add this buffer + the partial bank). Turtle openers build
+# towers first; other openers wait for a lantern and the L2 economy. Towers
+# also unlock AI pigeon scouts (autonomous patrol).
 const ENEMY_TOWER_BUFFER: int = 400
-const ENEMY_TOWER_EARLY_BUFFER: int = 200
+# Miner upgrades are only bought once this many miners are alive: upgrading a
+# skeleton crew is a trap (the old AI blew its 500g starting wallet on the L2
+# upgrade at 0:00 with 2 miners and stayed broke for minutes). Matches the
+# miner-cull floor — a "full crew" is 5.
+const ENEMY_MINER_UPGRADE_MIN_CREW: int = 5
 # Re-scouting (tier 2+): after the enemy faction is identified, a swordsman
 # periodically re-visits the enemy base to refresh tower/army intel — skipped
 # while an own pigeon is out (pigeons auto-patrol) or while defending.
