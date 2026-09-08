@@ -7,6 +7,7 @@ const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
 const HUDStyling = preload("res://scripts/ui/hud_styling.gd")
 const HUDMenus = preload("res://scripts/ui/hud_menus.gd")
 const HUDUpdates = preload("res://scripts/ui/hud_updates.gd")
+const MatchGraph = preload("res://scripts/ui/match_graph.gd")
 
 const _ICON_COIN: Texture2D = preload("res://frost_mines_assets/icons/icon_coin.png")
 const _ICON_MINER: Texture2D = preload("res://frost_mines_assets/icons/icon_miner.png")
@@ -86,6 +87,9 @@ func _ready() -> void:
 	WeatherManager.reset()
 	# Same for the AI's intel: beliefs reference the previous match's units.
 	AIBeliefSystem.reset()
+	# Match stats also start at match start: metadata (difficulty, factions,
+	# opener) is read here, after the main menu has made its picks.
+	MatchStats.reset()
 	_styling._ignore_mouse_recursive($TopBar)
 	_styling._ignore_mouse_recursive($BottomBar)
 	_styling._ignore_mouse_recursive(_game_over_panel)
@@ -310,6 +314,9 @@ func _add_unit_breakdown_icons() -> void:
 		"Archer": _ICON_ARCHER,
 		"Wizard": _ICON_WIZARD,
 		"Dragon": _ICON_DRAGON,
+		# No sprite asset exists for the pigeon; reuse the build menu's
+		# generated pixel-art bird so the trailing count reads as the pigeon.
+		"Pigeon": _menus._make_pigeon_icon(),
 	}
 	for unit_name: String in _unit_count_labels:
 		var label: Label = _unit_count_labels[unit_name]
@@ -790,19 +797,39 @@ func _on_game_over(winner: GameManager.Team) -> void:
 
 	var stats: Label = Label.new()
 	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var total_seconds: int = int(GameManager.match_time)
-	var minutes: int = total_seconds / 60
-	var seconds: int = total_seconds % 60
-	stats.text = "Time: %d:%02d\nUnits Trained: %d\nCoin Mined: %d" % [
-		minutes,
-		seconds,
-		EconomyManager.get_units_trained(GameManager.Team.PLAYER),
-		EconomyManager.get_coin_mined(GameManager.Team.PLAYER)
-	]
+	stats.text = _format_game_over_stats()
 	container.add_child(stats)
 	container.move_child(stats, 1)
+	# Coin/population graphs from the MatchStats timeline (needs at least the
+	# t=0 baseline plus one more point to draw a line).
+	var timeline: Array = MatchStats.last_summary.get("timeline", [])
+	if timeline.size() >= 2:
+		var graph := MatchGraph.new(timeline)
+		container.add_child(graph)
+		container.move_child(graph, 2)
 	var fade: Tween = create_tween()
 	fade.tween_property(_game_over_panel, "modulate:a", 1.0, 0.5)
+
+
+## Post-match summary table for the game-over panel. Reads MatchStats'
+## finalized summary (written to user://match_logs/ on game over) so the panel
+## and the JSON log always agree.
+func _format_game_over_stats() -> String:
+	var summary: Dictionary = MatchStats.last_summary
+	var total_seconds: int = int(summary.get("duration_sec", GameManager.match_time))
+	var lines: Array[String] = ["Time: %d:%02d" % [total_seconds / 60, total_seconds % 60]]
+	var teams: Dictionary = summary.get("teams", {})
+	if not teams.is_empty():
+		var player: Dictionary = teams["player"]
+		var enemy: Dictionary = teams["enemy"]
+		lines.append("%-14s %6s %6s" % ["", "You", "Enemy"])
+		lines.append("%-14s %6d %6d" % ["Units trained", player.units_trained, enemy.units_trained])
+		lines.append("%-14s %6d %6d" % ["Units lost", player.units_lost, enemy.units_lost])
+		lines.append("%-14s %6d %6d" % ["Coin mined", player.coin_mined, enemy.coin_mined])
+		lines.append("%-14s %6d %6d" % ["Damage dealt", player.damage_dealt, enemy.damage_dealt])
+	if MatchStats.last_log_path != "":
+		lines.append("Match log: %s" % ProjectSettings.globalize_path(MatchStats.last_log_path))
+	return "\n".join(lines)
 
 
 func _play_again() -> void:

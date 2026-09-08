@@ -83,6 +83,13 @@ func take_damage(amount: int, attacker: Node2D = null, environmental: bool = fal
 	unit.hp -= amount
 	unit._regen_delay = Constants.UNIT_REGEN_DELAY
 	unit._damage_log.append([0.0, amount])
+	# Match stats: credit the attacker's team with post-armor damage (units,
+	# towers, anything with a team property); environmental chip damage passes
+	# no attacker and is not credited to anyone.
+	if attacker != null:
+		var attacker_team = attacker.get("team")
+		if attacker_team != null:
+			MatchStats.record_damage(attacker_team, amount)
 	if not environmental:
 		unit._hit_flash_timer = 0.15
 		_spawn_damage_popup(amount)

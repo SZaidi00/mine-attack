@@ -79,8 +79,9 @@ This produces `build/MineAttack.html`, `build/MineAttack.app`, `build/MineAttack
 
 - **Left-click / drag**: select units (Shift adds to selection).
 - **Right-click**: context order — move, attack, mine, breach the wall, enter/exit the mine.
-- **1 / 2 / 3 / 4**: train Miner / Swordsman / Archer / Wizard.
-- **Ctrl+A / Ctrl+M / Ctrl+F**: select all units / miners / fighters.
+- **1 / 2 / 3 / 4 / 5 / 6**: train Miner / Swordsman / Archer / Wizard / Dragon / Pigeon.
+- **Ctrl+A / Ctrl+M / Ctrl+F / Ctrl+D**: select all units / miners / fighters / dragons.
+- **R**: open the research panel. **K / Delete**: disband selected units.
 - **WASD / Arrow keys**: pan camera. **Mouse wheel**: zoom.
 - **Tab**: toggle surface / underground camera view.
 - **Space / Esc**: pause menu.
@@ -107,24 +108,21 @@ The central wall separating the two mines can be broken by miners on either side
 ## Game concepts
 
 ### Factions
-Before each match, both sides pick a faction. Each faction grants a passive bonus and a unit ability you can trigger with the ability button:
+Before each match you pick one of three factions; the enemy's faction is a hidden random pick, revealed only when one of your units gets close enough to the enemy building to identify it. Each faction grants passive stat modifiers and activates a set of unit abilities:
 
-- **Brute**: tougher units; **Berserk** ability boosts attack speed.
-- **Shadow**: faster, stealthier units; **Blink** teleports a unit.
-- **Ironclad**: stronger structures and siege; **Heavy Bolt** and **Crush**.
-- **Arcane**: wizard-focused; **Mana Burn** and **Arcane Shot**.
-- **Swarm**: cheaper, faster-training units; **Swarm** and **Volley**.
-- **Explorer**: mining and vision bonuses; **Miner Reveal** and **Supply Drop**.
+- **Arcane**: magic-focused — stronger wizards, **Rune Blade** first-strike bonus, **Blink**, **Arcane Shot**, **Mana Burn**, **Miner Reveal**.
+- **Brute**: raw combat power — tankier swordsmen, **Berserk** rage, **Heavy Bolt**, **Fortify**, **Miner Fight Back**, **Dragon Crush**.
+- **Industrial**: economy and production — cheaper fighters, bonus starting gold and an extra miner, faster tower building, cheaper walls, **Swarm**, **Volley**, **Supply Drop**.
 
 Hover the faction cards in the main menu to see the full description.
 
 ### Fog of war and vision
-The map is hidden until your units or structures reveal it. **Lanterns** provide permanent vision, can be upgraded through three tiers, and shelter miners during snowstorms. Place them from the build menu. Towers and walls also block sight and movement until destroyed.
+The map is hidden until your units or structures reveal it. **Lanterns** provide permanent vision and can be upgraded through three tiers. Place them from the build menu. Towers and walls also block sight and movement until destroyed.
 
 ### Weather and dynamic terrain
 The battlefield changes over time:
 
-- **Snowstorms** reduce vision and movement; keep miners near lanterns or they take frost damage.
+- **Snowstorms** reduce vision and movement; surface units take frost damage. Get miners underground or back to the mine entry until the storm passes (underground units and buildings are safe).
 - **Volcano eruptions** rain meteors on the surface, leaving burning ground that damages units.
 - **Lava rises** from the bottom of the mine, forcing you upward and eventually turning flooded cells into new ore.
 - **Cave-ins** drop 3×3 rock blocks that deal damage and push units.
@@ -135,14 +133,14 @@ Open the research panel with **R** to advance along mutually-exclusive branches.
 ### Structures
 Use the radial build menu to place:
 
-- **Lanterns**: vision and snowstorm shelter.
+- **Lanterns**: permanent vision, upgradeable through three tiers.
 - **Towers**: ranged defense that attacks enemies in range.
 - **Walls**: block enemy movement and sight.
 - **Traps**: hidden area damage triggered by enemy units.
 
 ## Win condition
 
-Destroy the enemy building before it destroys yours. Difficulty (Easy / Normal / Hard / Nightmare) scales the AI's economy, training speed, aggression, and how fiercely its sieges fight back.
+Destroy the enemy building before it destroys yours. Difficulty (Easy / Normal / Hard / Nightmare / Godly) scales the AI's economy, training speed, aggression, and how fiercely its sieges fight back.
 
 ---
 

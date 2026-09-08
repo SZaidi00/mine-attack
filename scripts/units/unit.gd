@@ -599,6 +599,7 @@ func _die() -> void:
 	remove_from_group("units")
 	remove_from_group(team_name())
 	EconomyManager.remove_population(team, data.population)
+	MatchStats.record_unit_death(team)
 	died.emit(self)
 	queue_redraw()
 

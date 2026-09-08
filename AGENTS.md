@@ -29,11 +29,12 @@ mine-attack/
 ├── scripts/
 │   ├── autoload/      # constants, game_manager, economy_manager, faction_manager,
 │                      # research_manager, debug_log, audio_manager, settings_manager,
-│                      # weather_manager, ai_belief_system
+│                      # weather_manager, ai_belief_system, match_stats
 │   ├── controllers/   # ai_controller, player_controller + helper modules
 │   ├── resources/     # unit_data.gd, faction_data.gd, units/*.tres, factions/*.tres
 │   ├── ui/            # hud + helper modules, debug_overlay, layer_indicator,
-│                      # training_queue_panel, research_panel, unit_button, main_menu
+│                      # training_queue_panel, research_panel, unit_button, main_menu,
+│                      # match_graph
 │   ├── effects/       # coin_popup, damage_popup, coin_pickup, reject_popup,
 │                      # burning_ground, meteor, volcano_background
 │   ├── units/         # unit.gd + helper modules, projectile.gd, unit_pigeon.gd
@@ -62,7 +63,7 @@ mine-attack/
 - `UI/HUD` — top/bottom bars, queue panel, pause/build menus, game-over panel.
 - `DebugOverlay` — runtime debug overlay.
 
-Autoloads (load order from `project.godot`): `Constants`, `GameManager`, `FactionManager`, `EconomyManager`, `ResearchManager`, `DebugLog`, `AudioManager`, `SettingsManager`, `WeatherManager`, `AIBeliefSystem`.
+Autoloads (load order from `project.godot`): `Constants`, `GameManager`, `FactionManager`, `EconomyManager`, `ResearchManager`, `DebugLog`, `AudioManager`, `SettingsManager`, `WeatherManager`, `AIBeliefSystem`, `MatchStats`.
 
 ## Code organization
 
@@ -79,6 +80,7 @@ Global singletons. All hold per-match state that survives scene reloads; `hud.gd
 - `settings_manager.gd` — window resolution persistence (desktop only) and SFX bus volume persistence (all platforms), both in `user://settings.cfg`.
 - `weather_manager.gd` — snowstorms + volcano eruptions: independent game-time state machines, scheduling/damage/duration scaled by difficulty. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` and `WeatherManager.set_volcano_events_enabled(false)` (tests force events instead).
 - `ai_belief_system.gd` — per-team belief maps (cells/unit sightings/enemy-faction guess) built only from that team's vision; confidence decays on stale intel. Reset per match via `AIBeliefSystem.reset()`.
+- `match_stats.gd` — per-match stats recording: units lost (hooked from `Unit._die`), damage dealt (hooked from unit `take_damage`, credited to the attacker's team), and a 5s coin/population timeline (relative to match start, with a t=0 baseline and a match-end point). Reset per match from `hud._ready` (metadata: difficulty/factions/opener captured there); on `GameManager.game_over` it finalizes `last_summary` for the game-over panel and writes a JSON log to `user://match_logs/`.
 
 ### `scripts/controllers/`
 
@@ -128,7 +130,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 ### `scripts/ui/`
 
 - `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners.
-- `hud.gd` — node references, signal wiring, game-over flow, lava/weather/volcano warning banners, faction-identified popup, research-completion toasts; delegates to helpers.
+- `hud.gd` — node references, signal wiring, game-over flow (summary table + `MatchGraph` coin/population charts), lava/weather/volcano warning banners, faction-identified popup, research-completion toasts; delegates to helpers.
   - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
   - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists).
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
