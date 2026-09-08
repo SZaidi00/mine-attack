@@ -44,9 +44,9 @@ func _spawn_fighter(team: int, pos: Vector2) -> Node2D:
 
 
 func test_auto_engage_marks_hold_and_auto_flags() -> void:
-	var fighter: Node2D = _spawn_fighter(PLAYER, Vector2(700, 16))
+	var fighter: Node2D = _spawn_fighter(PLAYER, Vector2(-700, 16))
 	fighter.call("stop")  # defend stance: hold here
-	var enemy: Node2D = _spawn_fighter(ENEMY, Vector2(500, 16))  # in sight range
+	var enemy: Node2D = _spawn_fighter(ENEMY, Vector2(-500, 16))  # in sight range
 	fighter._handle_idle_fighter()
 	assert_eq(fighter._state, Unit.State.ATTACK, "a holder must still defend itself")
 	assert_true(fighter.get("_auto_engaged"), "the idle scan's pick must be marked as auto-engaged")
@@ -55,23 +55,23 @@ func test_auto_engage_marks_hold_and_auto_flags() -> void:
 
 
 func test_defend_chase_drops_beyond_leash() -> void:
-	var fighter: Node2D = _spawn_fighter(PLAYER, Vector2(700, 16))
+	var fighter: Node2D = _spawn_fighter(PLAYER, Vector2(-700, 16))
 	fighter.call("stop")
-	_spawn_fighter(ENEMY, Vector2(500, 16))
+	_spawn_fighter(ENEMY, Vector2(-500, 16))
 	fighter._handle_idle_fighter()
 	assert_eq(fighter._state, Unit.State.ATTACK)
-	fighter.global_position = Vector2(200, 16)  # chased 500px from the post
+	fighter.global_position = Vector2(-200, 16)  # chased 500px from the post
 	fighter._process_attack(0.016)
 	assert_eq(fighter._state, Unit.State.IDLE, "past the leash the chase must end")
 	assert_null(fighter.get("_target_unit"))
 
 
 func test_defend_chase_within_leash_continues() -> void:
-	var fighter: Node2D = _spawn_fighter(PLAYER, Vector2(700, 16))
+	var fighter: Node2D = _spawn_fighter(PLAYER, Vector2(-700, 16))
 	fighter.call("stop")
-	_spawn_fighter(ENEMY, Vector2(500, 16))
+	_spawn_fighter(ENEMY, Vector2(-500, 16))
 	fighter._handle_idle_fighter()
-	fighter.global_position = Vector2(400, 16)  # 300px from the post: inside the leash
+	fighter.global_position = Vector2(-400, 16)  # 300px from the post: inside the leash
 	fighter._process_attack(0.016)
 	assert_eq(fighter._state, Unit.State.ATTACK, "a little chase is fine")
 

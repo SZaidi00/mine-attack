@@ -289,6 +289,17 @@ func _process_attack(delta: float) -> void:
 			return
 
 	if unit.get_combat_position().distance_to(range_pos) > unit.data.attack_range:
+		# Midfield leash: an auto-engaged chase ends at the central line —
+		# the unit lets go and walks home instead of pursuing a fleeing enemy
+		# into the enemy half. Only applies while actually chasing (in-range
+		# fights at the line are not interrupted) and never to explicit
+		# orders, stance marches, or rally hunts (_auto_engaged is only set
+		# by the idle auto-attack scan).
+		if unit._auto_engaged and unit._target_unit != null and not unit.is_underground \
+				and unit._vision._is_enemy_half(unit.global_position):
+			unit._clear_target()
+			unit._set_state(Unit.State.IDLE, "midfield leash reached")
+			return
 		# Re-path only when there is no path or the destination has moved
 		# significantly (moving unit targets), not every physics frame.
 		if unit._path.is_empty() or unit._path[unit._path.size() - 1].distance_to(path_pos) > GridWorld.CELL_SIZE * 0.75:

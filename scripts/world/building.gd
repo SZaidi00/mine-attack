@@ -214,17 +214,42 @@ func _process(delta: float) -> void:
 		queue_changed.emit(_queue)
 
 
-func queue_unit(unit_id: String) -> bool:
+## Final train cost for a unit from this building: faction pricing plus
+## research discounts (Dragon Mastery / Broodmother for dragons). Single
+## source of truth shared by queue_unit and the HUD's train buttons so the
+## displayed price always matches what will actually be charged. Returns -1
+## for unknown units.
+func get_train_cost(unit_id: String) -> int:
 	if not _resources.has(unit_id):
-		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "unknown unit_id " + unit_id)
-		return false
-	var data: UnitData = _resources[unit_id]
+		return -1
 	# Faction-modified price (Revamp Phase 2); base price when factionless.
 	var cost: int = FactionManager.get_unit_cost(team, unit_id)
 	# Dragon Mastery / Broodmother discounts for dragon training.
 	if unit_id == "dragon":
 		var dragon_cost_mult: float = maxf(0.1, 1.0 - ResearchManager.get_stat_bonus(team, "dragon_cost_mult"))
 		cost = maxi(1, roundi(cost * dragon_cost_mult))
+	return cost
+
+
+## Final train time for a unit from this building, including research
+## reductions (Dragon Mastery / Broodmother for dragons). Returns -1 for
+## unknown units.
+func get_train_time(unit_id: String) -> float:
+	if not _resources.has(unit_id):
+		return -1.0
+	var train_time: float = _resources[unit_id].train_time
+	if unit_id == "dragon":
+		var dragon_time_mult: float = maxf(0.1, 1.0 - ResearchManager.get_stat_bonus(team, "dragon_train_time_mult"))
+		train_time *= dragon_time_mult
+	return train_time
+
+
+func queue_unit(unit_id: String) -> bool:
+	if not _resources.has(unit_id):
+		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "unknown unit_id " + unit_id)
+		return false
+	var data: UnitData = _resources[unit_id]
+	var cost: int = get_train_cost(unit_id)
 	if not EconomyManager.can_afford(team, cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "cannot afford " + unit_id)
 		return false
@@ -234,10 +259,7 @@ func queue_unit(unit_id: String) -> bool:
 	if not EconomyManager.spend_coin(team, cost):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "spend failed " + unit_id)
 		return false
-	var train_time: float = data.train_time
-	if unit_id == "dragon":
-		var dragon_time_mult: float = maxf(0.1, 1.0 - ResearchManager.get_stat_bonus(team, "dragon_train_time_mult"))
-		train_time *= dragon_time_mult
+	var train_time: float = get_train_time(unit_id)
 	_queue.append({ "id": unit_id, "data": data, "cost": cost, "remaining": train_time, "train_time": train_time })
 	DebugLog.log_command("Building %d" % get_instance_id(), "queue_unit", unit_id)
 	queue_changed.emit(_queue)

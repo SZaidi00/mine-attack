@@ -424,6 +424,21 @@ func test_broodmother_discounts_dragon_cost_and_train_time() -> void:
 	assert_almost_eq(entry.train_time, expected_time, 0.001)
 
 
+func test_broodmother_discount_shows_on_dragon_train_button() -> void:
+	var button: UnitButton = _main.get_node("UI/HUD/BottomBar/MarginContainer/HBoxContainer/DragonButton")
+	assert_eq(button._train_cost(), Constants.COSTS["dragon"], "full price before research")
+	ResearchManager._levels[PLAYER]["dragon_mastery"] = 1
+	ResearchManager._levels[PLAYER]["broodmother"] = 1
+	# Completing research emits this signal; the button listens to refresh.
+	ResearchManager.research_changed.emit(PLAYER)
+	var expected_cost: int = roundi(Constants.COSTS["dragon"] * (1.0 - Constants.BROODMOTHER_COST_MULT))
+	var expected_time: float = Constants.TRAIN_TIMES["dragon"] * (1.0 - Constants.DRAGON_MASTERY_TRAIN_TIME_MULT - Constants.BROODMOTHER_TRAIN_TIME_MULT)
+	assert_eq(button._train_cost(), expected_cost)
+	assert_almost_eq(button._train_time(), expected_time, 0.001)
+	assert_eq(button.get_node("CostLabel").text, str(expected_cost), "cost label shows the discounted price")
+	assert_eq(button.get_node("TimeLabel").text, "%.1fs" % expected_time, "time label shows the reduced train time")
+
+
 # ─── Weather discipline ───
 
 func test_weather_alert_extends_snowstorm_warning() -> void:

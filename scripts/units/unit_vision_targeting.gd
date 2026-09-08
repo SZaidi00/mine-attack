@@ -61,6 +61,15 @@ func _is_enemy_underground(world_pos: Vector2) -> bool:
 	return world_pos.x * _team_dir() < 0
 
 
+## Midfield rule: true when world_pos is across the central line, on the
+## enemy's half of the map. Auto-engagement only defends the home half —
+## enemies past midfield are left to explicit orders, rally hunts, and attack
+## stance, so idle units can't be lured across the whole map one chase at a
+## time.
+func _is_enemy_half(world_pos: Vector2) -> bool:
+	return world_pos.x * _team_dir() < 0
+
+
 ## Effective defend-leash radius: normally UNIT_DEFEND_LEASH_RANGE, but while
 ## the team's own building is under attack it pulls in tight so defenders
 ## finish the fight at the base instead of being lured away by retreating
@@ -99,6 +108,11 @@ func _find_auto_attack_target():
 				# Fog of War: cannot auto-attack what the team cannot see
 				# (Longbow archers blind-fire past this, Revamp Phase 6).
 				if not _has_blind_fire() and not _team_can_see(u.global_position):
+					continue
+				# Midfield rule: no auto-engaging surface targets on the
+				# enemy half (see _is_enemy_half). Longbow archers are
+				# exempt: blind-fire exists to shoot across the line.
+				if not u.is_underground and not _has_blind_fire() and _is_enemy_half(u.global_position):
 					continue
 				if leashed and unit._post_point.distance_squared_to(u.global_position) > leash_d2:
 					continue
@@ -234,6 +248,9 @@ func _pick_splash_target(max_dist: float) -> Unit:
 			continue
 		# Fog of War: cannot target what the team cannot see.
 		if not _team_can_see(u.global_position):
+			continue
+		# Midfield rule: no auto-engaging surface targets on the enemy half.
+		if not u.is_underground and _is_enemy_half(u.global_position):
 			continue
 		var d2: float = unit.combat_distance_squared_to(u)
 		if d2 > max_d2:

@@ -52,6 +52,11 @@ func _ready() -> void:
 	EconomyManager.coin_changed.connect(_on_economy_changed)
 	EconomyManager.population_changed.connect(_on_economy_changed)
 
+	# Research discounts (e.g. Broodmother's dragon cost/train-time reduction)
+	# change the displayed price mid-match; refresh on completion and respec.
+	ResearchManager.research_completed.connect(_on_research_changed)
+	ResearchManager.research_changed.connect(_on_research_changed)
+
 	# Re-check state whenever the building queue changes.
 	var building: Node2D = _get_player_building()
 	if building:
@@ -71,9 +76,38 @@ func _update_display() -> void:
 		return
 	text = ""  # Use child labels only; name is implied by icon/position.
 	if _cost_label:
-		_cost_label.text = "%d" % FactionManager.get_unit_cost(GameManager.Team.PLAYER, unit_id)
+		_cost_label.text = "%d" % _train_cost()
 	if _time_label:
-		_time_label.text = "%.1fs" % _Constants.TRAIN_TIMES[unit_id]
+		_time_label.text = "%.1fs" % _train_time()
+
+
+## The price actually charged for this unit: the building's final train cost
+## (faction pricing + research discounts), falling back to the faction price
+## when no building is available (e.g. in isolation tests).
+func _train_cost() -> int:
+	var building: Node2D = _get_player_building()
+	if building:
+		var cost: int = building.get_train_cost(unit_id)
+		if cost >= 0:
+			return cost
+	return FactionManager.get_unit_cost(GameManager.Team.PLAYER, unit_id)
+
+
+## The train time actually applied, including research reductions.
+func _train_time() -> float:
+	var building: Node2D = _get_player_building()
+	if building:
+		var t: float = building.get_train_time(unit_id)
+		if t >= 0.0:
+			return t
+	return _Constants.TRAIN_TIMES[unit_id]
+
+
+## Handles both research_completed (team, tech_id) and research_changed (team).
+func _on_research_changed(team: GameManager.Team, _tech_id: String = "") -> void:
+	if team == GameManager.Team.PLAYER:
+		_update_display()
+		_update_state()
 
 
 func _on_pressed() -> void:
@@ -101,7 +135,7 @@ func _update_state() -> void:
 	var pop_maxed: bool = false
 
 	var player_coin: int = EconomyManager.get_coin(GameManager.Team.PLAYER)
-	var cost: int = FactionManager.get_unit_cost(GameManager.Team.PLAYER, unit_id)
+	var cost: int = _train_cost()
 	can_afford = player_coin >= cost
 
 	var building: Node2D = _get_player_building()

@@ -108,7 +108,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `grid_mining.gd` — cell damage, mining, ore reveal, ore depletion trickle.
   - `grid_ambience.gd` — snow/dust particles, plus storm snow burst toggled by WeatherManager signals.
   - `grid_events.gd` — lava rising (warning → flood → recede into magma rock/fresh ore), cave-ins (3×3 SOLID_ROCK, 50 damage + push), ore vein respawn. Random scheduling can be disabled via `GridWorld.set_dynamic_events_enabled(false)`.
-- `building.gd` — training queue (supports manual pause/clear from the HUD), deposits, building HP/destruction, faction identification polling.
+- `building.gd` — training queue (supports manual pause/clear from the HUD), deposits, building HP/destruction, faction identification polling. `get_train_cost`/`get_train_time` are the single source of truth for train prices/times (faction pricing + research discounts), shared by `queue_unit` and the HUD train buttons.
 - `mine_entry.gd` — ladder teleport positions.
 - `ladder.gd` — ladder visuals/positioning.
 - `lantern.gd` / `tower.gd` / `wall_segment.gd` / `trap.gd` — placeable structures; a selected tower shows its attack range as a gold disc.
@@ -117,11 +117,11 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 - `unit.gd` — state enum, exported data, `_ready`/`_process`/`_draw`, public command/combat API; delegates to helpers.
   - `unit_commands.gd` — move, attack, mine, deposit, climb, stop, kill, garrison, rally commands. Siege paths blocked by enemy walls redirect to breaching the nearest wall.
-  - `unit_combat.gd` — damage, retaliation, projectiles, DPS window. Sieging units retaliate against towers shooting them.
+  - `unit_combat.gd` — damage, retaliation, projectiles, DPS window. Sieging units retaliate against towers shooting them. Auto-engaged chases (`_auto_engaged`) break at the midfield line (world x=0): idle units never pursue into the enemy half.
   - `unit_mining.gd` — idle miner handling, ore seeking, exhausted/blacklist logic.
   - `unit_navigation.gd` — path following, repathing, separation, kiting, flee, walkability.
   - `unit_abilities.gd` — faction abilities (blink, volley, swarm, rune blade, berserk, arcane shot, heavy bolt, crush, mana burn, miner reveal, supply drop, fight back).
-  - `unit_vision_targeting.gd` — vision radii, auto-attack target selection, splash targeting. Static structures are targetable on remembered intel, not just live vision.
+  - `unit_vision_targeting.gd` — vision radii, auto-attack target selection, splash targeting. Static structures are targetable on remembered intel, not just live vision. Auto-acquire only engages surface targets on the team's own half (midfield rule; Longbow blind-fire is exempt); explicit orders, stance marches, and rally hunts are exempt.
   - `unit_rendering.gd` — sprites, pickaxe animation, HP bar, cargo, selection ring.
   - `unit_idle.gd` — idle fighter/miner behavior, rally hunt, patrol, return-to-post.
 - `unit_pigeon.gd` — flying scout behavior (trained from towers, anti-air vulnerable).
@@ -138,7 +138,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 - `settings_panel.gd` — shared settings popup (SFX volume slider on the SFX bus) opened from the main menu and pause menu Settings buttons.
 - `research_panel.gd` — Doctrine Deck research overlay: spatial branch map with tech cards (icon, state badge, discipline-colored accent, active progress strip) and elbow/OR-dashed connectors, persistent detail rail (cost/time/prereq/exclusion + action button) and footer queue chips with cancel/respec/scan.
 - `training_queue_panel.gd` — Frosted Steel production module: active training with progress, scrollable queued-items list, capacity readout, Pause/Resume and Clear actions.
-- `unit_button.gd` — training buttons.
+- `unit_button.gd` — training buttons; cost/time labels and the affordability gate read the building's `get_train_cost`/`get_train_time` so research discounts (e.g. Broodmother's dragon discount) show immediately, refreshed via `ResearchManager.research_completed`/`research_changed`.
 - `layer_indicator.gd` — underground layer accessibility indicator.
 - `debug_overlay.gd` — runtime debug display.
 
