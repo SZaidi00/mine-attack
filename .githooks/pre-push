@@ -18,6 +18,17 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
 	echo "Pre-push hook: preparing release for $remote_ref..."
 
+	# GUI git clients often run hooks without Homebrew on PATH; fall back to the
+	# standard install locations before giving up.
+	if ! command -v gh >/dev/null 2>&1; then
+		for candidate in /opt/homebrew/bin/gh /usr/local/bin/gh "$HOME/bin/gh"; do
+			if [ -x "$candidate" ]; then
+				PATH="$(dirname "$candidate"):$PATH"
+				export PATH
+				break
+			fi
+		done
+	fi
 	if ! command -v gh >/dev/null 2>&1; then
 		echo "error: gh CLI not found; install it to auto-create releases." >&2
 		echo "       Or skip this hook with: SKIP_RELEASE=1 git push origin main" >&2
