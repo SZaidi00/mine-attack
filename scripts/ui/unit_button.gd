@@ -9,6 +9,7 @@ const _ICON_SWORDSMAN: Texture2D = preload("res://frost_mines_assets/icons/icon_
 const _ICON_ARCHER: Texture2D = preload("res://frost_mines_assets/icons/icon_archer.png")
 const _ICON_WIZARD: Texture2D = preload("res://frost_mines_assets/icons/icon_wizard.png")
 const _ICON_DRAGON: Texture2D = preload("res://frost_mines_assets/icons/icon_dragon.png")
+const _ICON_ENGINEER: Texture2D = preload("res://frost_mines_assets/icons/icon_engineer.png")
 
 const _UNIT_ICONS: Dictionary = {
 	"miner": _ICON_MINER,
@@ -16,6 +17,7 @@ const _UNIT_ICONS: Dictionary = {
 	"archer": _ICON_ARCHER,
 	"wizard": _ICON_WIZARD,
 	"dragon": _ICON_DRAGON,
+	"engineer": _ICON_ENGINEER,
 }
 
 const _UNIT_HOTKEYS: Dictionary = {
@@ -24,6 +26,7 @@ const _UNIT_HOTKEYS: Dictionary = {
 	"archer": "3",
 	"wizard": "4",
 	"dragon": "5",
+	"engineer": "7",
 }
 
 @export var unit_id: String = "miner"

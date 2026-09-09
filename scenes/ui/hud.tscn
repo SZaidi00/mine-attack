@@ -528,6 +528,54 @@ theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
 text = "14.0s"
 horizontal_alignment = 1
 
+[node name="EngineerButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(100, 70)
+layout_mode = 2
+text = "Engineer"
+script = ExtResource("2_unit_btn")
+unit_id = "engineer"
+
+[node name="KeyLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/EngineerButton"]
+layout_mode = 0
+offset_left = 6.0
+offset_top = 4.0
+offset_right = 22.0
+offset_bottom = 18.0
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
+text = "7"
+mouse_filter = 2
+
+[node name="Icon" type="TextureRect" parent="BottomBar/MarginContainer/HBoxContainer/EngineerButton"]
+layout_mode = 0
+offset_left = 42.0
+offset_top = 8.0
+offset_right = 58.0
+offset_bottom = 24.0
+
+[node name="CostLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/EngineerButton"]
+layout_mode = 0
+offset_left = 36.0
+offset_top = 28.0
+offset_right = 64.0
+offset_bottom = 44.0
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.984314, 0.74902, 0.141176, 1)
+text = "75"
+horizontal_alignment = 1
+
+[node name="TimeLabel" type="Label" parent="BottomBar/MarginContainer/HBoxContainer/EngineerButton"]
+layout_mode = 0
+offset_left = 32.0
+offset_top = 46.0
+offset_right = 68.0
+offset_bottom = 62.0
+theme_override_font_sizes/font_size = 10
+theme_override_colors/font_color = Color(0.580392, 0.639216, 0.721569, 1)
+text = "6.0s"
+horizontal_alignment = 1
+
 [node name="UpgradeMinerButton" type="Button" parent="BottomBar/MarginContainer/HBoxContainer"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(120, 70)

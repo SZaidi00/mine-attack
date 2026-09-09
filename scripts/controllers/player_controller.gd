@@ -92,8 +92,8 @@ func _connect_building_spawns() -> void:
 
 func _on_fighter_spawned(unit: Node2D) -> void:
 	var data = unit.get("data")
-	if data == null or data.is_miner:
-		return  # Miners always auto-enter the mine, regardless of stance.
+	if data == null or not data.is_fighter:
+		return  # Miners auto-enter the mine and engineers auto-seek repairs, regardless of stance.
 	match _current_stance:
 		"attack":
 			var enemy_building: Node2D = _enemy_building()
@@ -232,6 +232,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		train_unit("dragon")
 	elif event.is_action_pressed(_Constants.INPUT_TRAIN_PIGEON):
 		train_unit("pigeon")
+	elif event.is_action_pressed(_Constants.INPUT_TRAIN_ENGINEER):
+		train_unit("engineer")
 	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_VIEW):
 		_camera_helper._toggle_view()
 	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_RESEARCH):

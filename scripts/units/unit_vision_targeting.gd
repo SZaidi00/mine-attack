@@ -26,6 +26,8 @@ func get_vision_radius() -> int:
 			return Constants.VISION_DRAGON if not unit.is_underground else Constants.VISION_MINER_UNDERGROUND
 		"pigeon":
 			return Constants.VISION_PIGEON
+		"engineer":
+			return Constants.VISION_ENGINEER
 	return 0
 
 
@@ -142,7 +144,7 @@ func _find_auto_attack_target():
 			if d <= unit.data.sight_range * unit.data.sight_range:
 				return enemy_structure
 
-	# 4. Enemy miners on our side of the wall (underground only).
+	# 4. Enemy miners (and engineers) on our side of the wall (underground only).
 	if unit.is_underground:
 		var best: Unit = null
 		var best_dist: float = unit.data.sight_range * unit.data.sight_range
@@ -150,7 +152,7 @@ func _find_auto_attack_target():
 		for u in unit.get_tree().get_nodes_in_group("units"):
 			if u.team == unit.team or u._state == Unit.State.DEAD:
 				continue
-			if not u.data.is_miner:
+			if not u.data.is_miner and not u.data.is_engineer:
 				continue
 			if not unit._combat.can_damage_unit(u):
 				continue

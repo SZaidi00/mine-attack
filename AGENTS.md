@@ -41,7 +41,7 @@ mine-attack/
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~25 test scripts)
-├── tools/             # export_all.sh, serve_web.py
+├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd
 ├── .githooks/         # pre-push release hook
 └── improvements/      # revamp.md + new sprites
 ```
@@ -124,6 +124,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `unit_vision_targeting.gd` — vision radii, auto-attack target selection, splash targeting. Static structures are targetable on remembered intel, not just live vision. Auto-acquire only engages surface targets on the team's own half (midfield rule; Longbow blind-fire is exempt); explicit orders, stance marches, and rally hunts are exempt.
   - `unit_rendering.gd` — sprites, pickaxe animation, HP bar, cargo, selection ring.
   - `unit_idle.gd` — idle fighter/miner behavior, rally hunt, patrol, return-to-post.
+  - `unit_repair.gd` — engineer repair channel (structure-only, coin per HP, recent-damage lockout) and idle auto-seek.
 - `unit_pigeon.gd` — flying scout behavior (trained from towers, anti-air vulnerable).
 - `projectile.gd` — arrows/fireballs.
 
@@ -164,6 +165,7 @@ Trainable units (costs and times in `Constants.COSTS` / `Constants.TRAIN_TIMES`)
 - **Wizard** — ranged spell damage, AOE.
 - **Dragon** — flying, anti-air and ground, high cost.
 - **Pigeon** — flying scout trained from towers; provides vision, vulnerable to anti-air.
+- **Engineer** — support unit (75g, 2 pop, no attack); channels repairs on damaged friendly structures (walls/towers/lanterns/building — never units), charging coin per HP restored. A structure damaged within `ENGINEER_REPAIR_LOCKOUT_SEC` cannot be repaired. Idle engineers auto-seek the nearest damaged friendly structure.
 
 Miner upgrades unlock deeper layers (Level 1: layers 1–2, Level 2: layers 3–4, Level 3: layers 5–7). Fighter upgrades are per-type levels 1–3.
 
@@ -204,7 +206,7 @@ Defined in `project.godot` under `[input]`:
 
 - `lmb` / `rmb` — select / command
 - `Ctrl+A` / `Ctrl+M` / `Ctrl+F` / `Ctrl+D` — select all / miners / fighters / dragons
-- `1`–`6` — train miner / swordsman / archer / wizard / dragon / pigeon
+- `1`–`7` — train miner / swordsman / archer / wizard / dragon / pigeon / engineer
 - `Tab` (`toggle_view`) — toggle surface/underground camera bookmark
 - `R` (`toggle_research`) — toggle research panel
 - `K` / `Delete` (`kill_units`) — disband selection
@@ -287,7 +289,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself.
-- Category coverage: AI awareness/belief/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, defend leash, dragon, dynamic terrain, economy, factions, fog of war, grid world, kill units, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
+- Category coverage: AI awareness/belief/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, defend leash, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
 
 ## Security and deployment considerations
 

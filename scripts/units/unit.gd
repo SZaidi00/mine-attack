@@ -3,7 +3,7 @@ extends Node2D
 
 signal died(unit)
 
-enum State { IDLE, MOVE, ATTACK, MINE, DEPOSIT, ENTER_MINE, EXIT_MINE, CLIMB_UP, CLIMB_DOWN, DEAD }
+enum State { IDLE, MOVE, ATTACK, MINE, DEPOSIT, ENTER_MINE, EXIT_MINE, CLIMB_UP, CLIMB_DOWN, DEAD, REPAIR }
 
 const _COIN_PICKUP_SCENE: PackedScene = preload("res://scenes/effects/coin_pickup.tscn")
 const _REJECT_POPUP_SCENE: PackedScene = preload("res://scenes/effects/reject_popup.tscn")
@@ -18,6 +18,7 @@ const UnitAbilities = preload("res://scripts/units/unit_abilities.gd")
 const UnitVisionTargeting = preload("res://scripts/units/unit_vision_targeting.gd")
 const UnitRendering = preload("res://scripts/units/unit_rendering.gd")
 const UnitIdle = preload("res://scripts/units/unit_idle.gd")
+const UnitRepair = preload("res://scripts/units/unit_repair.gd")
 const UnitPigeon = preload("res://scripts/units/unit_pigeon.gd")
 
 @export var data: UnitData
@@ -37,6 +38,8 @@ var _path: PackedVector2Array = PackedVector2Array()
 var _path_index: int = 0
 var _target_unit = null
 var _target_building: Node2D = null
+# Engineer repair channel target (a friendly structure; see unit_repair.gd).
+var _repair_target: Node2D = null
 var _target_cell: Vector2i = Vector2i(-9999, -9999)
 var _target_position: Vector2 = Vector2.ZERO
 var _attack_timer: float = 0.0
@@ -158,6 +161,7 @@ var _abilities: UnitAbilities
 var _vision: UnitVisionTargeting
 var _rendering: UnitRendering
 var _idle: UnitIdle
+var _repair: UnitRepair
 var _pigeon: UnitPigeon
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
@@ -207,6 +211,7 @@ func _init_helpers() -> void:
 	_vision = UnitVisionTargeting.new(self)
 	_rendering = UnitRendering.new(self)
 	_idle = UnitIdle.new(self)
+	_repair = UnitRepair.new(self)
 	_pigeon = UnitPigeon.new(self)
 
 
@@ -329,6 +334,10 @@ func _process(delta: float) -> void:
 			if _rally_scan_timer <= 0.0:
 				_rally_scan_timer = 0.25
 				_idle._engage_rally_target_if_any()
+	elif data.is_engineer:
+		# Idle engineers auto-seek the nearest damaged friendly structure.
+		if _state == State.IDLE:
+			_repair._handle_idle_engineer()
 	_apply_research_bonuses()
 	# Keep the selection ring pulsing and the lantern glow flickering.
 	if selected or (data.is_miner and is_underground) or get_flight_altitude() > 0.0:
@@ -350,6 +359,8 @@ func _process(delta: float) -> void:
 			_commands._process_climb_up(delta)
 		State.CLIMB_DOWN:
 			_commands._process_climb_down(delta)
+		State.REPAIR:
+			_repair._process_repair(delta)
 
 
 func _draw() -> void:
@@ -409,6 +420,10 @@ func garrison_home() -> void:
 
 func rally_to(world_pos: Vector2) -> void:
 	_commands.rally_to(world_pos)
+
+
+func repair_structure(target: Node2D) -> void:
+	_commands.repair_structure(target)
 
 
 # ---------- Public combat / status wrappers ----------
@@ -572,6 +587,7 @@ func _clear_target() -> void:
 	_has_hit_this_engagement = false
 	_target_unit = null
 	_target_building = null
+	_repair_target = null
 	_target_cell = Vector2i(-9999, -9999)
 	_pending_mine_cell = Vector2i(-9999, -9999)
 	_target_position = Vector2.ZERO

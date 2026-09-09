@@ -53,6 +53,7 @@ func _ready() -> void:
 	_resources["archer"] = preload("res://scripts/resources/units/archer.tres")
 	_resources["wizard"] = preload("res://scripts/resources/units/wizard.tres")
 	_resources["dragon"] = preload("res://scripts/resources/units/dragon.tres")
+	_resources["engineer"] = preload("res://scripts/resources/units/engineer.tres")
 	_mark_footprint_solid()
 	_add_deposit_point()
 	_connect_view_mode()
@@ -364,6 +365,31 @@ func take_damage(amount: int) -> void:
 ## units read this to pull their chase leash in tight and fight at the base.
 func is_under_attack() -> bool:
 	return GameManager.match_time - _last_damage_time < _Constants.BUILDING_UNDER_ATTACK_SEC
+
+
+## Engineer repair support: true while damaged (and not destroyed).
+func needs_repair() -> bool:
+	return not _destroyed and _hp < max_hp
+
+
+## True while an engineer may channel repairs: damaged and not hit within the
+## lockout window (a live siege can never be out-repaired).
+func can_be_repaired() -> bool:
+	return needs_repair() and GameManager.match_time - _last_damage_time >= _Constants.ENGINEER_REPAIR_LOCKOUT_SEC
+
+
+## Engineer repair: restores up to amount HP, clamped to max. Returns the HP
+## actually applied so the engineer only charges coin for real repairs.
+func repair(amount: int) -> int:
+	if _destroyed:
+		return 0
+	var applied: int = mini(amount, max_hp - _hp)
+	if applied <= 0:
+		return 0
+	_hp += applied
+	hp_changed.emit(_hp, max_hp)
+	queue_redraw()
+	return applied
 
 
 ## One-time dust explosion over the footprint as the building starts to fall.

@@ -32,6 +32,8 @@ var hp: int = 0
 var build_time: float = _Constants.TOWER_BUILD_TIME
 # Coin spent on this tower (salvage pays half).
 var total_cost: int = 0
+# match_time of the last hit taken (drives the engineer repair lockout).
+var _last_damage_time: float = -999.0
 
 # Pigeon scout training queue: each entry is the remaining train time.
 var _pigeon_queue: Array = []
@@ -168,7 +170,7 @@ func _update_scan_angle() -> void:
 		_scan_angle = 0.0 if team == GameManager.Team.PLAYER else PI
 
 
-## Target priority: flying scouts > fighters > miners > buildings. Only what
+## Target priority: flying scouts > fighters > miners/engineers > buildings. Only what
 ## the team can currently see (Fog of War), surface targets only.
 func _pick_target() -> Node2D:
 	var best_scout: Unit = null
@@ -192,7 +194,7 @@ func _pick_target() -> Node2D:
 		elif unit.data.is_fighter and d2 < best_fighter_d2:
 			best_fighter_d2 = d2
 			best_fighter = unit
-		elif unit.data.is_miner and d2 < best_miner_d2:
+		elif (unit.data.is_miner or unit.data.is_engineer) and d2 < best_miner_d2:
 			best_miner_d2 = d2
 			best_miner = unit
 	if best_scout != null:
@@ -247,10 +249,35 @@ func take_damage(amount: int) -> void:
 	if not _is_built:
 		return
 	hp -= amount
+	_last_damage_time = GameManager.match_time
 	hp_changed.emit(hp, max_hp)
 	queue_redraw()
 	if hp <= 0:
 		_destroy()
+
+
+## Engineer repair support: true while damaged (under-construction towers are
+## invulnerable, so they can never need repairs).
+func needs_repair() -> bool:
+	return _is_built and hp < max_hp
+
+
+## True while an engineer may channel repairs: damaged and not hit within the
+## lockout window (a live siege can never be out-repaired).
+func can_be_repaired() -> bool:
+	return needs_repair() and GameManager.match_time - _last_damage_time >= _Constants.ENGINEER_REPAIR_LOCKOUT_SEC
+
+
+## Engineer repair: restores up to amount HP, clamped to max. Returns the HP
+## actually applied so the engineer only charges coin for real repairs.
+func repair(amount: int) -> int:
+	var applied: int = mini(amount, max_hp - hp)
+	if applied <= 0:
+		return 0
+	hp += applied
+	hp_changed.emit(hp, max_hp)
+	queue_redraw()
+	return applied
 
 
 ## Player-initiated demolition: refunds 25% of the total cost directly as

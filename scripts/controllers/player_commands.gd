@@ -70,6 +70,18 @@ func _issue_command(screen_pos: Vector2) -> void:
 			u.attack_building(enemy_structure)
 		return
 
+	# 2c. Damaged friendly structure clicked with engineers selected -> repair.
+	# (Full-HP structures fall through to the move default; no engineers
+	# selected likewise — mixed selections still move everyone.)
+	var friendly_structure: Node2D = pc._selection._friendly_structure_at(world_pos)
+	if friendly_structure != null and friendly_structure.has_method("needs_repair") and friendly_structure.needs_repair():
+		var engineers: Array = pc._selection._filter_engineers(pc._selected_units)
+		if not engineers.is_empty():
+			DebugLog.log_command("PlayerController", "repair_structure", "target=%d engineers=%d" % [friendly_structure.get_instance_id(), engineers.size()])
+			for u in engineers:
+				u.repair_structure(friendly_structure)
+			return
+
 	# 3. Central wall clicked with miners selected -> breach.
 	var miners: Array = pc._selection._filter_miners(pc._selected_units)
 	if pc._grid.is_central_wall(grid_pos) and not miners.is_empty():

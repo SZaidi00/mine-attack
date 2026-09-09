@@ -31,6 +31,8 @@ var hp: int = 0
 var build_time: float = 0.0
 # Total coin spent on this lantern including upgrades (salvage pays half).
 var total_cost: int = 0
+# match_time of the last hit taken (drives the engineer repair lockout).
+var _last_damage_time: float = -999.0
 
 var _build_progress: float = 0.0
 var _is_built: bool = false
@@ -132,10 +134,35 @@ func take_damage(amount: int) -> void:
 	if not _is_built:
 		return
 	hp -= amount
+	_last_damage_time = GameManager.match_time
 	hp_changed.emit(hp, max_hp)
 	queue_redraw()
 	if hp <= 0:
 		_destroy()
+
+
+## Engineer repair support: true while damaged (under-construction lanterns
+## are invulnerable, so they can never need repairs).
+func needs_repair() -> bool:
+	return _is_built and hp < max_hp
+
+
+## True while an engineer may channel repairs: damaged and not hit within the
+## lockout window (a live siege can never be out-repaired).
+func can_be_repaired() -> bool:
+	return needs_repair() and GameManager.match_time - _last_damage_time >= _Constants.ENGINEER_REPAIR_LOCKOUT_SEC
+
+
+## Engineer repair: restores up to amount HP, clamped to max. Returns the HP
+## actually applied so the engineer only charges coin for real repairs.
+func repair(amount: int) -> int:
+	var applied: int = mini(amount, max_hp - hp)
+	if applied <= 0:
+		return 0
+	hp += applied
+	hp_changed.emit(hp, max_hp)
+	queue_redraw()
+	return applied
 
 
 ## Player-initiated demolition: refunds 25% of the total cost directly as

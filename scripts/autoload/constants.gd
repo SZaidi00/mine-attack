@@ -31,6 +31,7 @@ const COSTS: Dictionary = {
 	"wizard": 250,
 	"dragon": 400,
 	"pigeon": 100,
+	"engineer": 75,
 }
 
 # ─── TRAIN TIMES (seconds) ───
@@ -41,6 +42,7 @@ const TRAIN_TIMES: Dictionary = {
 	"wizard": 10.0,
 	"dragon": 14.0,
 	"pigeon": 8.0,
+	"engineer": 6.0,
 }
 
 # ─── UNIT STATS ───
@@ -120,6 +122,7 @@ const VISION_ARCHER: int = 12
 const VISION_WIZARD: int = 10
 const VISION_DRAGON: int = 14
 const VISION_PIGEON: int = 2
+const VISION_ENGINEER: int = 6
 const VISION_BUILDING: int = 6
 const FOG_MEMORY_DURATION: float = 10.0
 const FOG_COLOR: Color = Color("#05070a")
@@ -187,6 +190,18 @@ const STRUCTURE_DEMOLISH_REFUND_RATIO: float = 0.25
 const PIGEON_MAX_COUNT: int = 2
 const PIGEON_LINGER_ENEMY_TIME: float = 12.0
 const PIGEON_LINGER_HOME_TIME: float = 5.0
+
+# ─── ENGINEER (support unit) ───
+# Engineers repair friendly STRUCTURES only (walls, towers, lanterns, and the
+# team's main building) — never units (units regen out of combat via
+# UNIT_REGEN_*). The channel restores ENGINEER_REPAIR_HP_PER_SEC and charges
+# ENGINEER_REPAIR_COIN_PER_HP from the team's wallet as each point lands;
+# repair pauses (idle in place) when the team cannot afford the next point.
+# A structure damaged within the last ENGINEER_REPAIR_LOCKOUT_SEC cannot be
+# repaired, so a live siege can never be out-repaired.
+const ENGINEER_REPAIR_HP_PER_SEC: float = 15.0
+const ENGINEER_REPAIR_COIN_PER_HP: float = 0.5
+const ENGINEER_REPAIR_LOCKOUT_SEC: float = 3.0
 
 # ─── DYNAMIC TERRAIN & EVENTS (Revamp Phase 4) ───
 # Lava rising: every LAVA_MIN/MAX_INTERVAL seconds of match time (random,
@@ -795,8 +810,8 @@ const UNIT_REGEN_DELAY: float = 5.0
 const UNIT_REGEN_PER_SEC: float = 2.0
 
 # ─── WALL ───
-const WALL_HP: float = 2000.0
-const WALL_DAMAGE_PER_MINER: float = 10.0
+const WALL_HP: float = 5000.0
+const WALL_DAMAGE_PER_MINER: float = 5.0
 
 # ─── UNDERGROUND ───
 const LAYERS: int = 7
@@ -950,6 +965,7 @@ const INPUT_TRAIN_ARCHER: StringName = &"train_archer"
 const INPUT_TRAIN_WIZARD: StringName = &"train_wizard"
 const INPUT_TRAIN_DRAGON: StringName = &"train_dragon"
 const INPUT_TRAIN_PIGEON: StringName = &"train_pigeon"
+const INPUT_TRAIN_ENGINEER: StringName = &"train_engineer"
 const INPUT_TOGGLE_VIEW: StringName = &"toggle_view"
 const INPUT_TOGGLE_RESEARCH: StringName = &"toggle_research"
 const INPUT_KILL_UNITS: StringName = &"kill_units"

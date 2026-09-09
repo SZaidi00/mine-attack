@@ -206,6 +206,26 @@ func _filter_miners(units: Array) -> Array:
 	return units.filter(func(u): return u.data.is_miner)
 
 
+func _filter_engineers(units: Array) -> Array:
+	return units.filter(func(u): return u.data.is_engineer)
+
+
+## Own repairable structure near the click point: placeables within a cell
+## (traps excluded — engineers only fix walls/towers/lanterns), or the team's
+## building picked against its full body rect.
+func _friendly_structure_at(world_pos: Vector2) -> Node2D:
+	for group: String in ["lanterns", "towers", "walls"]:
+		for structure in pc.get_tree().get_nodes_in_group(group):
+			if structure.team != GameManager.Team.PLAYER:
+				continue
+			if structure.global_position.distance_to(world_pos) < GridWorld.CELL_SIZE:
+				return structure
+	var building: Node2D = _building_at(world_pos)
+	if building != null and building.get("team") == GameManager.Team.PLAYER:
+		return building
+	return null
+
+
 func _filter_fighters(units: Array) -> Array:
 	return units.filter(func(u): return u.data.is_fighter)
 

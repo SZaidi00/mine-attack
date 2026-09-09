@@ -88,6 +88,41 @@ func _breach_nearest_enemy_wall(current_target: Node2D) -> bool:
 	return unit._state == Unit.State.ATTACK and unit._target_building == wall
 
 
+## Repair order (engineers only): walk to a damaged friendly structure and
+## channel repairs (see UnitRepair). Accepted even while the structure sits
+## inside the recent-damage lockout — the engineer stands by and the channel
+## resumes once the window passes. Any move/attack order cancels the repair
+## (they all run through _clear_target, which drops _repair_target).
+func repair_structure(target: Node2D) -> void:
+	if unit.data == null or not unit.data.is_engineer:
+		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "repair_structure", "not an engineer")
+		return
+	if target == null or not is_instance_valid(target) or not target.has_method("can_be_repaired"):
+		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "repair_structure", "invalid target")
+		return
+	if target.get("team") != unit.team:
+		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "repair_structure", "not a friendly structure")
+		return
+	if not target.needs_repair():
+		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "repair_structure", "structure at full HP")
+		return
+	# Path to a standing spot at the structure's base; the footprint itself is
+	# not a valid path target (same rule as attack_building).
+	var stand: Vector2 = unit._navigation._building_stand_point(target)
+	unit._clear_target()
+	unit._navigation._repath(stand)
+	if unit._path.is_empty():
+		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "repair_structure", "no path to structure")
+		unit._spawn_reject_popup(target.global_position)
+		unit._set_state(Unit.State.IDLE, "repair target unreachable")
+		return
+	DebugLog.log_command("Unit %d" % unit.get_instance_id(), "repair_structure", "target=%d" % target.get_instance_id())
+	unit._repair_target = target
+	unit._repair._reset_channel()
+	unit._hold_post = false
+	unit._set_state(Unit.State.REPAIR, "repair_structure command")
+
+
 func mine_cell(grid_pos: Vector2i) -> void:
 	if unit.data == null or not unit.data.is_miner:
 		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "mine_cell", "not a miner")
