@@ -91,7 +91,8 @@ func _find_auto_attack_target():
 	var leashed: bool = unit._hold_post and not unit.is_underground and unit._post_point != Vector2.ZERO
 	var leash: float = _defend_leash_range()
 	var leash_d2: float = leash * leash
-	# Enemy fighters: attack range first, then sight range. Closest wins —
+	# Enemy units (fighters, scouts, engineers): attack range first, then
+	# sight range. Closest wins —
 	# except fireball users (wizard/dragon), who pick the target whose position
 	# splashes the most enemies so fireballs aren't wasted on lone stragglers.
 	for range_limit in [unit.data.attack_range, unit.data.sight_range]:
@@ -105,7 +106,7 @@ func _find_auto_attack_target():
 			for u in unit.get_tree().get_nodes_in_group("units"):
 				if u.team == unit.team or u._state == Unit.State.DEAD:
 					continue
-				if not u.data.is_fighter and not u.data.is_scout:
+				if not u.data.is_fighter and not u.data.is_scout and not u.data.is_engineer:
 					continue
 				if not unit._combat.can_damage_unit(u):
 					continue

@@ -82,9 +82,9 @@ func _launch_wave_if_ready(threshold_override: int = -1) -> void:
 			unit.attack_building(target)
 
 
-## Wave hunting: the nearest visible enemy surface fighter within
+## Wave hunting: the nearest visible enemy surface fighter or engineer within
 ## ENEMY_WAVE_HUNT_RANGE that this unit can damage, or null (march on the
-## base). Reads live team vision, so the wave only reacts to armies it can
+## base). Reads live team vision, so the wave only reacts to units it can
 ## actually see coming.
 func _wave_hunt_target(unit: Unit) -> Unit:
 	if GameManager.get_ai_smarts() < 2 or ai._grid == null:
@@ -93,7 +93,7 @@ func _wave_hunt_target(unit: Unit) -> Unit:
 	var best_d2: float = _Constants.ENEMY_WAVE_HUNT_RANGE * _Constants.ENEMY_WAVE_HUNT_RANGE
 	var other_team_name: String = "player" if ai.team == GameManager.Team.ENEMY else "enemy"
 	for other in ai.get_tree().get_nodes_in_group(other_team_name):
-		if not other.data.is_fighter or other._state == Unit.State.DEAD or other.is_underground:
+		if not other.data.is_fighter and not other.data.is_engineer or other._state == Unit.State.DEAD or other.is_underground:
 			continue
 		if not unit.can_damage_unit(other):
 			continue
