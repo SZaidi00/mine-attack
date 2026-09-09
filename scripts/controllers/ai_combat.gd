@@ -176,7 +176,7 @@ func _pick_defense_target(defender: Unit) -> Unit:
 	var best_score: float = INF
 	var other_team_name: String = "player" if ai.team == GameManager.Team.ENEMY else "enemy"
 	for unit in ai.get_tree().get_nodes_in_group(other_team_name):
-		if unit._state == Unit.State.DEAD:
+		if unit._state == Unit.State.DEAD or unit.is_underground:
 			continue
 		var d: float = unit.global_position.distance_to(defender.global_position)
 		if d > 650.0:
@@ -235,6 +235,10 @@ func _nearest_enemy_unit(pos: Vector2, max_dist: float) -> Unit:
 	var other_team_name: String = "player" if ai.team == GameManager.Team.ENEMY else "enemy"
 	for unit in ai.get_tree().get_nodes_in_group(other_team_name):
 		if unit._state == Unit.State.DEAD:
+			continue
+		if unit.is_underground:
+			# Surface base defense semantics: underground intruders (crawlers)
+			# can't be reached by surface fighters — ai_crawlers answers them.
 			continue
 		var d: float = unit.global_position.distance_squared_to(pos)
 		if d < best_d:

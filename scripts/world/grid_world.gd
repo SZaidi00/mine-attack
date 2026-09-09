@@ -298,6 +298,11 @@ func find_path(from_world: Vector2, to_world: Vector2, team: int = -1) -> Packed
 	return _path.find_path(from_world, to_world, team)
 
 
+## Underground-only path (crawlers): the surface row is sealed for the query.
+func find_path_underground(from_world: Vector2, to_world: Vector2, team: int = -1) -> PackedVector2Array:
+	return _path.find_path_underground(from_world, to_world, team)
+
+
 func nearest_walkable_cell(to_cell: Vector2i, max_radius: int = 4) -> Vector2i:
 	return _path.nearest_walkable_cell(to_cell, max_radius)
 

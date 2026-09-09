@@ -210,6 +210,10 @@ func _filter_engineers(units: Array) -> Array:
 	return units.filter(func(u): return u.data.is_engineer)
 
 
+func _filter_crawlers(units: Array) -> Array:
+	return units.filter(func(u): return u.data.is_crawler)
+
+
 ## Own repairable structure near the click point: placeables within a cell
 ## (traps excluded — engineers only fix walls/towers/lanterns), or the team's
 ## building picked against its full body rect.

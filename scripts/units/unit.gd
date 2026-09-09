@@ -98,9 +98,11 @@ var _base_fighter_damage: float = 0.0
 # reaches zero (see _process).
 var _regen_delay: float = 0.0
 var _regen_accum: float = 0.0
-# Rolling window of damage taken: [age_seconds, amount] entries, aged in
-# _process and pruned past 3s. Feeds get_incoming_dps(), which the AI's
-# predictive retreat and bait-and-switch spring both read.
+# Rolling window of combat damage taken: [age_seconds, amount] entries, aged
+# in _process and pruned past 3s. Environmental hits (cave-ins, lava) are
+# excluded so they don't read as attacks. Feeds get_incoming_dps(), which the
+# AI's predictive retreat, bait-and-switch spring, and crawler distress
+# signal all read.
 var _damage_log: Array = []
 # The spot a fighter returns to when idle on the surface (its "standing
 # point"). Set at spawn, updated by explicit move/stop orders; attack and
@@ -338,6 +340,11 @@ func _process(delta: float) -> void:
 		# Idle engineers auto-seek the nearest damaged friendly structure.
 		if _state == State.IDLE:
 			_repair._handle_idle_engineer()
+	elif data.is_crawler:
+		# Crawlers are underground-only: idle ones on the surface head for the
+		# own mine entry; underground they guard (auto-engage) and return to post.
+		if _state == State.IDLE:
+			_idle._handle_idle_crawler()
 	_apply_research_bonuses()
 	# Keep the selection ring pulsing and the lantern glow flickering.
 	if selected or (data.is_miner and is_underground) or get_flight_altitude() > 0.0:

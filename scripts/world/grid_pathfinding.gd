@@ -80,6 +80,24 @@ func find_path(from_world: Vector2, to_world: Vector2, team: int = -1) -> Packed
 	return world_path
 
 
+## Underground-only variant for crawlers: the surface row is sealed for the
+## duration of the query, so an underground raider can only route through dug
+## tunnels. Without this the global A* happily walks an underground unit up
+## the shaft and across the surface, bypassing the central wall entirely.
+func find_path_underground(from_world: Vector2, to_world: Vector2, team: int = -1) -> PackedVector2Array:
+	var sealed: Array = []
+	var region: Rect2i = grid._astar.region
+	for x in range(region.position.x, region.end.x):
+		var pos: Vector2i = Vector2i(x, 0)
+		if grid._astar.is_in_boundsv(pos) and not grid._astar.is_point_solid(pos):
+			grid._astar.set_point_solid(pos, true)
+			sealed.append(pos)
+	var world_path: PackedVector2Array = find_path(from_world, to_world, team)
+	for pos in sealed:
+		grid._astar.set_point_solid(pos, false)
+	return world_path
+
+
 func _compute_path(start: Vector2i, end: Vector2i) -> PackedVector2Array:
 	# Units and targets can sit on solid cells (a target cell that is an undug
 	# tile, a unit pushed onto a blocked cell). Redirect to the nearest walkable

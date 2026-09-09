@@ -425,7 +425,7 @@ func test_broodmother_discounts_dragon_cost_and_train_time() -> void:
 
 
 func test_broodmother_discount_shows_on_dragon_train_button() -> void:
-	var button: UnitButton = _main.get_node("UI/HUD/BottomBar/MarginContainer/HBoxContainer/DragonButton")
+	var button: UnitButton = _main.get_node("UI/HUD/BottomBar/MarginContainer/VBoxContainer/TrainRow/DragonButton")
 	assert_eq(button._train_cost(), Constants.COSTS["dragon"], "full price before research")
 	ResearchManager._levels[PLAYER]["dragon_mastery"] = 1
 	ResearchManager._levels[PLAYER]["broodmother"] = 1

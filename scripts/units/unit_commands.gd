@@ -193,6 +193,11 @@ func enter_mine() -> void:
 
 
 func exit_mine() -> void:
+	# Crawlers are underground-only: they can never climb back out.
+	if unit.data != null and unit.data.is_crawler:
+		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "exit_mine", "crawlers cannot surface")
+		unit._spawn_reject_popup(unit.global_position)
+		return
 	DebugLog.log_command("Unit %d" % unit.get_instance_id(), "exit_mine")
 	unit._clear_target()
 	unit._set_state(Unit.State.EXIT_MINE, "exit_mine command")
@@ -207,6 +212,11 @@ func exit_mine() -> void:
 
 
 func climb_up_ladder() -> void:
+	# Crawlers are underground-only: the ladder is a one-way trip down.
+	if unit.data != null and unit.data.is_crawler:
+		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "climb_up_ladder", "crawlers cannot surface")
+		unit._spawn_reject_popup(unit.global_position)
+		return
 	DebugLog.log_command("Unit %d" % unit.get_instance_id(), "climb_up_ladder")
 	unit._clear_target()
 	unit._set_state(Unit.State.CLIMB_UP, "climb_up_ladder command")

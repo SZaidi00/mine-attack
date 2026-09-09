@@ -160,7 +160,7 @@ func _build_build_menu() -> void:
 	tray.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	tray.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	tray.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	tray.position = Vector2(0, -120)
+	tray.position = Vector2(0, -195)
 	tray.custom_minimum_size = Vector2(1000, 260)
 	tray.mouse_filter = Control.MOUSE_FILTER_STOP
 	tray.add_theme_stylebox_override("panel", UIThemeTokens.make_panel_style())

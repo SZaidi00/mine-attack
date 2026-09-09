@@ -25,10 +25,12 @@ func _issue_command(screen_pos: Vector2) -> void:
 
 	# Resolution order is deterministic and exclusive: exactly one command (or
 	# one rejection) is produced per right-click.
-	# 1. Enemy unit clicked -> attack with fighters.
+	# 1. Enemy unit clicked -> attack with fighters (crawlers join: they are the
+	# underground attackers, so a raider squad must be orderable onto miners).
 	var enemy_unit: Unit = pc._selection._enemy_unit_at(world_pos)
 	if enemy_unit != null:
 		var fighters: Array = pc._selection._filter_fighters(pc._selected_units)
+		fighters.append_array(pc._selection._filter_crawlers(pc._selected_units))
 		if fighters.is_empty():
 			_reject_command("attack_unit", "no fighters selected", world_pos)
 			return
@@ -227,6 +229,52 @@ func set_stance(stance: String) -> void:
 				u.garrison_home()
 		_:
 			DebugLog.log_reject("PlayerController", "set_stance", "unknown stance " + stance)
+	_apply_crawler_stance(stance)
+
+
+## Stances for the underground arm (crawlers): Attack sends them raiding
+## through the breached central wall toward the enemy mine (their auto-acquire
+## hunts enemy miners on the way — underground targeting has no midfield
+## rule); Defend holds position; Garrison recalls them to guard the own mine
+## entry's ladder bottom. While the wall stands there is no raid route, so
+## Attack leaves the guard in place.
+func _apply_crawler_stance(stance: String) -> void:
+	if not stance in ["attack", "defend", "garrison"]:
+		return
+	var crawlers: Array = pc._selection._filter_crawlers(pc.get_tree().get_nodes_in_group("player"))
+	if crawlers.is_empty():
+		return
+	match stance:
+		"attack":
+			if pc._grid.get_wall_hp() > 0:
+				return  # no route into the enemy mine yet — keep guarding
+			var enemy_entry: Node2D = _enemy_mine_entry()
+			if enemy_entry == null:
+				return
+			var raid_point: Vector2 = enemy_entry.call("get_underground_position")
+			DebugLog.log_command("PlayerController", "stance attack", "crawlers=%d raiding" % crawlers.size())
+			for u in crawlers:
+				if u.is_underground:
+					u.move_to(raid_point)
+		"defend":
+			for u in crawlers:
+				u.stop()
+		"garrison":
+			var own_entry: Node2D = pc._player_mine_entry()
+			if own_entry == null:
+				return
+			var post: Vector2 = own_entry.call("get_underground_position")
+			DebugLog.log_command("PlayerController", "stance garrison", "crawlers=%d to mine post" % crawlers.size())
+			for u in crawlers:
+				if u.is_underground:
+					u.move_to(post)
+
+
+func _enemy_mine_entry() -> Node2D:
+	for entry in pc.get_tree().get_nodes_in_group("mine_entries"):
+		if entry.get("team") != GameManager.Team.PLAYER:
+			return entry
+	return null
 
 
 func kill_selected() -> void:

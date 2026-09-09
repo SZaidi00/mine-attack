@@ -128,11 +128,12 @@ func try_volley(target_pos: Vector2) -> void:
 		trigger_volley(target_pos)
 
 
-## Fight Back (Brute): miners hit back when a fighter strikes them in melee.
+## Fight Back (Brute): miners hit back when a fighter strikes them in melee
+## (crawlers included — the raider unit is exactly what this deters).
 func on_take_damage_fight_back(attacker: Node2D) -> void:
 	if unit._faction != null and unit._faction.miner_fight_back and unit.data.is_miner and attacker is Unit \
 			and is_instance_valid(attacker) and attacker._state != Unit.State.DEAD \
-			and attacker.data != null and attacker.data.is_fighter:
+			and attacker.data != null and (attacker.data.is_fighter or attacker.data.is_crawler):
 		attacker.take_damage(5, unit)
 
 

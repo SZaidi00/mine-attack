@@ -234,6 +234,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		train_unit("pigeon")
 	elif event.is_action_pressed(_Constants.INPUT_TRAIN_ENGINEER):
 		train_unit("engineer")
+	elif event.is_action_pressed(_Constants.INPUT_TRAIN_CRAWLER):
+		train_unit("crawler")
 	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_VIEW):
 		_camera_helper._toggle_view()
 	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_RESEARCH):

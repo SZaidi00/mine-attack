@@ -41,7 +41,8 @@ mine-attack/
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~25 test scripts)
-├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd
+├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
+│                      # gen_crawler_sprites.gd
 ├── .githooks/         # pre-push release hook
 └── improvements/      # revamp.md + new sprites
 ```
@@ -92,17 +93,18 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `player_camera.gd` — zoom, pan, surface/underground view bookmarks, screen shake.
   - `player_build_placement.gd` — lantern/tower/wall/trap placement ghost and validation; towers and lanterns show a gold range/vision disc while placing (tower range includes research bonuses).
 - `ai_controller.gd` — tick fields, aggression state, scout memory; delegates to helpers.
-  - `ai_economy.gd` — economy decisions, training (faction-flavored army mix, miner/fighter interleave so the army grows in parallel with the crew), upgrades (miner upgrades wait for a crew of `ENEMY_MINER_UPGRADE_MIN_CREW`), research (faction branch preferences), miner culling. Spending follows a save-goal build order (`_current_save_goal`): one purchase at a time — first lantern → L2 miners → first tower (turtle leads with the tower; rush never saves for one) — and fighter spending holds while a goal is active, with two exemptions: miner training (miners fund the save) and a skeleton standing army of `ENEMY_DESPERATE_WAVE_SIZE` fighters (raid/defense minimum, so the AI never techs naked). With no goal active, fighter upgrades/research/2nd+ structures buy organically from surplus.
+  - `ai_economy.gd` — economy decisions, training (faction-flavored army mix, miner/fighter interleave so the army grows in parallel with the crew), upgrades (miner upgrades wait for a crew of `ENEMY_MINER_UPGRADE_MIN_CREW`), research (faction branch preferences), miner culling. Spending follows a save-goal build order (`_current_save_goal`): one purchase at a time — first lantern → L2 miners → first tower (turtle leads with the tower; rush never saves for one) — and fighter spending holds while a goal is active, with two exemptions: miner training (miners fund the save) and a skeleton standing army of `ENEMY_DESPERATE_WAVE_SIZE` fighters (raid/defense minimum, so the AI never techs naked). With no goal active, fighter upgrades/research/2nd+ structures buy organically from surplus. Engineer maintenance (`_try_train_engineer`): a surplus hire — never a save goal, never while one is active — when an own structure sits below `ENEMY_ENGINEER_DAMAGE_FRACTION` of max HP past the repair lockout; gated on the smarts tier (Easy never hires; Hard+ keeps a second engineer once it fields `ENEMY_ENGINEER_SECOND_MIN_STRUCTURES` placeables), and hired engineers need no orders thanks to the idle auto-seek in `unit_repair.gd` (own half of the map only). Crawler guard (`_try_train_crawler`): same surplus rules (never a save goal, never while one is active); smarts-tier gated cap (Easy never, tier 1 keeps one, tier 2+ keeps two — the second doubles as the raider once the wall is breached, Brute fields one extra), and the guard waits for a crew of `ENEMY_CRAWLER_MIN_MINERS` miners.
   - `ai_mining.gd` — miner task assignment and ore selection (skips miners under shelter orders).
-  - `ai_combat.gd` — attack waves, base defense, wall breach. Waves hunt visible enemy field units in range before marching, and peel up to half their fighters onto remembered enemy towers/lanterns before marching on the base. The combat-predictor veto (smarts tier 2+) lapses when no wave has marched for `ENEMY_WAVE_DESPERATION_DELAY` (difficulty-scaled) or the AI is at the population cap; desperation also drops the launch threshold to `ENEMY_DESPERATE_WAVE_SIZE`, so an out-produced AI always keeps attacking eventually.
+  - `ai_combat.gd` — attack waves, base defense, wall breach. Waves hunt visible enemy field units in range before marching, and peel up to half their fighters onto remembered enemy towers/lanterns before marching on the base. The combat-predictor veto (smarts tier 2+) lapses when no wave has marched for `ENEMY_WAVE_DESPERATION_DELAY` (difficulty-scaled) or the AI is at the population cap; desperation also drops the launch threshold to `ENEMY_DESPERATE_WAVE_SIZE`, so an out-produced AI always keeps attacking eventually. Surface base-defense targeting skips underground units (crawler raiders are the crawler guard's problem, not the army's).
   - `ai_smart_behaviors.gd` — focus fire, wounded retreat, mine-entry raids (a squad camps the enemy mine entry and ambushes deposit trips), bait, combat predictor (counts remembered enemy towers), wave retreat/recall, post-defense counterattack, aggression.
   - `ai_awareness.gd` — faction scouting (swordsman at 1:00, 30s retry after death) that becomes periodic re-scouting once the faction is identified (tier 2+, skipped while an own pigeon patrols or while defending), defensive lantern placement/upgrades, AI tower placement (mirrors the player-side placement rules; turtle openers build towers first), weather-offense timing (tier 2+: strikes on snowstorm start / volcano end via the timing-attack override), snowstorm/volcano miner recall to the mine entry/base and lava evacuation (signal-driven; sheltered miners hold via `unit.shelter_in_place`).
+  - `ai_crawlers.gd` — underground crawler guard/defense/raiding on a 1s tick (smarts tier 1+). Defense: visible enemy units underground on the own half, or underground miners taking damage (the 3s incoming-DPS window catches unseen attackers), trigger miner shelter orders (`shelter_in_place` + hold at the ladder bottom, released on all-clear) while the crawler guard converges on the intruder. Both triggers are combat-only: the threat scan ignores units that can't fight (a wandering enemy miner without Brute Fight Back doesn't count), and environmental damage (cave-ins/lava) never enters `Unit._damage_log`, so rockfalls don't panic the crew. Offense (tier 2+, no home threat, wall breached, army not defending): all but one crawler raid the enemy mine — hunt visible enemy miners, else march on the enemy mine entry — pulling home when visibly outnumbered underground or wounded, with an `ENEMY_CRAWLER_RAID_INTERVAL` re-launch cooldown.
 
 ### `scripts/world/`
 
 - `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers.
   - `grid_map_generation.gd` — map generation and A* initialization.
-  - `grid_pathfinding.gd` — `find_path`, walkability helpers, wall cell sealing.
+  - `grid_pathfinding.gd` — `find_path`, `find_path_underground` (crawler variant: seals the surface row for the query so underground raids can't bypass the central wall over the top), walkability helpers, wall cell sealing.
   - `grid_fog_of_war.gd` — vision maps, memory, ghost silhouettes, fog rendering.
   - `grid_drawing.gd` — surface/underground terrain drawing, effects, wall HP bar.
   - `grid_mining.gd` — cell damage, mining, ore reveal, ore depletion trickle.
@@ -120,7 +122,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `unit_combat.gd` — damage, retaliation, projectiles, DPS window. Sieging units retaliate against towers shooting them. Auto-engaged chases (`_auto_engaged`) break at the midfield line (world x=0): idle units never pursue into the enemy half.
   - `unit_mining.gd` — idle miner handling, ore seeking, exhausted/blacklist logic.
   - `unit_navigation.gd` — path following, repathing, separation, kiting, flee, walkability.
-  - `unit_abilities.gd` — faction abilities (blink, volley, swarm, rune blade, berserk, arcane shot, heavy bolt, crush, mana burn, miner reveal, supply drop, fight back).
+  - `unit_abilities.gd` — faction abilities (blink, volley, swarm, rune blade, berserk, arcane shot, heavy bolt, crush, mana burn, miner reveal, supply drop, fight back — which also triggers against crawlers).
   - `unit_vision_targeting.gd` — vision radii, auto-attack target selection, splash targeting. Static structures are targetable on remembered intel, not just live vision. Auto-acquire only engages surface targets on the team's own half (midfield rule; Longbow blind-fire is exempt); explicit orders, stance marches, and rally hunts are exempt.
   - `unit_rendering.gd` — sprites, pickaxe animation, HP bar, cargo, selection ring.
   - `unit_idle.gd` — idle fighter/miner behavior, rally hunt, patrol, return-to-post.
@@ -131,7 +133,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 ### `scripts/ui/`
 
 - `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners.
-- `hud.gd` — node references, signal wiring, game-over flow (summary table + `MatchGraph` coin/population charts), lava/weather/volcano warning banners, faction-identified popup, research-completion toasts; delegates to helpers.
+- `hud.gd` — node references (bottom-bar buttons are looked up by `%Name` unique name so layout moves can't break paths), signal wiring, game-over flow (summary table + `MatchGraph` coin/population charts), lava/weather/volcano warning banners, faction-identified popup, research-completion toasts; delegates to helpers. The BottomBar is two rows: `TrainRow` (7 train buttons) on top, `CommandRow` (upgrades + stance/kill/research/build) below.
   - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
   - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists).
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
@@ -166,6 +168,7 @@ Trainable units (costs and times in `Constants.COSTS` / `Constants.TRAIN_TIMES`)
 - **Dragon** — flying, anti-air and ground, high cost.
 - **Pigeon** — flying scout trained from towers; provides vision, vulnerable to anti-air.
 - **Engineer** — support unit (75g, 2 pop, no attack); channels repairs on damaged friendly structures (walls/towers/lanterns/building — never units), charging coin per HP restored. A structure damaged within `ENGINEER_REPAIR_LOCKOUT_SEC` cannot be repaired. Idle engineers auto-seek the nearest damaged friendly structure.
+- **Crawler** — underground-only raider (120g, 2 pop, melee); descends into the mine at spawn and can never surface or dig. Its auto-acquire is the one exception to the midfield rule: it engages any visible enemy unit underground on either side of the central wall. Underground pathing seals the surface row (`find_path_underground`), so crossing midfield requires a breached central wall plus dug tunnels. Not a fighter: waves, garrison, rally, Ctrl+F, and fighter upgrades all ignore it (`UnitData.is_crawler`).
 
 Miner upgrades unlock deeper layers (Level 1: layers 1–2, Level 2: layers 3–4, Level 3: layers 5–7). Fighter upgrades are per-type levels 1–3.
 
@@ -206,7 +209,7 @@ Defined in `project.godot` under `[input]`:
 
 - `lmb` / `rmb` — select / command
 - `Ctrl+A` / `Ctrl+M` / `Ctrl+F` / `Ctrl+D` — select all / miners / fighters / dragons
-- `1`–`7` — train miner / swordsman / archer / wizard / dragon / pigeon / engineer
+- `1`–`8` — train miner / swordsman / archer / wizard / dragon / pigeon / engineer / crawler
 - `Tab` (`toggle_view`) — toggle surface/underground camera bookmark
 - `R` (`toggle_research`) — toggle research panel
 - `K` / `Delete` (`kill_units`) — disband selection
@@ -289,7 +292,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself.
-- Category coverage: AI awareness/belief/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, defend leash, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
+- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
 
 ## Security and deployment considerations
 

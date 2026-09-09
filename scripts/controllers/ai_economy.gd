@@ -145,6 +145,14 @@ func _run_economy() -> void:
 	# fund.
 	_try_train_pigeon(save_goal)
 
+	# Engineer maintenance: a surplus hire when structures need repairs —
+	# never a save goal, and never while one is active.
+	if save_goal == 0:
+		_try_train_engineer()
+		# Crawler mine guard: same surplus rules — never a save goal, never
+		# while one is active.
+		_try_train_crawler()
+
 
 ## The price the AI is currently saving toward (0 = free spending). One goal
 ## at a time, in build order: first lantern → L2 miners → first tower. Turtle
@@ -345,3 +353,139 @@ func _try_train_pigeon(reserve: int) -> void:
 		if tower.team == ai.team and tower.is_built():
 			if tower.call("queue_pigeon"):
 				return
+
+
+## Engineer maintenance (support unit): hires an engineer from surplus when an
+## own structure sits below ENEMY_ENGINEER_DAMAGE_FRACTION of max HP past the
+## repair lockout. Deliberately NOT a save goal, and the caller only runs this
+## with no goal active — a 75g support hire must never stall fighter
+## production or the skeleton standing army. Gated on the difficulty "smarts"
+## tier: tier 0 (Easy) never bothers; tier 3 (Hard+) keeps a second engineer
+## once it fields ENEMY_ENGINEER_SECOND_MIN_STRUCTURES placeables. The hired
+## engineer needs no orders — idle auto-seek (unit_repair.gd) walks it to the
+## nearest damaged own-side structure.
+func _try_train_engineer() -> void:
+	var smarts: int = GameManager.get_ai_smarts()
+	if smarts < 1:
+		return
+	var cap: int = _Constants.ENEMY_ENGINEER_MAX_COUNT
+	if smarts >= 3 and _count_own_structures() >= _Constants.ENEMY_ENGINEER_SECOND_MIN_STRUCTURES:
+		cap += 1
+	if _count_engineers() >= cap:
+		return
+	if not _has_damaged_structure():
+		return
+	var building: Node2D = ai._combat._get_building()
+	if building == null or building.call("get_queue").size() >= 3:
+		return
+	var cost: int = FactionManager.get_unit_cost(ai.team, "engineer")
+	if EconomyManager.get_coin(ai.team) < cost + _Constants.ENEMY_ENGINEER_SURPLUS:
+		return
+	if not EconomyManager.can_add_population(ai.team, 2):
+		return
+	building.call("queue_unit", "engineer")
+
+
+## Living plus queued engineers — the queue count matters because the decision
+## tick outpaces the 6s train time, so a living-only count would re-hire every
+## tick until the queue filled.
+func _count_engineers() -> int:
+	var n: int = 0
+	for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
+		if unit.data.is_engineer and unit._state != Unit.State.DEAD:
+			n += 1
+	var building: Node2D = ai._combat._get_building()
+	if building != null:
+		for entry in building.call("get_queue"):
+			if entry.id == "engineer":
+				n += 1
+	return n
+
+
+## Own placeables on the surface (underground lanterns are unreachable by
+## design and don't count toward the second-engineer threshold).
+func _count_own_structures() -> int:
+	var n: int = 0
+	for group: String in ["towers", "walls", "lanterns"]:
+		for structure in ai.get_tree().get_nodes_in_group(group):
+			if structure.get("team") != ai.team:
+				continue
+			if structure.global_position.y > GridWorld.CELL_SIZE:
+				continue  # underground lantern
+			n += 1
+	return n
+
+
+## True when an own structure is damaged enough to justify an engineer: below
+## ENEMY_ENGINEER_DAMAGE_FRACTION of max HP and past the recent-damage lockout
+## (a live siege can't be out-repaired, so don't hire for one).
+func _has_damaged_structure() -> bool:
+	for group: String in ["towers", "walls", "lanterns", "buildings"]:
+		for structure in ai.get_tree().get_nodes_in_group(group):
+			if structure.get("team") != ai.team:
+				continue
+			if structure.global_position.y > GridWorld.CELL_SIZE:
+				continue  # underground lantern
+			if not structure.has_method("can_be_repaired") or not structure.can_be_repaired():
+				continue
+			if _structure_hp_fraction(structure) < _Constants.ENEMY_ENGINEER_DAMAGE_FRACTION:
+				return true
+	return false
+
+
+## HP fraction of a structure (placeables expose hp; building.gd keeps its HP
+## private behind _hp).
+func _structure_hp_fraction(structure: Node2D) -> float:
+	var hp: Variant = structure.get("hp")
+	if hp == null:
+		hp = structure.get("_hp")
+	return float(hp) / float(structure.get("max_hp"))
+
+
+## Crawler mine guard (underground raider unit): the AI keeps a small standing
+## guard so a breached central wall is not a free pass into its mine. Deliberately
+## NOT a save goal — the caller only runs this with no goal active, so guard
+## spending never stalls fighter production or the skeleton standing army.
+## Gated on the difficulty "smarts" tier: tier 0 (Easy) never trains crawlers;
+## tier 1 keeps one guard, tier 2+ keeps two (the second doubles as the raider
+## once the wall is breached — see ai_crawlers.gd). Brute fields one extra
+## (melee-flavored faction). The guard also waits for a real mining crew —
+## defending a mine with no miners in it is a waste.
+func _try_train_crawler() -> void:
+	var smarts: int = GameManager.get_ai_smarts()
+	if smarts < 1:
+		return
+	var cap: int = 1
+	if smarts >= 2:
+		cap += 1
+	var faction: FactionData = FactionManager.get_faction(ai.team)
+	if faction != null and faction.faction_id == "brute":
+		cap += 1
+	if _count_crawlers() >= cap:
+		return
+	if _count_miners() < _Constants.ENEMY_CRAWLER_MIN_MINERS:
+		return
+	var building: Node2D = ai._combat._get_building()
+	if building == null or building.call("get_queue").size() >= 3:
+		return
+	var cost: int = FactionManager.get_unit_cost(ai.team, "crawler")
+	if EconomyManager.get_coin(ai.team) < cost + _Constants.ENEMY_CRAWLER_SURPLUS:
+		return
+	if not EconomyManager.can_add_population(ai.team, 2):
+		return
+	building.call("queue_unit", "crawler")
+
+
+## Living plus queued crawlers — the queue count matters because the decision
+## tick outpaces the 8s train time (same re-hire trap as the engineer).
+func _count_crawlers() -> int:
+	var n: int = 0
+	for unit in ai.get_tree().get_nodes_in_group(ai._combat.team_name()):
+		if unit.data.is_crawler and unit._state != Unit.State.DEAD:
+			n += 1
+	var building: Node2D = ai._combat._get_building()
+	if building != null:
+		for entry in building.call("get_queue"):
+			if entry.id == "crawler":
+				n += 1
+	return n

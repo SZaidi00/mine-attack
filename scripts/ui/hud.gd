@@ -30,6 +30,8 @@ const _ICON_SNOWSTORM: Texture2D = preload("res://frost_mines_assets/icons/icon_
 	"Wizard": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/WizardCountLabel,
 	"Dragon": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/DragonCountLabel,
 	"Pigeon": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/PigeonCountLabel,
+	"Engineer": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/EngineerCountLabel,
+	"Crawler": $TopBar/MarginContainer/VBoxContainer/StatsRow/CenterGroup/UnitBreakdown/CrawlerCountLabel,
 }
 @onready var _player_hp_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/PlayerHPLabel
 @onready var _enemy_hp_label: Label = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyHPLabel
@@ -44,20 +46,20 @@ const _ICON_SNOWSTORM: Texture2D = preload("res://frost_mines_assets/icons/icon_
 	5.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed5Button,
 	10.0: $TopBar/MarginContainer/VBoxContainer/TabsRow/SpeedGroup/Speed10Button,
 }
-@onready var _upgrade_button: Button = $BottomBar/MarginContainer/HBoxContainer/UpgradeMinerButton
+@onready var _upgrade_button: Button = %UpgradeMinerButton
 @onready var _fighter_upgrade_buttons: Dictionary = {
-	"swordsman": $BottomBar/MarginContainer/HBoxContainer/UpgradeSwordsmanButton,
-	"archer": $BottomBar/MarginContainer/HBoxContainer/UpgradeArcherButton,
-	"wizard": $BottomBar/MarginContainer/HBoxContainer/UpgradeWizardButton,
-	"dragon": $BottomBar/MarginContainer/HBoxContainer/UpgradeDragonButton,
+	"swordsman": %UpgradeSwordsmanButton,
+	"archer": %UpgradeArcherButton,
+	"wizard": %UpgradeWizardButton,
+	"dragon": %UpgradeDragonButton,
 }
-@onready var _attack_button: Button = $BottomBar/MarginContainer/HBoxContainer/AttackButton
-@onready var _defend_button: Button = $BottomBar/MarginContainer/HBoxContainer/DefendButton
-@onready var _garrison_button: Button = $BottomBar/MarginContainer/HBoxContainer/GarrisonButton
-@onready var _rally_button: Button = $BottomBar/MarginContainer/HBoxContainer/RallyButton
-@onready var _kill_button: Button = $BottomBar/MarginContainer/HBoxContainer/KillButton
-@onready var _research_button: Button = $BottomBar/MarginContainer/HBoxContainer/ResearchButton
-@onready var _build_button: Button = $BottomBar/MarginContainer/HBoxContainer/BuildButton
+@onready var _attack_button: Button = %AttackButton
+@onready var _defend_button: Button = %DefendButton
+@onready var _garrison_button: Button = %GarrisonButton
+@onready var _rally_button: Button = %RallyButton
+@onready var _kill_button: Button = %KillButton
+@onready var _research_button: Button = %ResearchButton
+@onready var _build_button: Button = %BuildButton
 @onready var _research_panel: Control = $ResearchPanel
 @onready var _player_faction_icon: TextureRect = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/PlayerFactionIcon
 @onready var _enemy_faction_icon: TextureRect = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyFactionIcon
@@ -452,7 +454,7 @@ func _build_lava_banner() -> void:
 	_lava_banner.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_lava_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_lava_banner.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_lava_banner.position.y = -150.0
+	_lava_banner.position.y = -236.0
 	_lava_banner.add_theme_stylebox_override("panel", UIThemeTokens.make_warning_banner_style(UIThemeTokens.WarningVariant.LAVA))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER

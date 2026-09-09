@@ -70,6 +70,47 @@ func _return_to_rally_point() -> void:
 		unit._set_state(Unit.State.MOVE, "return to rally point")
 
 
+## Crawler idle (underground-only raider): on the surface the crawler just
+## walks to the own mine entry and climbs down; underground it auto-engages
+## any enemy unit in vision — on EITHER side of the central wall, the one
+## deliberate exception to the midfield rule (raiding the enemy mine is its
+## job) — and otherwise returns to its post. The post is the last explicit
+## underground move destination, or the own mine entry's ladder bottom by
+## default (guard-the-mine).
+func _handle_idle_crawler() -> void:
+	if not unit.is_underground:
+		unit._commands.climb_down_ladder()
+		return
+	var target: Unit = unit._vision._find_crawler_target()
+	if target != null:
+		# Auto-engagement, not an explicit order (same bookkeeping as fighters):
+		# keep the hold-post flag so a guard returns after the kill.
+		var hold: bool = unit._hold_post
+		unit._commands.attack_unit(target)
+		if unit._state == Unit.State.ATTACK:
+			unit._hold_post = hold
+			unit._auto_engaged = true
+		return
+	_return_to_crawler_post()
+
+
+## Idle underground with nothing to fight: drift back to the standing point.
+## A surface post (the spawn point) means "not yet assigned" — guard the own
+## mine entry's ladder bottom instead.
+func _return_to_crawler_post() -> void:
+	var post: Vector2 = unit._post_point
+	if post == Vector2.ZERO or post.y <= GridWorld.CELL_SIZE:
+		var entry: Node2D = unit._nearest_friendly_mine_entry()
+		if entry == null:
+			return
+		post = entry.call("get_underground_position")
+	if unit.global_position.distance_to(post) <= GridWorld.CELL_SIZE * 1.5:
+		return
+	unit._navigation._repath(post + unit._movement_offset)
+	if not unit._path.is_empty():
+		unit._set_state(Unit.State.MOVE, "return to mine post")
+
+
 func _patrol_underground() -> void:
 	var entry: Node2D = unit._nearest_friendly_mine_entry()
 	if entry == null:

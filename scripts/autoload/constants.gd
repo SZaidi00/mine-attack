@@ -32,6 +32,7 @@ const COSTS: Dictionary = {
 	"dragon": 400,
 	"pigeon": 100,
 	"engineer": 75,
+	"crawler": 120,
 }
 
 # ─── TRAIN TIMES (seconds) ───
@@ -43,6 +44,7 @@ const TRAIN_TIMES: Dictionary = {
 	"dragon": 14.0,
 	"pigeon": 8.0,
 	"engineer": 6.0,
+	"crawler": 8.0,
 }
 
 # ─── UNIT STATS ───
@@ -123,6 +125,9 @@ const VISION_WIZARD: int = 10
 const VISION_DRAGON: int = 14
 const VISION_PIGEON: int = 2
 const VISION_ENGINEER: int = 6
+# Crawlers live underground: their lamp lights the mine like a miner's
+# (slightly farther — raiding is their job), and only the layer they are on.
+const VISION_CRAWLER: int = 4
 const VISION_BUILDING: int = 6
 const FOG_MEMORY_DURATION: float = 10.0
 const FOG_COLOR: Color = Color("#05070a")
@@ -930,6 +935,37 @@ const ENEMY_MINER_UPGRADE_MIN_CREW: int = 5
 # periodically re-visits the enemy base to refresh tower/army intel — skipped
 # while an own pigeon is out (pigeons auto-patrol) or while defending.
 const ENEMY_RESCOUT_INTERVAL: float = 75.0
+# Engineer maintenance (support unit): the AI hires an engineer from surplus
+# (never a save goal, so fighter production and the skeleton standing army are
+# untouched) when one of its structures sits below
+# ENEMY_ENGINEER_DAMAGE_FRACTION of max HP past the repair lockout. Gated on
+# the difficulty "smarts" tier: tier 0 (Easy) never bothers; tier 3 (Hard+)
+# keeps a second engineer once it fields ENEMY_ENGINEER_SECOND_MIN_STRUCTURES
+# placeables. The cushion keeps the 75g hire from eating the fighter budget.
+const ENEMY_ENGINEER_DAMAGE_FRACTION: float = 0.8
+const ENEMY_ENGINEER_MAX_COUNT: int = 1
+const ENEMY_ENGINEER_SECOND_MIN_STRUCTURES: int = 3
+const ENEMY_ENGINEER_SURPLUS: int = 250
+
+# ─── CRAWLER (underground raider) ───
+# Crawlers are underground-only melee attackers: they descend via the own mine
+# entry at spawn, can never climb back out, and cannot dig (wall breaching
+# stays miner-only). Their auto-acquire is the deliberate exception to the
+# midfield rule — underground they engage enemy units on EITHER side of the
+# central wall, so once the wall is breached they hunt enemy miners in their
+# own tunnels. Idle crawlers return to a post near the own mine entry
+# (guard-the-mine default); explicit orders and the Attack stance drive raids.
+# AI usage (gated by the difficulty "smarts" tier, like the engineer): tier 0
+# (Easy) never trains crawlers; tier 1 keeps a single mine guard; tier 2+
+# keeps two and sends raiding crawlers through the breached central wall,
+# pulling them home when visibly outnumbered underground. Training is an
+# organic surplus spend (never a save goal, never while one is active) and
+# waits for a real mining crew — a guard for an economy that doesn't exist
+# yet is a waste. Brute fields one extra crawler (melee-flavored faction).
+const ENEMY_CRAWLER_MIN_MINERS: int = 3
+const ENEMY_CRAWLER_SURPLUS: int = 200
+const ENEMY_CRAWLER_RAID_INTERVAL: float = 25.0
+const ENEMY_CRAWLER_RAID_MIN_COUNT: int = 2
 
 # ─── UNIT MICRO ───
 # Ranged fighters kite (step back while firing) when an enemy melee threat
@@ -966,6 +1002,7 @@ const INPUT_TRAIN_WIZARD: StringName = &"train_wizard"
 const INPUT_TRAIN_DRAGON: StringName = &"train_dragon"
 const INPUT_TRAIN_PIGEON: StringName = &"train_pigeon"
 const INPUT_TRAIN_ENGINEER: StringName = &"train_engineer"
+const INPUT_TRAIN_CRAWLER: StringName = &"train_crawler"
 const INPUT_TOGGLE_VIEW: StringName = &"toggle_view"
 const INPUT_TOGGLE_RESEARCH: StringName = &"toggle_research"
 const INPUT_KILL_UNITS: StringName = &"kill_units"

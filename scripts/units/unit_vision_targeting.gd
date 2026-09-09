@@ -28,6 +28,8 @@ func get_vision_radius() -> int:
 			return Constants.VISION_PIGEON
 		"engineer":
 			return Constants.VISION_ENGINEER
+		"crawler":
+			return Constants.VISION_CRAWLER
 	return 0
 
 
@@ -35,9 +37,9 @@ func get_vision_radius() -> int:
 ## reveal the layer they are on — vision no longer bleeds through the
 ## surface ceiling or across the central wall into the enemy mine. Surface
 ## fighters and flying units light only the surface; underground vision is
-## reserved for underground miners and mine lanterns.
+## reserved for underground miners, crawlers, and mine lanterns.
 func get_vision_layer() -> int:
-	if unit.data != null and unit.data.is_miner:
+	if unit.data != null and (unit.data.is_miner or unit.data.is_crawler):
 		return GridWorld.VISION_LAYER_UNDERGROUND if unit.is_underground else GridWorld.VISION_LAYER_SURFACE
 	return GridWorld.VISION_LAYER_SURFACE
 
@@ -169,6 +171,32 @@ func _find_auto_attack_target():
 		if best != null:
 			return best
 	return null
+
+
+## Crawler targeting (underground raider): the midfield rule's deliberate
+## exception — crawlers exist to raid the enemy mine, so they engage ANY enemy
+## unit underground on either side of the central wall. Structures are never
+## crawler targets. Fog-honest: only what the team can currently see.
+func _find_crawler_target() -> Unit:
+	if unit.data == null or not unit.data.is_crawler or not unit.is_underground:
+		return null
+	var best: Unit = null
+	var best_dist: float = unit.data.sight_range * unit.data.sight_range
+	for u in unit.get_tree().get_nodes_in_group("units"):
+		if u.team == unit.team or u._state == Unit.State.DEAD:
+			continue
+		if not u.is_underground:
+			continue
+		if not unit._combat.can_damage_unit(u):
+			continue
+		# Fog of War: cannot auto-attack what the team cannot see.
+		if not _team_can_see(u.global_position):
+			continue
+		var d: float = unit.combat_distance_squared_to(u)
+		if d <= best_dist:
+			best_dist = d
+			best = u
+	return best
 
 
 ## Rally targets: any living enemy on the surface — fighters AND miners.

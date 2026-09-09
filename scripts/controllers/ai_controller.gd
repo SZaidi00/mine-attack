@@ -8,6 +8,7 @@ const AIMining = preload("res://scripts/controllers/ai_mining.gd")
 const AICombat = preload("res://scripts/controllers/ai_combat.gd")
 const AISmartBehaviors = preload("res://scripts/controllers/ai_smart_behaviors.gd")
 const AIAwareness = preload("res://scripts/controllers/ai_awareness.gd")
+const AICrawlers = preload("res://scripts/controllers/ai_crawlers.gd")
 
 ## Target army composition — the economy tick trains whichever type is
 ## furthest below its share, so the AI fields a mixed force (tanky frontline,
@@ -49,6 +50,8 @@ var _last_ai_mined: int = -1
 
 # Awareness (Revamp Phase 8): scouting, lantern placement, weather response.
 var _awareness_tick: float = 0.0
+# Crawler guard/defense/raiding tick (smarts tier 1+; the module self-gates).
+var _crawler_tick: float = 0.0
 var _scout: Unit = null
 var _next_scout_time: float = _Constants.ENEMY_SCOUT_TIME
 # Re-scouting (tier 2+): once the enemy faction is identified, a swordsman
@@ -78,6 +81,7 @@ var _mining: AIMining
 var _combat: AICombat
 var _smart: AISmartBehaviors
 var _awareness: AIAwareness
+var _crawlers: AICrawlers
 
 
 func _init() -> void:
@@ -86,6 +90,7 @@ func _init() -> void:
 	_combat = AICombat.new(self)
 	_smart = AISmartBehaviors.new(self)
 	_awareness = AIAwareness.new(self)
+	_crawlers = AICrawlers.new(self)
 
 
 func _ready() -> void:
@@ -156,6 +161,11 @@ func _process(delta: float) -> void:
 	if _awareness_tick >= 1.0:
 		_awareness._run_awareness(_awareness_tick)
 		_awareness_tick = 0.0
+
+	_crawler_tick += delta
+	if _crawler_tick >= 1.0:
+		_crawlers._run_crawlers()
+		_crawler_tick = 0.0
 
 	var smarts: int = GameManager.get_ai_smarts()
 	if smarts >= 1:
@@ -317,6 +327,10 @@ func _run_bait() -> void:
 
 func _run_awareness(delta: float = 1.0) -> void:
 	_awareness._run_awareness(delta)
+
+
+func _run_crawlers() -> void:
+	_crawlers._run_crawlers()
 
 
 func _run_scouting() -> void:

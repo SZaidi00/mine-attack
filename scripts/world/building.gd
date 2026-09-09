@@ -54,6 +54,7 @@ func _ready() -> void:
 	_resources["wizard"] = preload("res://scripts/resources/units/wizard.tres")
 	_resources["dragon"] = preload("res://scripts/resources/units/dragon.tres")
 	_resources["engineer"] = preload("res://scripts/resources/units/engineer.tres")
+	_resources["crawler"] = preload("res://scripts/resources/units/crawler.tres")
 	_mark_footprint_solid()
 	_add_deposit_point()
 	_connect_view_mode()
@@ -285,6 +286,10 @@ func _spawn_front(_unit_id: String, data: UnitData, paid_cost: int = -1) -> void
 	unit_spawned.emit(unit)
 	# Make sure miners head straight into the shaft as soon as they spawn.
 	if data_copy.is_miner and unit.has_method("climb_down_ladder"):
+		unit.call("climb_down_ladder")
+	# Crawlers are underground-only: they walk to the own mine entry and
+	# descend immediately, then live down there permanently.
+	elif data_copy.is_crawler and unit.has_method("climb_down_ladder"):
 		unit.call("climb_down_ladder")
 
 

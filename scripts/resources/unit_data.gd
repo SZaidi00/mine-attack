@@ -6,6 +6,8 @@ extends Resource
 @export var is_fighter: bool = false
 @export var is_scout: bool = false
 @export var is_engineer: bool = false
+## Crawler: underground-only melee attacker (raids the enemy mine).
+@export var is_crawler: bool = false
 @export var cost: int = 100
 @export var train_time: float = 5.0
 @export var population: int = 1

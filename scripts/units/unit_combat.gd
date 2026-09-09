@@ -82,7 +82,6 @@ func take_damage(amount: int, attacker: Node2D = null, environmental: bool = fal
 		amount = maxi(1, amount - unit._armor)
 	unit.hp -= amount
 	unit._regen_delay = Constants.UNIT_REGEN_DELAY
-	unit._damage_log.append([0.0, amount])
 	# Match stats: credit the attacker's team with post-armor damage (units,
 	# towers, anything with a team property); environmental chip damage passes
 	# no attacker and is not credited to anyone.
@@ -91,6 +90,9 @@ func take_damage(amount: int, attacker: Node2D = null, environmental: bool = fal
 		if attacker_team != null:
 			MatchStats.record_damage(attacker_team, amount)
 	if not environmental:
+		# Only combat damage feeds the incoming-DPS window — cave-ins and lava
+		# must not read as an attack to the AI (crawler distress, retreats).
+		unit._damage_log.append([0.0, amount])
 		unit._hit_flash_timer = 0.15
 		_spawn_damage_popup(amount)
 		# Fight Back (Brute): miners hit back when a fighter strikes them in melee.

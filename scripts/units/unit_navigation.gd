@@ -112,7 +112,13 @@ func _kite_away_from(threat_pos: Vector2, delta: float) -> void:
 
 func _repath(target_world: Vector2) -> void:
 	# Team is passed so own walls never block their builder (Phase 3 seals).
-	unit._path = unit._grid.find_path(unit.global_position, target_world, unit.team)
+	# Crawlers are underground-only: once inside the mine they path through
+	# tunnels exclusively — the surface row is sealed for their queries so a
+	# raid can never shortcut over the top past the central wall.
+	if unit.data != null and unit.data.is_crawler and unit.is_underground:
+		unit._path = unit._grid.find_path_underground(unit.global_position, target_world, unit.team)
+	else:
+		unit._path = unit._grid.find_path(unit.global_position, target_world, unit.team)
 	unit._path_index = 0
 	# Skip the first point if it is the current cell or if moving to it would
 	# send us backward relative to the overall target direction (can happen when

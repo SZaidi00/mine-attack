@@ -50,17 +50,23 @@ func _handle_idle_engineer() -> void:
 		_seek_failed_ms = Time.get_ticks_msec()
 
 
-## Nearest damaged friendly structure (placeables and the main building). The
-## recent-damage lockout is ignored here — the engineer walks over and waits
-## the window out next to the structure. Underground lanterns are skipped:
-## the engineer never enters the mine, so they are unreachable by design.
+## Nearest damaged friendly structure (placeables and the main building) on
+## the team's own half of the map (midfield is world x = 0) — walking across
+## the line to fix a forward structure means strolling through the enemy army.
+## The recent-damage lockout is ignored here — the engineer walks over and
+## waits the window out next to the structure. Underground lanterns are
+## skipped: the engineer never enters the mine, so they are unreachable by
+## design.
 func _find_repair_target() -> Node2D:
 	var best: Node2D = null
 	var best_d2: float = INF
+	var own_side: float = -1.0 if unit.team == GameManager.Team.PLAYER else 1.0
 	for group: String in ["towers", "walls", "lanterns", "buildings"]:
 		for structure in unit.get_tree().get_nodes_in_group(group):
 			if structure.get("team") != unit.team:
 				continue
+			if structure.global_position.x * own_side < 0.0:
+				continue  # across midfield — not worth the walk into danger
 			if structure.global_position.y > GridWorld.CELL_SIZE:
 				continue  # underground lantern — engineers work the surface only
 			if not structure.has_method("needs_repair") or not structure.needs_repair():
