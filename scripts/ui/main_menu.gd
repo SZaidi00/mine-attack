@@ -17,6 +17,7 @@ const _SWORDSMAN_PLAYER: Texture2D = preload("res://frost_mines_assets/units/swo
 const _SWORDSMAN_ENEMY: Texture2D = preload("res://frost_mines_assets/units/swordsman_enemy.png")
 
 var _difficulty_option: OptionButton
+var _adaptive_check: CheckBox
 var _settings_panel: Control
 # Phase 4: two-step menu — the main card leads into faction select.
 var _main_center: CenterContainer
@@ -378,6 +379,11 @@ func _build_card() -> void:
 		_difficulty_option.add_item(diff_name.capitalize())
 	_difficulty_option.selected = GameManager.difficulty
 	diff_row.add_child(_difficulty_option)
+	_adaptive_check = CheckBox.new()
+	_adaptive_check.text = "Adaptive"
+	_adaptive_check.tooltip_text = "AI difficulty adjusts mid-match to keep the game close"
+	_adaptive_check.button_pressed = GameManager.adaptive_difficulty
+	diff_row.add_child(_adaptive_check)
 	vbox.add_child(diff_row)
 
 	if SettingsManager.is_supported():
@@ -692,6 +698,7 @@ func _show_main_card() -> void:
 
 func _on_play() -> void:
 	GameManager.set_difficulty(_difficulty_option.selected as GameManager.Difficulty)
+	GameManager.set_adaptive_difficulty(_adaptive_check.button_pressed)
 	FactionManager.set_player_faction(_selected_faction_id)
 	FactionManager.pick_random_enemy_faction()
 	GameManager.roll_ai_opener()

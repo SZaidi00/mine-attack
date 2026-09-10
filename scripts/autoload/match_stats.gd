@@ -22,6 +22,10 @@ var difficulty: String = ""
 var player_faction: String = ""
 var enemy_faction: String = ""
 var ai_opener: String = ""
+# Adaptive difficulty smoothing: whether the main-menu checkbox was on, and
+# the final smoothing offset (tier steps from the chosen difficulty) reached
+# by match end — both feed the balance-analysis logs.
+var adaptive_difficulty: bool = false
 
 # Result of the last finalized match; empty until the first game over.
 var last_summary: Dictionary = {}
@@ -69,6 +73,7 @@ func _sample_timeline() -> void:
 ## scene loads (match start), after the menu has made its picks.
 func reset() -> void:
 	difficulty = GameManager.Difficulty.keys()[GameManager.difficulty]
+	adaptive_difficulty = GameManager.adaptive_difficulty
 	ai_opener = GameManager.ai_opener
 	var pf: FactionData = FactionManager.get_faction(GameManager.Team.PLAYER)
 	var ef: FactionData = FactionManager.get_faction(GameManager.Team.ENEMY)
@@ -136,6 +141,8 @@ func build_summary(winner: GameManager.Team) -> Dictionary:
 		"winner": "player" if winner == GameManager.Team.PLAYER else "enemy",
 		"duration_sec": int(GameManager.match_time - _start_time),
 		"difficulty": difficulty,
+		"adaptive_difficulty": adaptive_difficulty,
+		"difficulty_offset": GameManager.get_difficulty_offset(),
 		"player_faction": player_faction,
 		"enemy_faction": enemy_faction,
 		"ai_opener": ai_opener,

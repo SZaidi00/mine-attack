@@ -5,7 +5,7 @@ Proposed improvements for MineAttack, grouped by area. Status legend: `[ ]` not 
 ## High impact
 
 - [x] **Post-match stats & match logging** — match-end screen with graphs/numbers (coin mined over time, army size, damage dealt) plus a per-match JSON log from the autoloads to feed balance analysis. (Implemented: `MatchStats` autoload, game-over summary table + `MatchGraph` coin/population charts, JSON logs in `user://match_logs/`.)
-- [ ] **AI difficulty smoothing** — adaptive difficulty that nudges `game_manager.gd` modifiers mid-match instead of only fixed tiers (Easy → Godly); builds on `AIBeliefSystem` and smarts tiers.
+- [x] **AI difficulty smoothing** — adaptive difficulty that nudges `game_manager.gd` modifiers mid-match instead of only fixed tiers (Easy → Godly); builds on `AIBeliefSystem` and smarts tiers. (Implemented: opt-in "Adaptive" checkbox in the main menu (`GameManager.adaptive_difficulty`); `GameManager._difficulty_offset` in ±1 tier steps interpolated between adjacent `DIFFICULTY_MODIFIERS` rows — numeric keys lerp, the smarts tier flips only at a full step; `ai_difficulty_smoothing.gd` evaluator on a 30s tick past a 90s grace scores army (believed vs own fighters), economy (income rates), and base HP, nudging one 0.25 step per eval with 2-eval hysteresis — ahead eases off, behind toughens up; `SMOOTHING_*` tuning, debug-overlay readout, match-log metadata, `tests/test_difficulty_smoothing.gd`.)
 - [ ] **Save/resume mid-match** — `user://savegame` snapshot of grid state + unit/structure state; state already lives mostly in serializable autoloads and `GridWorld._cells`.
 
 ## Gameplay depth

@@ -77,6 +77,18 @@ var match_time: float = 0.0
 # AI difficulty for the current match. Set from the debug dropdown (Phase 6)
 # or the main menu (Phase 7); survives reset() so Play Again keeps the choice.
 var difficulty: Difficulty = Difficulty.NORMAL
+# Adaptive difficulty smoothing (opt-in from the main menu): when on, the AI's
+# smoothing evaluator nudges _difficulty_offset mid-match to keep the match
+# close. Survives reset() like the difficulty pick itself.
+var adaptive_difficulty: bool = false
+# Mid-match smoothing offset, in tier steps (-1 = one tier easier, +1 = one
+# tier harder, fractional = interpolated between adjacent tier rows). Clamped
+# to [-1, 1]; 0 = the chosen tier exactly. Reset per match.
+var _difficulty_offset: float = 0.0
+# Interpolated-modifier cache (get_difficulty_modifiers is called every frame
+# for wave/economy ticks); rebuilt only when difficulty or the offset changes.
+var _cached_modifiers: Dictionary = {}
+var _cached_modifiers_key: String = ""
 # Player-chosen game speed (1x/2x/3x/5x/10x). Like difficulty, survives reset()
 # so Play Again keeps the choice. The win slow-mo overrides it temporarily.
 var game_speed: float = 1.0
@@ -160,9 +172,11 @@ func reset() -> void:
 	_slowmo_end_msec = -1
 	soft_paused = false
 	Engine.time_scale = game_speed
-	# Note: difficulty and game_speed are intentionally kept so Play Again
-	# preserves both choices. soft_paused is cleared so Play Again never starts
-	# in a paused state.
+	_difficulty_offset = 0.0
+	_cached_modifiers_key = ""
+	# Note: difficulty, adaptive_difficulty and game_speed are intentionally
+	# kept so Play Again preserves all three choices. soft_paused is cleared so
+	# Play Again never starts in a paused state.
 
 
 ## Sets the player-chosen game speed. The value is always stored (so the win
@@ -190,8 +204,65 @@ func set_difficulty(d: Difficulty) -> void:
 	DebugLog.log_command("GameManager", "set_difficulty", Difficulty.keys()[d])
 
 
+## Enables/disables adaptive difficulty smoothing for the match (main-menu
+## checkbox). When on, the AI's smoothing evaluator nudges the difficulty
+## offset mid-match; when off the offset stays 0 and tiers behave as before.
+func set_adaptive_difficulty(on: bool) -> void:
+	adaptive_difficulty = on
+	DebugLog.log_command("GameManager", "set_adaptive_difficulty", str(on))
+
+
+## Mid-match smoothing offset in tier steps (see _difficulty_offset).
+func get_difficulty_offset() -> float:
+	return _difficulty_offset
+
+
+## Nudges the smoothing offset by `delta` tier steps, clamped to [-1, 1]
+## (one tier either side of the chosen difficulty). Called by the AI's
+## smoothing evaluator (ai_difficulty_smoothing.gd) when adaptive difficulty
+## is on; no-ops at the clamp so spamming nudges can't escape the bounds.
+func nudge_difficulty(delta: float) -> void:
+	var clamped: float = clampf(_difficulty_offset + delta, -1.0, 1.0)
+	if is_equal_approx(clamped, _difficulty_offset):
+		return
+	_difficulty_offset = clamped
+	DebugLog.log_command(
+		"GameManager",
+		"nudge_difficulty",
+		"%+.2f -> %.2f (%s)" % [delta, _difficulty_offset, Difficulty.keys()[difficulty].capitalize()]
+	)
+
+
 func get_difficulty_modifiers() -> Dictionary:
-	return DIFFICULTY_MODIFIERS[difficulty]
+	if _difficulty_offset == 0.0:
+		return DIFFICULTY_MODIFIERS[difficulty]
+	var key: String = "%d:%.4f" % [difficulty, _difficulty_offset]
+	if key != _cached_modifiers_key:
+		_cached_modifiers = _interpolate_modifiers(difficulty, _difficulty_offset)
+		_cached_modifiers_key = key
+	return _cached_modifiers
+
+
+## Interpolates a modifier table between the rows adjacent to
+## base + offset: every numeric key lerps across the fraction, so e.g. an
+## offset of 0.5 on Normal halves the gap to Hard on coin, train time, wave
+## tempo, and the aggression ratios. The "smarts" behavior tier is NOT
+## interpolated — it comes from the rounded effective tier, so smart behaviors
+## flip only on a full step, never mid-fraction.
+func _interpolate_modifiers(base: Difficulty, offset: float) -> Dictionary:
+	var eff: float = clampf(float(base) + offset, 0.0, float(Difficulty.size() - 1))
+	var lo: int = int(floor(eff))
+	var hi: int = mini(lo + 1, Difficulty.size() - 1)
+	var t: float = eff - float(lo)
+	var lower: Dictionary = DIFFICULTY_MODIFIERS[lo]
+	var upper: Dictionary = DIFFICULTY_MODIFIERS[hi]
+	var result: Dictionary = {}
+	for key in lower:
+		if key == "smarts":
+			continue
+		result[key] = lerpf(float(lower[key]), float(upper[key]), t)
+	result["smarts"] = DIFFICULTY_MODIFIERS[int(round(eff))]["smarts"]
+	return result
 
 
 ## AI deposit income multiplier (applied at the AI building's deposit point).

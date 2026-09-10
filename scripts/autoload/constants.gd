@@ -974,6 +974,33 @@ const ENEMY_ENGINEER_DAMAGE_FRACTION: float = 0.8
 const ENEMY_ENGINEER_MAX_COUNT: int = 1
 const ENEMY_ENGINEER_SECOND_MIN_STRUCTURES: int = 3
 const ENEMY_ENGINEER_SURPLUS: int = 250
+# Adaptive difficulty smoothing (opt-in main-menu checkbox): the AI evaluates
+# how the match is going this often and nudges GameManager's difficulty offset
+# toward keeping the match close. No evals before the grace time so the opener
+# plays out on the chosen tier.
+const SMOOTHING_EVAL_INTERVAL: float = 30.0
+const SMOOTHING_GRACE_TIME: float = 90.0
+# One verdict moves the offset by this many tier steps; the full ±1 range spans
+# several evals so difficulty ramps instead of lurching.
+const SMOOTHING_STEP: float = 0.25
+# A verdict direction must win this many consecutive evals before the offset
+# moves that way (hysteresis against single-sample noise).
+const SMOOTHING_HYSTERESIS: int = 2
+# Verdict signals: army (own live fighters vs the believed enemy army),
+# economy (own vs enemy coin-mined rates), base (own building HP fraction).
+# The verdict needs at least this many of the 3 signals pointing the same way.
+const SMOOTHING_SIGNAL_MIN: int = 2
+# Army signal: the AI is "ahead" when its live fighters outnumber the believed
+# enemy fighters by this ratio, "behind" when they fall short of it.
+const SMOOTHING_ARMY_AHEAD_RATIO: float = 1.5
+const SMOOTHING_ARMY_BEHIND_RATIO: float = 0.67
+# Economy signal: "ahead" above / "behind" below this income-rate ratio
+# (enemy rate over own rate, same shape as ENEMY_ECON_PRESSURE_RATIO).
+const SMOOTHING_INCOME_AHEAD_RATIO: float = 0.8
+const SMOOTHING_INCOME_BEHIND_RATIO: float = 1.25
+# Base signal: own building below this HP fraction reads as "behind". There is
+# no symmetric "ahead" — army + economy signals cover winning.
+const SMOOTHING_BASE_HP_FRACTION: float = 0.5
 
 # ─── CRAWLER (underground raider) ───
 # Crawlers are underground-only melee attackers: they descend via the own mine

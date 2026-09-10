@@ -51,7 +51,7 @@ mine-attack/
 
 ## Runtime architecture
 
-`scenes/ui/main_menu.tscn` is the main scene (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
+`scenes/ui/main_menu.tscn` is the main scene (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
 
 - `World/VolcanoBackground` — decorative volcano sprite.
 - `World/GridWorld` — procedural map, A*, fog of war, rendering.
@@ -73,7 +73,7 @@ Autoloads (load order from `project.godot`): `Constants`, `GameManager`, `Factio
 Global singletons. All hold per-match state that survives scene reloads; `hud.gd` resets them on Play Again / Quit to Menu.
 
 - `constants.gd` — balance numbers, costs, train times, upgrade tables, vision/fog constants, dynamic-terrain event tuning (`LAVA_*`/`CAVEIN_*`/`MAGMA_*`/`ORE_*`), weather tuning (`SNOWSTORM_*`), volcano tuning (`VOLCANO_*`), research branch tree (`RESEARCH_TECHS`) and branch-effect tuning, input action `StringName`s. Source of truth for all numeric balance.
-- `game_manager.gd` — `Team`/`Difficulty` enums (Easy, Normal, Hard, Nightmare, Godly), team colors, difficulty modifiers, game speed, match timer, win/loss, soft pause. Rolls the AI's per-match opener (`AI_OPENERS`: balanced/rush/boom/turtle, faction-weighted) which shifts wave thresholds, the miner quota, and build order.
+- `game_manager.gd` — `Team`/`Difficulty` enums (Easy, Normal, Hard, Nightmare, Godly), team colors, difficulty modifiers, game speed, match timer, win/loss, soft pause. Rolls the AI's per-match opener (`AI_OPENERS`: balanced/rush/boom/turtle, faction-weighted) which shifts wave thresholds, the miner quota, and build order. Adaptive difficulty smoothing (opt-in via `adaptive_difficulty`, main-menu checkbox): a mid-match `_difficulty_offset` (±1 tier steps) interpolates the numeric difficulty modifiers between adjacent `DIFFICULTY_MODIFIERS` rows (the smarts behavior tier flips only at a full step), nudged by the AI's smoothing evaluator.
 - `faction_manager.gd` — faction picks (Arcane, Brute, Industrial), hidden-faction identification, faction-modified costs and starting bonuses.
 - `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Baseline income: both teams trickle `BASELINE_INCOME_COIN` every `BASELINE_INCOME_INTERVAL` from match start, no eligibility gates (AI scaled by the difficulty coin multiplier). Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (same AI scaling), so a wiped economy can always re-staff.
 - `research_manager.gd` — timed branch research tree: mutually-exclusive tiers, one-time 500g respec, active research slot with queue, Ore Sonar scan.
@@ -99,6 +99,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `ai_smart_behaviors.gd` — focus fire, wounded retreat, mine-entry raids (a squad camps the enemy mine entry and ambushes deposit trips), bait, combat predictor (counts remembered enemy towers), wave retreat/recall, post-defense counterattack, aggression.
   - `ai_awareness.gd` — faction scouting (swordsman at 1:00, 30s retry after death) that becomes periodic re-scouting once the faction is identified (tier 2+, skipped while an own pigeon patrols or while defending), defensive lantern placement/upgrades, AI tower placement (mirrors the player-side placement rules; turtle openers build towers first), weather-offense timing (tier 2+: strikes on snowstorm start / volcano end via the timing-attack override), snowstorm/volcano miner recall to the mine entry/base and lava evacuation (signal-driven; sheltered miners hold via `unit.shelter_in_place`).
   - `ai_crawlers.gd` — underground crawler guard/defense/raiding on a 1s tick (smarts tier 1+). Defense: visible enemy units underground on the own half, or underground miners taking damage (the 3s incoming-DPS window catches unseen attackers), trigger miner shelter orders (`shelter_in_place` + hold at the ladder bottom, released on all-clear) while the crawler guard converges on the intruder. Both triggers are combat-only: the threat scan ignores units that can't fight (a wandering enemy miner without Brute Fight Back doesn't count), and environmental damage (cave-ins/lava) never enters `Unit._damage_log`, so rockfalls don't panic the crew. Offense (tier 2+, no home threat, wall breached, army not defending): all but one crawler raid the enemy mine — hunt visible enemy miners, else march on the enemy mine entry — pulling home when visibly outnumbered underground or wounded, with an `ENEMY_CRAWLER_RAID_INTERVAL` re-launch cooldown.
+  - `ai_difficulty_smoothing.gd` — adaptive difficulty (opt-in `GameManager.adaptive_difficulty`, bidirectional rubber band): on a `SMOOTHING_EVAL_INTERVAL` tick past a `SMOOTHING_GRACE_TIME` grace, scores army (own live fighters vs the fog-honest believed enemy army), economy (the aggression tick's income-rate samples), and own base HP; a ≥ `SMOOTHING_SIGNAL_MIN`-of-3 verdict feeds a hysteresis streak that nudges `GameManager.nudge_difficulty()` one `SMOOTHING_STEP` per eval — clearly ahead eases toward easier tiers, clearly behind toughens toward harder ones. `GameManager` interpolates the numeric modifiers between adjacent tier rows (smarts flips only at a full step).
 
 ### `scripts/world/`
 
@@ -295,7 +296,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself.
-- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
+- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
 
 ## Security and deployment considerations
 

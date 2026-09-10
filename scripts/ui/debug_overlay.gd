@@ -181,6 +181,8 @@ func _update_stats() -> void:
 	text += "Miner Lv: P=%d E=%d\n" % [EconomyManager.get_miner_level(GameManager.Team.PLAYER), EconomyManager.get_miner_level(GameManager.Team.ENEMY)]
 	text += "Game active: %s\n" % str(GameManager.game_active)
 	text += "Difficulty: %s\n" % GameManager.Difficulty.keys()[GameManager.difficulty].capitalize()
+	if GameManager.adaptive_difficulty:
+		text += "AI adapt: %+.2f steps\n" % GameManager.get_difficulty_offset()
 	if ai:
 		text += "AI aggression: %s\n" % ai._aggression_level
 

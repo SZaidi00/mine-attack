@@ -9,6 +9,7 @@ const AICombat = preload("res://scripts/controllers/ai_combat.gd")
 const AISmartBehaviors = preload("res://scripts/controllers/ai_smart_behaviors.gd")
 const AIAwareness = preload("res://scripts/controllers/ai_awareness.gd")
 const AICrawlers = preload("res://scripts/controllers/ai_crawlers.gd")
+const AIDifficultySmoothing = preload("res://scripts/controllers/ai_difficulty_smoothing.gd")
 
 ## Target army composition — the economy tick trains whichever type is
 ## furthest below its share, so the AI fields a mixed force (tanky frontline,
@@ -50,6 +51,8 @@ var _last_ai_mined: int = -1
 
 # Awareness (Revamp Phase 8): scouting, lantern placement, weather response.
 var _awareness_tick: float = 0.0
+# Adaptive-difficulty smoothing tick (opt-in; the module self-gates).
+var _smoothing_tick: float = 0.0
 # Crawler guard/defense/raiding tick (smarts tier 1+; the module self-gates).
 var _crawler_tick: float = 0.0
 var _scout: Unit = null
@@ -82,6 +85,7 @@ var _combat: AICombat
 var _smart: AISmartBehaviors
 var _awareness: AIAwareness
 var _crawlers: AICrawlers
+var _smoothing: AIDifficultySmoothing
 
 
 func _init() -> void:
@@ -91,6 +95,7 @@ func _init() -> void:
 	_smart = AISmartBehaviors.new(self)
 	_awareness = AIAwareness.new(self)
 	_crawlers = AICrawlers.new(self)
+	_smoothing = AIDifficultySmoothing.new(self)
 
 
 func _ready() -> void:
@@ -161,6 +166,11 @@ func _process(delta: float) -> void:
 	if _awareness_tick >= 1.0:
 		_awareness._run_awareness(_awareness_tick)
 		_awareness_tick = 0.0
+
+	_smoothing_tick += delta
+	if _smoothing_tick >= _Constants.SMOOTHING_EVAL_INTERVAL:
+		_smoothing_tick = 0.0
+		_smoothing._run_smoothing()
 
 	_crawler_tick += delta
 	if _crawler_tick >= 1.0:
