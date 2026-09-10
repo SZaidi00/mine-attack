@@ -8,6 +8,10 @@ extends Resource
 @export var is_engineer: bool = false
 ## Crawler: underground-only melee attacker (raids the enemy mine).
 @export var is_crawler: bool = false
+## Undead (Necromancy): raised from a corpse by a wizard. Half HP/damage, no
+## faction abilities or fighter upgrades, no kiting, population 0, and bound
+## to the raising wizard — it dies when its necromancer does.
+@export var is_undead: bool = false
 @export var cost: int = 100
 @export var train_time: float = 5.0
 @export var population: int = 1

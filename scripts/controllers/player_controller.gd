@@ -273,6 +273,10 @@ func set_stance(stance: String) -> void:
 	_commands.set_stance(stance)
 
 
+func set_raise_mode(mode: String) -> void:
+	_commands.set_raise_mode(mode)
+
+
 func get_stance() -> String:
 	return _current_stance
 

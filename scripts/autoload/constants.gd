@@ -318,7 +318,8 @@ const VOLCANO_BURN_RADIUS_CELLS: float = 1.0
 # the team (branch_locked signal); a one-time respec (BRANCH_RESPEC_COST) resets
 # the team's choices. These coexist with the instant miner/fighter upgrades.
 # Each tech: name, optional unit branch, tree_pos (column = tier, row =
-# branch) for the research overlay, "locks" (alternative tech id locked on
+# branch) for the research overlay, "locks" (alternative tech id — or Array of
+# ids, for 3-way capstone groups — locked on
 # completion), optional requires (ALL prerequisite tech ids → level) or
 # requires_any (AT LEAST ONE listed tech id at level ≥ 1), and per-level
 # cost/time/effects/desc (desc feeds the hover tooltip).
@@ -374,48 +375,48 @@ const RESEARCH_TECHS: Dictionary = {
 			1: { "cost": 400, "time": 20.0, "desc": "Miners reach layers 5-7 immediately; miners +10% underground move speed" },
 		},
 	},
-	# ── Surface War discipline (rows 5-9) ──
+	# ── Surface War discipline (rows 6-10) ──
 	"surface_war": {
 		"name": "Surface War",
 		"unit": "fighter",
-		"tree_pos": Vector2i(0, 5),
+		"tree_pos": Vector2i(0, 6),
 		"locks": "deep_delve",
 		"levels": {
 			1: { "cost": 400, "time": 20.0, "desc": "Fighters +15% speed & damage on the surface; miners capped at layer 4; towers +20% range" },
 		},
 	},
-	# ── Fortification discipline (rows 10-14) ──
+	# ── Fortification discipline (rows 11-15) ──
 	"fortification": {
 		"name": "Fortification",
 		"unit": "",
-		"tree_pos": Vector2i(0, 10),
+		"tree_pos": Vector2i(0, 11),
 		"levels": {
 			1: { "cost": 500, "time": 25.0, "building_hp_mult": 0.1, "structure_hp_mult": 0.15, "structure_build_time_mult": 0.2, "desc": "Buildings +10% max HP; towers/walls +15% max HP; structures build 20% faster" },
 		},
 	},
-	# ── Dragon Mastery discipline (rows 15-19) ──
+	# ── Dragon Mastery discipline (rows 16-20) ──
 	"dragon_mastery": {
 		"name": "Dragon Mastery",
 		"unit": "dragon",
-		"tree_pos": Vector2i(0, 15),
+		"tree_pos": Vector2i(0, 16),
 		"levels": {
 			1: { "cost": 600, "time": 30.0, "dragon_hp_mult": 0.2, "dragon_dmg_mult": 0.2, "dragon_train_time_mult": 0.2, "desc": "Dragons +20% HP and damage; dragon train time -20%" },
 		},
 	},
-	# ── Weather discipline (rows 20-24) ──
+	# ── Weather discipline (rows 21-25) ──
 	"arctic_training": {
 		"name": "Arctic Training",
 		"unit": "",
-		"tree_pos": Vector2i(0, 20),
+		"tree_pos": Vector2i(0, 21),
 		"levels": {
 			1: { "cost": 400, "time": 20.0, "snowstorm_speed": 0.2, "desc": "Units move 20% faster during snowstorms" },
 		},
 	},
-	# ── Survival discipline (rows 25-29) ──
+	# ── Survival discipline (rows 26-30) ──
 	"survival_instinct": {
 		"name": "Survival Instinct",
 		"unit": "",
-		"tree_pos": Vector2i(0, 25),
+		"tree_pos": Vector2i(0, 26),
 		"levels": {
 			1: { "cost": 400, "time": 20.0, "environmental_damage_reduction": 0.2, "desc": "All units take 20% less damage from snowstorms and volcano events" },
 		},
@@ -444,11 +445,11 @@ const RESEARCH_TECHS: Dictionary = {
 			1: { "cost": 800, "time": 25.0, "miner_carry": 20, "miner_hp": 10, "desc": "Miners +20 carry capacity, +10 HP, immune to cave-in push" },
 		},
 	},
-	# ── Surface War tier 2 (rows 6-7) ──
+	# ── Surface War tier 2 (rows 7-8) ──
 	"longbow": {
 		"name": "Longbow",
 		"unit": "archer",
-		"tree_pos": Vector2i(1, 6),
+		"tree_pos": Vector2i(1, 7),
 		"requires": { "surface_war": 1 },
 		"levels": {
 			1: { "cost": 800, "time": 25.0, "archer_range": 25, "desc": "Archers +25 attack range and can blind-fire into the fog" },
@@ -457,17 +458,17 @@ const RESEARCH_TECHS: Dictionary = {
 	"rapid_fire": {
 		"name": "Rapid Fire",
 		"unit": "fighter",
-		"tree_pos": Vector2i(1, 7),
+		"tree_pos": Vector2i(1, 8),
 		"requires": { "surface_war": 1 },
 		"levels": {
 			1: { "cost": 900, "time": 25.0, "fighter_cdr": 0.2, "swordsman_speed": 0.1, "desc": "All fighters attack 20% faster; swordsmen +10% move speed" },
 		},
 	},
-	# ── Fortification tier 2 (rows 11-12) ──
+	# ── Fortification tier 2 (rows 12-13) ──
 	"stone_masonry": {
 		"name": "Stone Masonry",
 		"unit": "",
-		"tree_pos": Vector2i(1, 11),
+		"tree_pos": Vector2i(1, 12),
 		"requires": { "fortification": 1 },
 		"levels": {
 			1: { "cost": 700, "time": 25.0, "wall_hp_mult": 0.3, "wall_cost_mult": 0.2, "wall_max_count_bonus": 1, "desc": "Walls +30% HP, -20% cost, +1 max wall count" },
@@ -476,17 +477,17 @@ const RESEARCH_TECHS: Dictionary = {
 	"sentry_network": {
 		"name": "Sentry Network",
 		"unit": "",
-		"tree_pos": Vector2i(1, 12),
+		"tree_pos": Vector2i(1, 13),
 		"requires": { "fortification": 1 },
 		"levels": {
 			1: { "cost": 800, "time": 25.0, "tower_range_mult": 0.25, "tower_max_count_bonus": 1, "tower_target_acquisition_mult": 0.25, "desc": "Towers +25% range, +1 max tower count, acquire targets 25% faster" },
 		},
 	},
-	# ── Dragon Mastery tier 2 (rows 16-17) ──
+	# ── Dragon Mastery tier 2 (rows 17-18) ──
 	"broodmother": {
 		"name": "Broodmother",
 		"unit": "dragon",
-		"tree_pos": Vector2i(1, 16),
+		"tree_pos": Vector2i(1, 17),
 		"requires": { "dragon_mastery": 1 },
 		"levels": {
 			1: { "cost": 900, "time": 30.0, "dragon_train_time_mult": 0.3, "dragon_cost_mult": 0.15, "desc": "Dragons train 30% faster and cost 15% less" },
@@ -495,17 +496,17 @@ const RESEARCH_TECHS: Dictionary = {
 	"sky_raiders": {
 		"name": "Sky Raiders",
 		"unit": "dragon",
-		"tree_pos": Vector2i(1, 17),
+		"tree_pos": Vector2i(1, 18),
 		"requires": { "dragon_mastery": 1 },
 		"levels": {
 			1: { "cost": 1000, "time": 30.0, "dragon_hp_mult": 0.25, "desc": "Dragons +25% HP; breath applies faction debuffs consistently" },
 		},
 	},
-	# ── Weather tier 2 (rows 21-22) ──
+	# ── Weather tier 2 (rows 22-23) ──
 	"weather_alert": {
 		"name": "Weather Alert",
 		"unit": "",
-		"tree_pos": Vector2i(1, 21),
+		"tree_pos": Vector2i(1, 22),
 		"requires": { "arctic_training": 1 },
 		"levels": {
 			1: { "cost": 600, "time": 25.0, "weather_warning_bonus": 7.0, "desc": "Snowstorm/lava warnings last 12s; cave-ins give a 3s heads-up" },
@@ -514,7 +515,7 @@ const RESEARCH_TECHS: Dictionary = {
 	"storm_scout": {
 		"name": "Storm Scout",
 		"unit": "",
-		"tree_pos": Vector2i(1, 22),
+		"tree_pos": Vector2i(1, 23),
 		"requires": { "arctic_training": 1 },
 		"levels": {
 			1: { "cost": 700, "time": 25.0, "vision_in_storm_mult": 0.25, "desc": "+25% vision radius during snowstorms; faction identification range +50%" },
@@ -522,16 +523,17 @@ const RESEARCH_TECHS: Dictionary = {
 	},
 
 	# ═══════════════════════════════════════════════════════════════════════
-	# Tier 3 capstones (binary choice within each discipline)
+	# Tier 3 capstones (mutually exclusive within each discipline; Deep Delve
+	# has a three-way choice)
 	# ═══════════════════════════════════════════════════════════════════════
 
-	# ── Deep Delve tier 3 (rows 3-4) ──
+	# ── Deep Delve tier 3 (rows 3-5) ──
 	"crystal_forge": {
 		"name": "Crystal Forge",
 		"unit": "wizard",
 		"tree_pos": Vector2i(2, 3),
 		"requires_any": ["ore_sonar", "reinforced_pack"],
-		"locks": "earth_shield",
+		"locks": ["earth_shield", "necromancy"],
 		"levels": {
 			1: { "cost": 1500, "time": 35.0, "wizard_damage_mult": 0.4, "desc": "Wizards +40% damage; fireballs leave burning ground (5 DPS for 3s)" },
 		},
@@ -541,16 +543,26 @@ const RESEARCH_TECHS: Dictionary = {
 		"unit": "",
 		"tree_pos": Vector2i(2, 4),
 		"requires_any": ["ore_sonar", "reinforced_pack"],
-		"locks": "crystal_forge",
+		"locks": ["crystal_forge", "necromancy"],
 		"levels": {
 			1: { "cost": 1400, "time": 35.0, "unit_hp_mult": 0.15, "building_hp": 1000, "desc": "All units +15% max HP; building +1000 max HP (heals the difference)" },
 		},
 	},
-	# ── Surface War tier 3 (rows 8-9) ──
+	"necromancy": {
+		"name": "Necromancy",
+		"unit": "wizard",
+		"tree_pos": Vector2i(2, 5),
+		"requires_any": ["ore_sonar", "reinforced_pack"],
+		"locks": ["crystal_forge", "earth_shield"],
+		"levels": {
+			1: { "cost": 1500, "time": 35.0, "desc": "Wizards raise the dead: channel on a corpse to summon an undead swordsman/archer (up to 5) or an undead dragon (1, needs a dragon corpse). Undead cost no population but die with their necromancer" },
+		},
+	},
+	# ── Surface War tier 3 (rows 9-10) ──
 	"siege_master": {
 		"name": "Siege Master",
 		"unit": "swordsman",
-		"tree_pos": Vector2i(2, 8),
+		"tree_pos": Vector2i(2, 9),
 		"requires_any": ["longbow", "rapid_fire"],
 		"locks": "guerrilla",
 		"levels": {
@@ -560,18 +572,18 @@ const RESEARCH_TECHS: Dictionary = {
 	"guerrilla": {
 		"name": "Guerrilla",
 		"unit": "",
-		"tree_pos": Vector2i(2, 9),
+		"tree_pos": Vector2i(2, 10),
 		"requires_any": ["longbow", "rapid_fire"],
 		"locks": "siege_master",
 		"levels": {
 			1: { "cost": 1300, "time": 35.0, "desc": "Units +20% speed with no ally within 6 cells; miners can place traps (50 damage)" },
 		},
 	},
-	# ── Fortification tier 3 (rows 13-14) ──
+	# ── Fortification tier 3 (rows 14-15) ──
 	"citadel": {
 		"name": "Citadel",
 		"unit": "",
-		"tree_pos": Vector2i(2, 13),
+		"tree_pos": Vector2i(2, 14),
 		"requires_any": ["stone_masonry", "sentry_network"],
 		"locks": "artillery",
 		"levels": {
@@ -581,18 +593,18 @@ const RESEARCH_TECHS: Dictionary = {
 	"artillery": {
 		"name": "Artillery",
 		"unit": "",
-		"tree_pos": Vector2i(2, 14),
+		"tree_pos": Vector2i(2, 15),
 		"requires_any": ["stone_masonry", "sentry_network"],
 		"locks": "citadel",
 		"levels": {
 			1: { "cost": 1500, "time": 40.0, "tower_damage_mult": 0.25, "tower_splash_radius_cells": 1.5, "tower_splash_damage_pct": 0.4, "desc": "Towers deal +25% damage and 40% splash in 1.5 cells" },
 		},
 	},
-	# ── Dragon Mastery tier 3 (rows 18-19) ──
+	# ── Dragon Mastery tier 3 (rows 19-20) ──
 	"inferno": {
 		"name": "Inferno",
 		"unit": "dragon",
-		"tree_pos": Vector2i(2, 18),
+		"tree_pos": Vector2i(2, 19),
 		"requires_any": ["broodmother", "sky_raiders"],
 		"locks": "tempest_wings",
 		"levels": {
@@ -602,18 +614,18 @@ const RESEARCH_TECHS: Dictionary = {
 	"tempest_wings": {
 		"name": "Tempest Wings",
 		"unit": "dragon",
-		"tree_pos": Vector2i(2, 19),
+		"tree_pos": Vector2i(2, 20),
 		"requires_any": ["broodmother", "sky_raiders"],
 		"locks": "inferno",
 		"levels": {
 			1: { "cost": 1500, "time": 40.0, "desc": "Dragons ignore snowstorm penalties and move 15% faster" },
 		},
 	},
-	# ── Weather tier 3 (rows 23-24) ──
+	# ── Weather tier 3 (rows 24-25) ──
 	"stormcaller": {
 		"name": "Stormcaller",
 		"unit": "",
-		"tree_pos": Vector2i(2, 23),
+		"tree_pos": Vector2i(2, 24),
 		"requires_any": ["weather_alert", "storm_scout"],
 		"locks": "pathfinder",
 		"levels": {
@@ -623,18 +635,18 @@ const RESEARCH_TECHS: Dictionary = {
 	"pathfinder": {
 		"name": "Pathfinder",
 		"unit": "",
-		"tree_pos": Vector2i(2, 24),
+		"tree_pos": Vector2i(2, 25),
 		"requires_any": ["weather_alert", "storm_scout"],
 		"locks": "stormcaller",
 		"levels": {
 			1: { "cost": 1200, "time": 35.0, "vision_in_storm_mult": 0.3, "desc": "Friendly units +30% vision during storms; miners auto-recall on storm warning" },
 		},
 	},
-	# ── Survival tier 2 (rows 25-26) ──
+	# ── Survival tier 2 (rows 26-27) ──
 	"arctic_gear": {
 		"name": "Arctic Gear",
 		"unit": "",
-		"tree_pos": Vector2i(1, 25),
+		"tree_pos": Vector2i(1, 26),
 		"requires": { "survival_instinct": 1 },
 		"levels": {
 			1: { "cost": 700, "time": 25.0, "snowstorm_damage_reduction": 0.2, "desc": "Units take an additional 20% less snowstorm exposure damage" },
@@ -643,17 +655,17 @@ const RESEARCH_TECHS: Dictionary = {
 	"volcano_wards": {
 		"name": "Volcano Wards",
 		"unit": "",
-		"tree_pos": Vector2i(1, 26),
+		"tree_pos": Vector2i(1, 27),
 		"requires": { "survival_instinct": 1 },
 		"levels": {
 			1: { "cost": 700, "time": 25.0, "volcano_damage_reduction": 0.2, "desc": "Units take an additional 20% less volcano meteor and burn damage" },
 		},
 	},
-	# ── Survival tier 3 (rows 27-28) ──
+	# ── Survival tier 3 (rows 28-29) ──
 	"storm_refuge": {
 		"name": "Storm Refuge",
 		"unit": "",
-		"tree_pos": Vector2i(2, 27),
+		"tree_pos": Vector2i(2, 28),
 		"requires_any": ["arctic_gear", "volcano_wards"],
 		"locks": "eruption_drills",
 		"levels": {
@@ -663,7 +675,7 @@ const RESEARCH_TECHS: Dictionary = {
 	"eruption_drills": {
 		"name": "Eruption Drills",
 		"unit": "",
-		"tree_pos": Vector2i(2, 28),
+		"tree_pos": Vector2i(2, 29),
 		"requires_any": ["arctic_gear", "volcano_wards"],
 		"locks": "storm_refuge",
 		"levels": {
@@ -677,7 +689,7 @@ const RESEARCH_TECHS: Dictionary = {
 	"deep_fortress": {
 		"name": "Deep Fortress",
 		"unit": "",
-		"tree_pos": Vector2i(3, 8),
+		"tree_pos": Vector2i(3, 9),
 		"requires": { "earth_shield": 1, "citadel": 1 },
 		"levels": {
 			1: { "cost": 2800, "time": 50.0, "building_hp": 1000, "building_regen_hp_per_sec": 5.0, "desc": "Buildings +1000 HP; walls/towers self-repair 5 HP/s; underground lanterns +3 vision" },
@@ -686,7 +698,7 @@ const RESEARCH_TECHS: Dictionary = {
 	"total_war": {
 		"name": "Total War",
 		"unit": "",
-		"tree_pos": Vector2i(3, 11),
+		"tree_pos": Vector2i(3, 12),
 		"requires": { "siege_master": 1, "artillery": 1 },
 		"levels": {
 			1: { "cost": 3000, "time": 50.0, "fighter_dmg_mult": 0.1, "tower_max_count_bonus": 1, "wall_max_count_bonus": 1, "desc": "All fighters +10% damage; towers +1 max count, walls +1 max count" },
@@ -695,7 +707,7 @@ const RESEARCH_TECHS: Dictionary = {
 	"storm_dragon": {
 		"name": "Storm Dragon",
 		"unit": "dragon",
-		"tree_pos": Vector2i(3, 21),
+		"tree_pos": Vector2i(3, 22),
 		"requires_any": ["tempest_wings", "stormcaller"],
 		"levels": {
 			1: { "cost": 3200, "time": 55.0, "desc": "Dragons ignore all weather penalties; breath extinguishes enemy lanterns" },
@@ -722,6 +734,22 @@ const SURFACE_WAR_TOWER_RANGE_MULT: float = 1.2
 # crystal_forge: burning ground left by fireballs.
 const BURNING_GROUND_DPS: float = 5.0
 const BURNING_GROUND_DURATION: float = 3.0
+# necromancy: corpses, the wizard raise channel, and the undead it summons.
+# Any surface swordsman/archer/dragon death leaves a raisable corpse for
+# NECRO_CORPSE_DURATION seconds (undead deaths and underground deaths leave
+# none). A wizard with the raise toggle set channels NECRO_RAISE_CHANNEL_TIME
+# seconds within NECRO_RAISE_RANGE of a matching corpse (searched out to
+# NECRO_SEEK_RADIUS) to summon an undead copy at NECRO_UNDEAD_* of the
+# original's stats: no faction abilities, no fighter upgrades, no kiting, and
+# population 0 — but bound to the raising wizard (they die when it dies).
+const NECRO_CORPSE_DURATION: float = 20.0
+const NECRO_RAISE_CHANNEL_TIME: float = 3.0
+const NECRO_RAISE_RANGE: float = 48.0
+const NECRO_SEEK_RADIUS: float = 600.0
+const NECRO_UNDEAD_HP_MULT: float = 0.5
+const NECRO_UNDEAD_DAMAGE_MULT: float = 0.5
+const NECRO_MAX_GROUND_UNDEAD: int = 5
+const NECRO_MAX_DRAGON_UNDEAD: int = 1
 # Ignite: a unit that takes a burning-ground tick stays lit for
 # BURN_LINGER_DURATION after leaving the patch, taking BURN_TICK_INTERVAL
 # ticks at BURN_LINGER_DPS_RATIO of the patch's dps — standing in the fire

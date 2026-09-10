@@ -19,6 +19,7 @@ const UnitVisionTargeting = preload("res://scripts/units/unit_vision_targeting.g
 const UnitRendering = preload("res://scripts/units/unit_rendering.gd")
 const UnitIdle = preload("res://scripts/units/unit_idle.gd")
 const UnitRepair = preload("res://scripts/units/unit_repair.gd")
+const UnitNecromancy = preload("res://scripts/units/unit_necromancy.gd")
 const UnitPigeon = preload("res://scripts/units/unit_pigeon.gd")
 
 @export var data: UnitData
@@ -152,6 +153,15 @@ var _blink_timer: float = 0.0
 var _arcane_shot_timer: float = 0.0
 # Volley (Industrial archer): group-fire cooldown (12s).
 var _volley_timer: float = 0.0
+# Necromancy (Deep Delve tier-3 capstone): what this wizard raises from
+# corpses — "off" (disabled), "troops" (undead swordsmen/archers), or "dragon"
+# (undead dragon, needs a dragon corpse). Set by the HUD toggle (player) or
+# defaulted to "troops" for enemy wizards; inert without the research and on
+# non-wizards (see unit_necromancy.gd).
+var _raise_mode: String = "off"
+# Undead only: the wizard that raised this unit. When the necromancer dies,
+# the magic fails and the undead collapses with it.
+var _necro_owner: Unit = null
 
 # Instance helpers (created in _init so other nodes can call Unit APIs from
 # their own _ready() before this node's _ready() runs).
@@ -164,6 +174,7 @@ var _vision: UnitVisionTargeting
 var _rendering: UnitRendering
 var _idle: UnitIdle
 var _repair: UnitRepair
+var _necromancy: UnitNecromancy
 var _pigeon: UnitPigeon
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
@@ -176,7 +187,17 @@ func _init() -> void:
 func _ready() -> void:
 	if data == null:
 		data = preload("res://scripts/resources/units/swordsman.tres")
-	_faction = FactionManager.get_faction(team)
+	# Undead are factionless by design: no faction abilities or stat bonuses
+	# (every ability in unit_abilities.gd and every bonus in
+	# _apply_faction_bonuses gates on _faction != null / is_undead).
+	if data.is_undead:
+		_faction = null
+	else:
+		_faction = FactionManager.get_faction(team)
+		# AI necromancers raise troops by default; the player toggles per
+		# selection via the HUD (inert until the Necromancy research completes).
+		if team == GameManager.Team.ENEMY and data.unit_name.to_lower() == "wizard":
+			_raise_mode = "troops"
 	if data.is_miner:
 		_apply_miner_upgrade()
 	# Faction bonuses run first: they capture _base_speed/_base_max_hp that
@@ -214,6 +235,7 @@ func _init_helpers() -> void:
 	_rendering = UnitRendering.new(self)
 	_idle = UnitIdle.new(self)
 	_repair = UnitRepair.new(self)
+	_necromancy = UnitNecromancy.new(self)
 	_pigeon = UnitPigeon.new(self)
 
 
@@ -233,6 +255,13 @@ func _process(delta: float) -> void:
 
 	# Match over: freeze all unit AI and movement in place.
 	if not GameManager.game_active:
+		return
+
+	# Undead (Necromancy): bound to their raising wizard — when the necromancer
+	# dies, the binding fails and the undead collapses with it.
+	if data.is_undead and (_necro_owner == null or not is_instance_valid(_necro_owner) \
+			or _necro_owner._state == State.DEAD):
+		_die()
 		return
 
 	# Out-of-combat regeneration: a few seconds without taking damage slowly
@@ -325,11 +354,18 @@ func _process(delta: float) -> void:
 				_blink_timer -= delta
 				if _blink_timer <= 0.0:
 					_abilities.try_blink()
+				# Necromancy: advance any raise channel; the idle claim below
+				# starts new ones.
+				_necromancy._process_necromancy(delta)
 			"archer":
 				_arcane_shot_timer -= delta
 				_volley_timer -= delta
 		if _state == State.IDLE:
-			_idle._handle_idle_fighter()
+			# Necromancy claims the idle tick first when a wizard is raising
+			# (channeling on or moving to a corpse); otherwise the normal idle
+			# rules apply.
+			if not (data.unit_name.to_lower() == "wizard" and _necromancy._handle_idle_necromancer()):
+				_idle._handle_idle_fighter()
 		elif _rally_active and _state == State.MOVE:
 			# Attack-move: scan for surface enemies while travelling.
 			_rally_scan_timer -= delta
@@ -431,6 +467,12 @@ func rally_to(world_pos: Vector2) -> void:
 
 func repair_structure(target: Node2D) -> void:
 	_commands.repair_structure(target)
+
+
+## Necromancy: set the raise toggle ("off"/"troops"/"dragon"). Only meaningful
+## on wizards; inert without the team's Necromancy research.
+func set_raise_mode(mode: String) -> void:
+	_raise_mode = mode
 
 
 # ---------- Public combat / status wrappers ----------
@@ -619,6 +661,9 @@ func _die() -> void:
 	# the coin is never lost — any miner that walks over the pickup collects it.
 	if data.is_miner and carried_coin > 0:
 		_spawn_coin_pickup(carried_coin)
+	# Necromancy: eligible surface deaths leave a raisable corpse for a short
+	# window (undead never leave one — no recursive raising).
+	_maybe_spawn_corpse()
 	remove_from_group("units")
 	remove_from_group(team_name())
 	EconomyManager.remove_population(team, data.population)
@@ -632,6 +677,49 @@ func _spawn_coin_pickup(amount: int) -> void:
 	pickup.global_position = global_position
 	pickup.set("coin_value", amount)
 	get_tree().current_scene.add_child(pickup)
+
+
+## Necromancy: leave a raisable corpse where a surface swordsman, archer, or
+## dragon fell. Underground deaths leave none (wizards never enter the mine,
+## so a corpse down there could never be raised) and undead deaths leave none
+## (no recursive raising). The corpse belongs to no team — any wizard with the
+## Necromancy branch may raise it.
+func _maybe_spawn_corpse() -> void:
+	if data.is_undead or is_underground:
+		return
+	var unit_id: String = data.unit_name.to_lower()
+	var category: String = ""
+	if unit_id == "dragon":
+		category = "dragon"
+	elif unit_id == "swordsman" or unit_id == "archer":
+		category = "ground"
+	else:
+		return
+	var corpse: Corpse = Corpse.new()
+	corpse.setup(data, category, Constants.NECRO_CORPSE_DURATION)
+	corpse.global_position = global_position
+	get_parent().add_child(corpse)
+
+
+## Necromancy: raise a corpse into an undead copy on the wizard's team. The
+## undead keeps the original's type and sprites but runs at
+## NECRO_UNDEAD_* of its HP/damage, costs no population, carries no faction,
+## and dies with this wizard (checked every frame in _process).
+func _spawn_undead_from(corpse: Corpse) -> void:
+	var undead_data: UnitData = corpse.unit_data.duplicate(true)
+	undead_data.is_undead = true
+	undead_data.population = 0
+	undead_data.max_hp = maxi(1, roundi(undead_data.max_hp * Constants.NECRO_UNDEAD_HP_MULT))
+	undead_data.damage_per_hit *= Constants.NECRO_UNDEAD_DAMAGE_MULT
+	var undead: Unit = load("res://scenes/unit.tscn").instantiate()
+	undead.data = undead_data
+	undead.team = team
+	undead.global_position = corpse.global_position
+	undead._necro_owner = self
+	get_parent().add_child(undead)
+	corpse.consume()
+	AudioManager.play("blast", corpse.global_position, -10.0)
+	DebugLog.log_command("Unit %d" % get_instance_id(), "necro_raise", "undead=%s" % undead_data.unit_name)
 
 
 func _deferred_enter_mine_check() -> void:
@@ -753,6 +841,8 @@ func _spawn_reject_popup(at: Vector2) -> void:
 ## Faction multipliers (Revamp Phase 2) are folded in here so level-ups
 ## recompute from the same modified values.
 func _apply_fighter_upgrade() -> void:
+	if data.is_undead:
+		return  # undead keep their raising-time stats — no upgrades, ever
 	var unit_id: String = data.unit_name.to_lower()
 	if not Constants.FIGHTER_UPGRADES.has(unit_id):
 		return
@@ -871,7 +961,7 @@ func _apply_research_bonuses() -> void:
 ## their faction terms inside those recompute functions instead, so the two
 ## systems compose without compounding.
 func _apply_faction_bonuses() -> void:
-	if _faction != null:
+	if _faction != null and not data.is_undead:
 		if data.is_miner:
 			data.max_hp += _faction.miner_hp_bonus
 			data.mining_swings_per_sec *= _faction.miner_mining_mult

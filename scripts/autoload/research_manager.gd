@@ -99,12 +99,14 @@ func _process(delta: float) -> void:
 				_levels[team][active.tech_id] = active.level
 				DebugLog.log_command("ResearchManager", "research_complete", "team=%s tech=%s level=%d" % [_team_name(team), active.tech_id, active.level])
 				research_completed.emit(team, active.tech_id)
-				# Completing a branch locks its alternative for good.
-				var locks: String = _Constants.RESEARCH_TECHS[active.tech_id].get("locks", "")
-				if locks != "" and not _locked[team].has(locks):
-					_locked[team].append(locks)
-					DebugLog.log_command("ResearchManager", "branch_locked", "team=%s tech=%s" % [_team_name(team), locks])
-					branch_locked.emit(team, locks)
+				# Completing a branch locks its alternative(s) for good.
+				var locks: Variant = _Constants.RESEARCH_TECHS[active.tech_id].get("locks", "")
+				var lock_list: Array = locks if locks is Array else ([locks] if locks != "" else [])
+				for lock_id: String in lock_list:
+					if not _locked[team].has(lock_id):
+						_locked[team].append(lock_id)
+						DebugLog.log_command("ResearchManager", "branch_locked", "team=%s tech=%s" % [_team_name(team), lock_id])
+						branch_locked.emit(team, lock_id)
 				research_changed.emit(team)
 				# Chain into the next queued order on the same tick.
 				_start_next_from_queue(team)

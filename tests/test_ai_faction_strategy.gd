@@ -59,6 +59,7 @@ func test_factionless_ai_keeps_balanced_mix() -> void:
 
 func test_arcane_ai_climbs_to_crystal_forge() -> void:
 	FactionManager.enemy_faction_id = "arcane"
+	GameManager.ai_opener = "rush"  # rush commits to the Crystal Forge damage
 	assert_eq(_ai._pick_research(null), "deep_delve", "Arcane takes the deep side of tier 1")
 	ResearchManager._levels[ENEMY]["deep_delve"] = 1
 	assert_eq(_ai._pick_research(null), "arctic_training", "Arcane picks Arctic Training after committing to a side")
@@ -67,7 +68,17 @@ func test_arcane_ai_climbs_to_crystal_forge() -> void:
 	ResearchManager._levels[ENEMY]["survival_instinct"] = 1
 	assert_eq(_ai._pick_research(null), "ore_sonar", "Arcane climbs the deep side tier 2")
 	ResearchManager._levels[ENEMY]["ore_sonar"] = 1
-	assert_eq(_ai._pick_research(null), "crystal_forge", "Arcane heads for Crystal Forge")
+	assert_eq(_ai._pick_research(null), "crystal_forge", "rush Arcane heads for Crystal Forge")
+
+
+func test_arcane_ai_picks_necromancy_off_rush() -> void:
+	FactionManager.enemy_faction_id = "arcane"
+	GameManager.ai_opener = "balanced"
+	ResearchManager._levels[ENEMY]["deep_delve"] = 1
+	ResearchManager._levels[ENEMY]["arctic_training"] = 1
+	ResearchManager._levels[ENEMY]["survival_instinct"] = 1
+	ResearchManager._levels[ENEMY]["ore_sonar"] = 1
+	assert_eq(_ai._pick_research(null), "necromancy", "non-rush Arcane takes Necromancy")
 
 
 func test_brute_ai_climbs_to_siege_master() -> void:

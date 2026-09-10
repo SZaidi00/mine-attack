@@ -60,6 +60,10 @@ const _ICON_SNOWSTORM: Texture2D = preload("res://frost_mines_assets/icons/icon_
 @onready var _kill_button: Button = %KillButton
 @onready var _research_button: Button = %ResearchButton
 @onready var _build_button: Button = %BuildButton
+@onready var _command_row: HBoxContainer = $BottomBar/MarginContainer/VBoxContainer/CommandRow
+# Necromancy raise toggle: created at runtime (like the build-menu cards)
+# because it only appears once the Necromancy research completes.
+var _raise_button: Button = null
 @onready var _research_panel: Control = $ResearchPanel
 @onready var _player_faction_icon: TextureRect = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/PlayerFactionIcon
 @onready var _enemy_faction_icon: TextureRect = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyFactionIcon
@@ -116,6 +120,7 @@ func _ready() -> void:
 	_add_stat_icons()
 	_add_unit_breakdown_icons()
 	_add_attack_button_icon()
+	_build_raise_button()
 
 	_upgrade_button.pressed.connect(_upgrade_miner)
 	for unit_id: String in _fighter_upgrade_buttons:
@@ -205,6 +210,41 @@ func _style_game_over_buttons() -> void:
 	UIThemeTokens.apply_button_theme(again, UIThemeTokens.ButtonVariant.PRIMARY)
 
 
+## Necromancy raise toggle: cycles what selected wizards raise from corpses
+## (off → troops → dragon). Hidden unless the player has the Necromancy
+## research and a living wizard is selected; the per-frame sync lives in
+## HUDUpdates._sync_raise_button.
+func _build_raise_button() -> void:
+	_raise_button = Button.new()
+	_raise_button.custom_minimum_size = Vector2(100, 70)
+	_raise_button.add_theme_font_size_override("font_size", 12)
+	UIThemeTokens.apply_button_theme(_raise_button, UIThemeTokens.ButtonVariant.SECONDARY)
+	_raise_button.text = "Raise:\nOff"
+	_raise_button.tooltip_text = "Necromancy: choose what selected wizards raise from corpses — troops (up to 5 undead swordsmen/archers) or a dragon (1, needs a dragon corpse). Undead cost no population but die when their wizard does."
+	_raise_button.visible = false
+	_command_row.add_child(_raise_button)
+	# Sit with the stance buttons (before Kill), not at the row's far end.
+	_command_row.move_child(_raise_button, _rally_button.get_index() + 1)
+	_raise_button.pressed.connect(_cycle_raise_mode)
+	_raise_button.pressed.connect(func(): AudioManager.play("click"))
+
+
+func _cycle_raise_mode() -> void:
+	var pc: PlayerController = _get_player_controller()
+	if pc == null:
+		return
+	var modes: Array = ["off", "troops", "dragon"]
+	var current: String = "off"
+	for u in pc.get_selected_units():
+		if is_instance_valid(u):
+			var data = u.get("data")
+			if data != null and data.unit_name.to_lower() == "wizard":
+				current = u.get("_raise_mode")
+				break
+	var next_mode: String = modes[(modes.find(current) + 1) % modes.size()]
+	pc.set_raise_mode(next_mode)
+
+
 func _process(_delta: float) -> void:
 	var pc: PlayerController = _get_player_controller()
 	if pc:
@@ -218,6 +258,7 @@ func _process(_delta: float) -> void:
 		if _build_button.button_pressed != build_menu_open:
 			_build_button.set_pressed_no_signal(build_menu_open)
 		_updates._sync_stance_buttons(pc)
+		_updates._sync_raise_button(pc)
 	_updates._update_upgrade_button()
 	_updates._update_fighter_upgrade_buttons()
 	_updates._update_unit_breakdown()

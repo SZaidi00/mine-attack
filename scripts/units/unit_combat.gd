@@ -321,9 +321,10 @@ func _process_attack(delta: float) -> void:
 	# whenever a threat slips inside the kite fraction of the attack range —
 	# the current target, or any enemy melee unit closing in (so ranged units
 	# never let melee reach them while firing at something else). Melee units
-	# (attack_range <= 35) and building sieges are unaffected. Gaps use combat
+	# (attack_range <= 35) and building sieges are unaffected. Undead
+	# (Necromancy) never kite — they shamble straight in. Gaps use combat
 	# positions (air vs ground); kite steering still moves feet on the ground.
-	if unit.data.attack_range > 35.0:
+	if unit.data.attack_range > 35.0 and not unit.data.is_undead:
 		var kite_limit: float = unit.data.attack_range * Constants.UNIT_KITE_RANGE_FRACTION
 		var threat_pos: Vector2 = Vector2.INF
 		var threat_d2: float = INF

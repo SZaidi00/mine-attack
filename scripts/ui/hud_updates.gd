@@ -68,6 +68,31 @@ func _sync_stance_buttons(pc: PlayerController) -> void:
 			btn.set_pressed_no_signal(stance == stance_name)
 
 
+## Necromancy raise toggle: visible only while the player has the Necromancy
+## research and a living (not undead) wizard is selected; the label mirrors
+## the first selected wizard's raise mode.
+func _sync_raise_button(pc: PlayerController) -> void:
+	var btn: Button = hud._raise_button
+	if btn == null:
+		return
+	var visible_now: bool = false
+	var mode: String = "off"
+	if ResearchManager.has_branch(GameManager.Team.PLAYER, "necromancy"):
+		for u in pc.get_selected_units():
+			if not is_instance_valid(u):
+				continue
+			var data = u.get("data")
+			if data != null and data.unit_name.to_lower() == "wizard" and not data.is_undead:
+				visible_now = true
+				mode = u.get("_raise_mode")
+				break
+	btn.visible = visible_now
+	var mode_label: String = {"off": "Off", "troops": "Troops", "dragon": "Dragon"}.get(mode, "Off")
+	var text: String = "Raise:\n%s" % mode_label
+	if btn.text != text:
+		btn.text = text
+
+
 ## Selection readout in the top bar: a count for groups, the unit's name
 ## plus live HP when exactly one unit is selected, or structure info and the
 ## demolition refund when structures are selected.

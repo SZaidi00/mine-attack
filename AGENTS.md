@@ -113,6 +113,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 - `building.gd` — training queue (supports manual pause/clear from the HUD), deposits, building HP/destruction, faction identification polling. `get_train_cost`/`get_train_time` are the single source of truth for train prices/times (faction pricing + research discounts), shared by `queue_unit` and the HUD train buttons.
 - `mine_entry.gd` — ladder teleport positions.
 - `ladder.gd` — ladder visuals/positioning.
+- `corpse.gd` — raisable corpse marker (Necromancy): spawned where a surface swordsman/archer/dragon dies, self-expires after `NECRO_CORPSE_DURATION`, code-drawn with a necromantic shimmer; group `corpses`.
 - `lantern.gd` / `tower.gd` / `wall_segment.gd` / `trap.gd` — placeable structures; a selected tower shows its attack range as a gold disc.
 
 ### `scripts/units/`
@@ -127,13 +128,14 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `unit_rendering.gd` — sprites, pickaxe animation, HP bar, cargo, selection ring.
   - `unit_idle.gd` — idle fighter/miner behavior, rally hunt, patrol, return-to-post.
   - `unit_repair.gd` — engineer repair channel (structure-only, coin per HP, recent-damage lockout) and idle auto-seek.
+  - `unit_necromancy.gd` — Necromancy raise behavior: idle wizards with the raise toggle seek corpses, walk into range, and channel to summon an undead copy (per-wizard caps, claim reservation so two wizards never raise the same corpse; the channel breaks on any interruption).
 - `unit_pigeon.gd` — flying scout behavior (trained from towers, anti-air vulnerable).
 - `projectile.gd` — arrows/fireballs.
 
 ### `scripts/ui/`
 
 - `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners.
-- `hud.gd` — node references (bottom-bar buttons are looked up by `%Name` unique name so layout moves can't break paths), signal wiring, game-over flow (summary table + `MatchGraph` coin/population charts), lava/weather/volcano warning banners, faction-identified popup, research-completion toasts; delegates to helpers. The BottomBar is two rows: `TrainRow` (7 train buttons) on top, `CommandRow` (upgrades + stance/kill/research/build) below.
+- `hud.gd` — node references (bottom-bar buttons are looked up by `%Name` unique name so layout moves can't break paths), signal wiring, game-over flow (summary table + `MatchGraph` coin/population charts), lava/weather/volcano warning banners, faction-identified popup, research-completion toasts; delegates to helpers. The BottomBar is two rows: `TrainRow` (7 train buttons) on top, `CommandRow` (upgrades + stance/kill/research/build) below. The Necromancy Raise toggle is created at runtime and inserted after the Rally button, visible only with the research done and a wizard selected.
   - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
   - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists).
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
@@ -169,6 +171,7 @@ Trainable units (costs and times in `Constants.COSTS` / `Constants.TRAIN_TIMES`)
 - **Pigeon** — flying scout trained from towers; provides vision, vulnerable to anti-air.
 - **Engineer** — support unit (75g, 2 pop, no attack); channels repairs on damaged friendly structures (walls/towers/lanterns/building — never units), charging coin per HP restored. A structure damaged within `ENGINEER_REPAIR_LOCKOUT_SEC` cannot be repaired. Idle engineers auto-seek the nearest damaged friendly structure.
 - **Crawler** — underground-only raider (120g, 2 pop, melee); descends into the mine at spawn and can never surface or dig. Its auto-acquire is the one exception to the midfield rule: it engages any visible enemy unit underground on either side of the central wall. Underground pathing seals the surface row (`find_path_underground`), so crossing midfield requires a breached central wall plus dug tunnels. Not a fighter: waves, garrison, rally, Ctrl+F, and fighter upgrades all ignore it (`UnitData.is_crawler`).
+- **Undead** (Necromancy research only, not trainable) — raised by a wizard channeling on a corpse left by a dead surface swordsman/archer/dragon (corpses last `NECRO_CORPSE_DURATION` s, any team's wizard may raise them). An undead copy runs at ~50% HP/damage with no faction abilities, no fighter upgrades, and no kiting, costs no population, and dies when its raising wizard dies. Per-wizard caps: 5 ground undead or 1 undead dragon (needs a dragon corpse). Player wizards get a Raise toggle button in the CommandRow when selected (off/troops/dragon); enemy wizards default to troops. Sickly green sprite tint instead of new art (`UnitData.is_undead`).
 
 Miner upgrades unlock deeper layers (Level 1: layers 1–2, Level 2: layers 3–4, Level 3: layers 5–7). Fighter upgrades are per-type levels 1–3.
 
@@ -183,7 +186,7 @@ Placeable from the radial build menu:
 
 ### Research
 
-Open with `R`. The tree has multiple discipline roots; tier-2 branches can both be researched, but tier-3 capstones are mutually exclusive, and tier-4 cross-path capstones require techs from two disciplines. Completing a tech locks its alternative; a one-time 500g respec resets all choices. Effects are applied by the systems that own the stat.
+Open with `R`. The tree has multiple discipline roots; tier-2 branches can both be researched, but tier-3 capstones are mutually exclusive (Deep Delve is a three-way choice: Crystal Forge / Earth Shield / Necromancy — a tech's `locks` field may be an Array), and tier-4 cross-path capstones require techs from two disciplines. Completing a tech locks its alternative(s); a one-time 500g respec resets all choices. Effects are applied by the systems that own the stat.
 
 ### Weather and dynamic terrain
 
@@ -292,7 +295,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself.
-- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
+- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
 
 ## Security and deployment considerations
 

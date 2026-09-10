@@ -724,7 +724,7 @@ func _build_tooltip(tech_id: String) -> String:
 		# Name the completed branch that locked this alternative out.
 		for other_id in _Constants.RESEARCH_TECHS:
 			var other: Dictionary = _Constants.RESEARCH_TECHS[other_id]
-			if other.get("locks", "") == tech_id and ResearchManager.has_branch(_TEAM, other_id):
+			if tech_id in _lock_list(other.get("locks", "")) and ResearchManager.has_branch(_TEAM, other_id):
 				lines.append("Locked out by %s" % other.name)
 				break
 	return "\n".join(lines)
@@ -912,25 +912,43 @@ func _prereq_text(tech: Dictionary) -> String:
 
 
 func _excludes_text(tech: Dictionary) -> String:
-	var locks: String = tech.get("locks", "")
-	if locks == "":
+	var locks: Array = _lock_list(tech.get("locks", ""))
+	if locks.is_empty():
 		return "—"
-	var alt_name: String = _Constants.RESEARCH_TECHS[locks].name
-	if ResearchManager.is_locked(_TEAM, locks):
-		return "%s (already locked out)" % alt_name
-	return alt_name
+	var parts: Array[String] = []
+	for lock_id: String in locks:
+		var alt_name: String = _Constants.RESEARCH_TECHS[lock_id].name
+		if ResearchManager.is_locked(_TEAM, lock_id):
+			alt_name += " (already locked out)"
+		parts.append(alt_name)
+	return ", ".join(parts)
+
+
+## "locks" is a single tech id (String) or an Array of ids for 3-way capstone
+## groups (e.g. the Deep Delve tier-3 choice); normalize to an Array.
+func _lock_list(locks: Variant) -> Array:
+	if locks is Array:
+		return locks
+	if locks == "":
+		return []
+	return [locks]
 
 
 ## Mutual exclusivity is irreversible until the one-time respec — say so on
 ## the rail before the player commits.
 func _refresh_detail_warning(tech_id: String, tech: Dictionary, state: _NodeState) -> void:
-	var locks: String = tech.get("locks", "")
-	if locks == "" or ResearchManager.is_locked(_TEAM, locks):
+	var locks: Array = _lock_list(tech.get("locks", ""))
+	# Only alternatives that are still open count: already-locked ones need no
+	# fresh warning.
+	var open_locks: Array = locks.filter(func(lock_id: String): return not ResearchManager.is_locked(_TEAM, lock_id))
+	if open_locks.is_empty():
 		_detail_warning.visible = false
 		return
 	if state == _NodeState.AVAILABLE or state == _NodeState.QUEUED or state == _NodeState.ACTIVE:
-		var alt_name: String = _Constants.RESEARCH_TECHS[locks].name
-		_detail_warning.text = "Completing %s permanently locks out %s. The one-time respec (%dg) is the only way back." % [tech.name, alt_name, _Constants.BRANCH_RESPEC_COST]
+		var alt_names: Array[String] = []
+		for lock_id: String in open_locks:
+			alt_names.append(_Constants.RESEARCH_TECHS[lock_id].name)
+		_detail_warning.text = "Completing %s permanently locks out %s. The one-time respec (%dg) is the only way back." % [tech.name, ", ".join(alt_names), _Constants.BRANCH_RESPEC_COST]
 		_detail_warning.visible = true
 	else:
 		_detail_warning.visible = false

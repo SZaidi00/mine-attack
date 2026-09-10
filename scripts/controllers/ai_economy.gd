@@ -256,7 +256,17 @@ func _effective_army_mix() -> Dictionary:
 func _pick_research() -> String:
 	var faction: FactionData = FactionManager.get_faction(ai.team)
 	var faction_id: String = faction.faction_id if faction != null else ""
-	var plan: Array = _RESEARCH_PLANS.get(faction_id, [])
+	# Duplicate: the arcane substitution below rewrites the capstone slot in
+	# place and must never mutate the shared plan const.
+	var plan: Array = _RESEARCH_PLANS.get(faction_id, []).duplicate()
+
+	# Arcane's Deep Delve capstone is a three-way choice: rush openers want
+	# Crystal Forge's damage now, anything else values Necromancy's free army
+	# (its wizards raise corpses on their own; see unit_necromancy.gd).
+	if faction_id == "arcane":
+		var capstone_idx: int = plan.find("crystal_forge")
+		if capstone_idx >= 0:
+			plan[capstone_idx] = _arcane_capstone()
 
 	# Factionless AIs must commit to Deep Delve or Surface War first.
 	if plan.is_empty():
@@ -298,6 +308,12 @@ func _research_open(tech_id: String) -> bool:
 		and not ResearchManager.is_locked(ai.team, tech_id) \
 		and not ResearchManager.get_next_level_data(ai.team, tech_id).is_empty() \
 		and ResearchManager.are_prerequisites_met(ai.team, tech_id)
+
+
+## Arcane Deep Delve capstone choice (see _pick_research): the rush opener
+## commits to Crystal Forge damage; the other openers take Necromancy.
+func _arcane_capstone() -> String:
+	return "crystal_forge" if GameManager.ai_opener == "rush" else "necromancy"
 
 
 ## Disbands n miners (emptiest bags first) to free population slots when the

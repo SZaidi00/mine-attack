@@ -99,11 +99,13 @@ func draw() -> void:
 		var ring_radius: float = selection_radius * pulse
 		unit.draw_texture_rect(_SELECTION_RING, Rect2(-ring_radius, -altitude - ring_radius, ring_radius * 2.0, ring_radius * 2.0), false)
 
-	# Body (offset upward when flying).
+	# Body (offset upward when flying). Undead (Necromancy) reuse the original
+	# sprites under a sickly necrotic tint — palette swap instead of new art.
+	var body_tint: Color = Color(0.65, 1.0, 0.7) if unit.data.is_undead else Color.WHITE
 	if sprite_texture != null:
 		var sprite_size: Vector2 = sprite_texture.get_size() * scale_factor
 		var dest := Rect2(-sprite_size / 2.0 + Vector2(0, -altitude), sprite_size)
-		unit.draw_texture_rect(sprite_texture, dest, false)
+		unit.draw_texture_rect(sprite_texture, dest, false, body_tint)
 	elif unit.data.is_scout:
 		_draw_pigeon_placeholder(color, altitude, scale_factor)
 	else:

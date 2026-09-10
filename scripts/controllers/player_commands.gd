@@ -277,6 +277,28 @@ func _enemy_mine_entry() -> Node2D:
 	return null
 
 
+## Necromancy: set the raise toggle ("off"/"troops"/"dragon") on every
+## selected living wizard. Undead copies are toggled by their own necromancer
+## only, so they are skipped; mixed selections ignore non-wizards.
+func set_raise_mode(mode: String) -> void:
+	if not mode in ["off", "troops", "dragon"]:
+		DebugLog.log_reject("PlayerController", "set_raise_mode", "unknown mode " + mode)
+		return
+	var wizards: Array = []
+	for u in pc._selected_units:
+		if not is_instance_valid(u):
+			continue
+		var data = u.get("data")
+		if data != null and data.unit_name.to_lower() == "wizard" and not data.is_undead:
+			wizards.append(u)
+	if wizards.is_empty():
+		DebugLog.log_reject("PlayerController", "set_raise_mode", "no wizards selected")
+		return
+	DebugLog.log_command("PlayerController", "set_raise_mode", "mode=%s wizards=%d" % [mode, wizards.size()])
+	for u in wizards:
+		u.set_raise_mode(mode)
+
+
 func kill_selected() -> void:
 	pc._selected_units = pc._selected_units.filter(func(u): return is_instance_valid(u))
 	pc._selected_structures = pc._selected_structures.filter(func(s): return is_instance_valid(s))
