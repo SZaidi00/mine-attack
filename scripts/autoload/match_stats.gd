@@ -26,6 +26,10 @@ var ai_opener: String = ""
 # the final smoothing offset (tier steps from the chosen difficulty) reached
 # by match end — both feed the balance-analysis logs.
 var adaptive_difficulty: bool = false
+# Map identity for balance analysis: the effective seed and the per-seed
+# profile knobs (central wall HP multiplier, ore richness curve).
+var map_seed: int = -1
+var map_profile: Dictionary = {}
 
 # Result of the last finalized match; empty until the first game over.
 var last_summary: Dictionary = {}
@@ -91,6 +95,11 @@ func reset() -> void:
 	_sample_elapsed = 0.0
 	_start_time = GameManager.match_time
 	_sample_timeline()  # t=0 baseline, so even short matches have a graph
+	# GridWorld._ready (tree order: World before UI) has resolved the seed by
+	# the time HUD._ready calls this; fall back to GameManager's value.
+	var grid: Node = get_tree().root.get_node_or_null("Main/World/GridWorld")
+	map_seed = grid.map_seed if grid != null else GameManager.map_seed
+	map_profile = grid.map_profile.duplicate() if grid != null else {}
 	last_summary = {}
 	last_log_path = ""
 
@@ -146,6 +155,8 @@ func build_summary(winner: GameManager.Team) -> Dictionary:
 		"player_faction": player_faction,
 		"enemy_faction": enemy_faction,
 		"ai_opener": ai_opener,
+		"map_seed": map_seed,
+		"map_profile": map_profile.duplicate(),
 		"teams": teams,
 		"timeline": _timeline.duplicate(),
 	}

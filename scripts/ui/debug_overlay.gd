@@ -181,6 +181,13 @@ func _update_stats() -> void:
 	text += "Miner Lv: P=%d E=%d\n" % [EconomyManager.get_miner_level(GameManager.Team.PLAYER), EconomyManager.get_miner_level(GameManager.Team.ENEMY)]
 	text += "Game active: %s\n" % str(GameManager.game_active)
 	text += "Difficulty: %s\n" % GameManager.Difficulty.keys()[GameManager.difficulty].capitalize()
+	if _grid.map_seed >= 0:
+		var curve_name: String = ""
+		for id: String in Constants.MAP_ORE_CURVES:
+			if Constants.MAP_ORE_CURVES[id] == _grid.map_profile.get("ore_curve"):
+				curve_name = id
+				break
+		text += "Map: seed %d · wall %.1fx · %s\n" % [_grid.map_seed, _grid.map_profile.get("wall_hp_mult", 1.0), curve_name]
 	if GameManager.adaptive_difficulty:
 		text += "AI adapt: %+.2f steps\n" % GameManager.get_difficulty_offset()
 	if ai:

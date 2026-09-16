@@ -77,6 +77,27 @@ static func create() -> Control:
 	row.add_child(slider)
 	row.add_child(value_label)
 
+	var seed_row := HBoxContainer.new()
+	seed_row.add_theme_constant_override("separation", 10)
+	seed_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(seed_row)
+
+	var seed_label := Label.new()
+	seed_label.text = "Map Seed:"
+	seed_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+	seed_row.add_child(seed_label)
+
+	# Effective seed of the current/next match (rolled maps show the value the
+	# map was generated from once a match has started).
+	var seed_value := Label.new()
+	seed_value.custom_minimum_size = Vector2(224, 0)
+	seed_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	seed_value.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	seed_value.text = str(GameManager.map_seed) if GameManager.map_seed >= 0 else "Random"
+	root.visibility_changed.connect(func():
+		seed_value.text = str(GameManager.map_seed) if GameManager.map_seed >= 0 else "Random")
+	seed_row.add_child(seed_value)
+
 	var close := Button.new()
 	close.text = "Close"
 	close.custom_minimum_size = Vector2(160, 40)

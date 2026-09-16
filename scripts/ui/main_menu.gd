@@ -25,6 +25,7 @@ var _faction_center: CenterContainer
 var _selected_faction_id: String = ""
 var _faction_cards: Dictionary = {}  # faction_id -> PanelContainer
 var _play_button: Button
+var _seed_edit: LineEdit
 # Phase 4: command-console side status modules flanking the main card.
 var _left_status: PanelContainer
 var _right_status: PanelContainer
@@ -536,6 +537,34 @@ func _build_faction_select() -> void:
 
 	_build_faction_particles()
 
+	# Map seed row: empty means "roll a fresh random map every match"; typing a
+	# number (or using Reroll) pins that map so Play Again replays it.
+	var seed_row := HBoxContainer.new()
+	seed_row.add_theme_constant_override("separation", 8)
+	seed_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(seed_row)
+
+	var seed_label := Label.new()
+	seed_label.text = "Map seed:"
+	seed_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+	seed_row.add_child(seed_label)
+
+	_seed_edit = LineEdit.new()
+	_seed_edit.custom_minimum_size = Vector2(160, 0)
+	_seed_edit.placeholder_text = "Random"
+	_seed_edit.text = str(GameManager.map_seed) if GameManager.map_seed >= 0 else ""
+	seed_row.add_child(_seed_edit)
+
+	var reroll := Button.new()
+	reroll.text = "Reroll"
+	reroll.custom_minimum_size = Vector2(90, 0)
+	reroll.add_theme_font_size_override("font_size", 14)
+	UIThemeTokens.apply_button_theme(reroll, UIThemeTokens.ButtonVariant.SECONDARY)
+	reroll.tooltip_text = "Pick a random seed (replay the same map with Play Again)"
+	reroll.pressed.connect(func(): AudioManager.play("click"))
+	reroll.pressed.connect(func(): _seed_edit.text = str(randi()))
+	seed_row.add_child(reroll)
+
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 16)
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -699,7 +728,18 @@ func _show_main_card() -> void:
 func _on_play() -> void:
 	GameManager.set_difficulty(_difficulty_option.selected as GameManager.Difficulty)
 	GameManager.set_adaptive_difficulty(_adaptive_check.button_pressed)
+	_commit_map_seed()
 	FactionManager.set_player_faction(_selected_faction_id)
 	FactionManager.pick_random_enemy_faction()
 	GameManager.roll_ai_opener()
 	get_tree().change_scene_to_file("res://scenes/main.tscn")
+
+
+## Empty or non-numeric seed field = fresh random map every match; a parsed
+## non-negative integer pins that map (locked so Play Again replays it).
+func _commit_map_seed() -> void:
+	var text: String = _seed_edit.text.strip_edges()
+	if text != "" and text.is_valid_int() and text.to_int() >= 0:
+		GameManager.set_map_seed(text.to_int())
+	else:
+		GameManager.clear_map_seed()

@@ -3,13 +3,33 @@ extends RefCounted
 
 var grid: GridWorld
 
+# Dedicated map RNG: seeded from the match's map seed so the same seed always
+# rebuilds the same map, while weather/AI rolls stay random per match.
+var rng := RandomNumberGenerator.new()
+
+# Per-map profile knobs, rolled from rng at generation time (deterministic
+# per seed): central wall HP multiplier and ore richness curve.
+var _wall_hp_mult: float = 1.0
+var _ore_curve: Dictionary = {}
+
+
 func _init(g: GridWorld) -> void:
 	grid = g
 
 
+func _roll_profile() -> void:
+	var mults: Array = grid._Constants.MAP_WALL_HP_MULTS
+	_wall_hp_mult = mults[rng.randi_range(0, mults.size() - 1)]
+	var curve_ids: Array = grid._Constants.MAP_ORE_CURVES.keys()
+	_ore_curve = grid._Constants.MAP_ORE_CURVES[curve_ids[rng.randi_range(0, curve_ids.size() - 1)]]
+	grid.map_profile = {"wall_hp_mult": _wall_hp_mult, "ore_curve": _ore_curve}
+	grid._wall_max_hp = roundi(grid.WALL_HP_BASE * _wall_hp_mult)
+	grid._wall_hp = grid._wall_max_hp
+
+
 func _generate_map() -> void:
-	if Constants.DEBUG and Constants.DEBUG_SEED >= 0:
-		seed(Constants.DEBUG_SEED)
+	rng.seed = grid.map_seed
+	_roll_profile()
 	# Surface ground.
 	for x in range(grid.X_MIN, grid.X_MAX + 1):
 		_set_cell(Vector2i(x, 0), GridWorld.Cell.new(GridWorld.CellType.SURFACE_GROUND, 0, 99, 9999, 0))
@@ -28,11 +48,14 @@ func _generate_map() -> void:
 				grid._central_wall_cells.append(pos)
 				continue
 
-			# Ore chance rises with depth.
-			var is_ore: bool = randf() < (0.10 + layer * 0.05)
-			if is_ore:
+			# Ore chance follows the per-map richness curve (base + slope per
+			# layer, plus a midfield bonus on rich-center maps).
+			var ore_chance: float = _ore_curve.base + layer * _ore_curve.slope
+			if _ore_curve.center_bonus > 0.0 and abs(x) <= grid._Constants.MAP_RICH_CENTER_HALF_WIDTH:
+				ore_chance += _ore_curve.center_bonus
+			if rng.randf() < ore_chance:
 				var coin_range: Vector2i = grid._Constants.LAYER_COIN_RANGES[layer]
-				var coin: int = randi_range(coin_range.x, coin_range.y)
+				var coin: int = rng.randi_range(coin_range.x, coin_range.y)
 				_set_cell(Vector2i(x, y), GridWorld.Cell.new(GridWorld.CellType.ORE, layer, ml_req, tile_hp, coin))
 			else:
 				_set_cell(Vector2i(x, y), GridWorld.Cell.new(GridWorld.CellType.DIRT, layer, ml_req, tile_hp, 0))

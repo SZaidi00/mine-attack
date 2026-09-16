@@ -73,7 +73,7 @@ Autoloads (load order from `project.godot`): `Constants`, `GameManager`, `Factio
 Global singletons. All hold per-match state that survives scene reloads; `hud.gd` resets them on Play Again / Quit to Menu.
 
 - `constants.gd` — balance numbers, costs, train times, upgrade tables, vision/fog constants, dynamic-terrain event tuning (`LAVA_*`/`CAVEIN_*`/`MAGMA_*`/`ORE_*`), weather tuning (`SNOWSTORM_*`), volcano tuning (`VOLCANO_*`), research branch tree (`RESEARCH_TECHS`) and branch-effect tuning, input action `StringName`s. Source of truth for all numeric balance.
-- `game_manager.gd` — `Team`/`Difficulty` enums (Easy, Normal, Hard, Nightmare, Godly), team colors, difficulty modifiers, game speed, match timer, win/loss, soft pause. Rolls the AI's per-match opener (`AI_OPENERS`: balanced/rush/boom/turtle, faction-weighted) which shifts wave thresholds, the miner quota, and build order. Adaptive difficulty smoothing (opt-in via `adaptive_difficulty`, main-menu checkbox): a mid-match `_difficulty_offset` (±1 tier steps) interpolates the numeric difficulty modifiers between adjacent `DIFFICULTY_MODIFIERS` rows (the smarts behavior tier flips only at a full step), nudged by the AI's smoothing evaluator.
+- `game_manager.gd` — `Team`/`Difficulty` enums (Easy, Normal, Hard, Nightmare, Godly), team colors, difficulty modifiers, game speed, match timer, win/loss, soft pause. Rolls the AI's per-match opener (`AI_OPENERS`: balanced/rush/boom/turtle, faction-weighted) which shifts wave thresholds, the miner quota, and build order. Adaptive difficulty smoothing (opt-in via `adaptive_difficulty`, main-menu checkbox): a mid-match `_difficulty_offset` (±1 tier steps) interpolates the numeric difficulty modifiers between adjacent `DIFFICULTY_MODIFIERS` rows (the smarts behavior tier flips only at a full step), nudged by the AI's smoothing evaluator. Holds the map seed state (`map_seed`/`map_seed_locked`): a user-pinned seed replays the same map on Play Again; an unlocked one re-rolls per match.
 - `faction_manager.gd` — faction picks (Arcane, Brute, Industrial), hidden-faction identification, faction-modified costs and starting bonuses.
 - `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Baseline income: both teams trickle `BASELINE_INCOME_COIN` every `BASELINE_INCOME_INTERVAL` from match start, no eligibility gates (AI scaled by the difficulty coin multiplier). Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (same AI scaling), so a wiped economy can always re-staff.
 - `research_manager.gd` — timed branch research tree: mutually-exclusive tiers, one-time 500g respec, active research slot with queue, Ore Sonar scan.
@@ -104,7 +104,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 ### `scripts/world/`
 
 - `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers.
-  - `grid_map_generation.gd` — map generation and A* initialization.
+  - `grid_map_generation.gd` — map generation and A* initialization. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
   - `grid_pathfinding.gd` — `find_path`, `find_path_underground` (crawler variant: seals the surface row for the query so underground raids can't bypass the central wall over the top), walkability helpers, wall cell sealing.
   - `grid_fog_of_war.gd` — vision maps, memory, ghost silhouettes, fog rendering.
   - `grid_drawing.gd` — surface/underground terrain drawing, effects, wall HP bar.
@@ -295,7 +295,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Framework: GUT (`addons/gut/`).
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
-- Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself.
+- Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself. Map generation does NOT follow the global RNG stream (dedicated map RNG, see `grid_map_generation.gd`) — tests that need a fixed map pin `GameManager.set_map_seed(n)` in setup and `GameManager.clear_map_seed()` in teardown.
 - Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
 
 ## Security and deployment considerations

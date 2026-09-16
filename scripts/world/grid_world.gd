@@ -75,8 +75,10 @@ const X_MAX: int = _Constants.GRID_X_MAX
 const Y_MIN: int = _Constants.GRID_Y_MIN
 const Y_MAX: int = _Constants.GRID_Y_MAX
 
-# Central wall is a single objective with shared HP (GDD: 2000 HP).
-const WALL_HP_TOTAL: int = _Constants.WALL_HP
+# Central wall is a single objective with shared HP. The pool is per-instance
+# (not a const) because the per-seed map profile scales it: map generation
+# sets _wall_max_hp from WALL_HP * profile wall multiplier.
+const WALL_HP_BASE: float = _Constants.WALL_HP
 
 # Helper modules split grid responsibilities into smaller files.
 const GridMapGeneration = preload("res://scripts/world/grid_map_generation.gd")
@@ -122,9 +124,16 @@ const VISION_LAYER_BOTH: int = 0
 const VISION_LAYER_SURFACE: int = 1
 const VISION_LAYER_UNDERGROUND: int = 2
 
-var _wall_hp: int = WALL_HP_TOTAL
-var _wall_max_hp: int = WALL_HP_TOTAL
+var _wall_hp: int = int(WALL_HP_BASE)
+var _wall_max_hp: int = int(WALL_HP_BASE)
 var _central_wall_cells: Array[Vector2i] = []
+
+# Per-match map identity, resolved in _ready: map_seed is the effective seed
+# (user-pinned or rolled) and map_profile the per-seed knobs (wall HP
+# multiplier + ore curve) rolled by GridMapGeneration. Exposed for the debug
+# overlay, match log, and tests.
+var map_seed: int = -1
+var map_profile: Dictionary = {}
 
 # Backgrounds are padded this far beyond the map on every side so wide or
 # tall windows (where the whole world fits in view) never show unpainted void.
@@ -165,9 +174,24 @@ func _init() -> void:
 	_events = GridEvents.new(self)
 
 
+## Seed chain: a user-pinned seed wins; debug builds honor DEBUG_SEED (test
+## harness); otherwise roll a fresh one. The effective seed is written back to
+## GameManager so the settings panel, match log, and debug overlay all show
+## the same number the map was generated from.
+func _resolve_map_seed() -> void:
+	if GameManager.map_seed >= 0:
+		map_seed = GameManager.map_seed
+	elif Constants.DEBUG and Constants.DEBUG_SEED >= 0:
+		map_seed = Constants.DEBUG_SEED
+	else:
+		map_seed = randi()
+		GameManager.map_seed = map_seed
+
+
 func _ready() -> void:
 	_sky_top_color = _SKY_TEXTURE.get_image().get_pixel(0, 0)
 	_underground_bottom_color = _UNDERGROUND_TEXTURE.get_image().get_pixel(0, _UNDERGROUND_TEXTURE.get_height() - 1)
+	_resolve_map_seed()
 	_map_gen._generate_map()
 	_map_gen._init_astar()
 	_fog._init_vision_maps()

@@ -95,6 +95,11 @@ var game_speed: float = 1.0
 # The AI's opener for the current match (key into AI_OPENERS). "balanced" is
 # the neutral default; real matches reroll it via roll_ai_opener().
 var ai_opener: String = "balanced"
+# Map seed for the next/current match. -1 means "roll a fresh seed when the
+# match scene loads". A user-typed seed sets map_seed_locked so Play Again
+# replays the same map; unlocked matches re-roll per match (see hud.gd).
+var map_seed: int = -1
+var map_seed_locked: bool = false
 # Soft pause (separate from the tree-pausing pause menu): a temporary 0x speed
 # the player can toggle from the HUD without bringing up the exit menu. It is
 # cleared on match reset so Play Again does not start paused.
@@ -210,6 +215,21 @@ func set_difficulty(d: Difficulty) -> void:
 func set_adaptive_difficulty(on: bool) -> void:
 	adaptive_difficulty = on
 	DebugLog.log_command("GameManager", "set_adaptive_difficulty", str(on))
+
+
+## Pins the map seed for the next match (main-menu seed field). Locked seeds
+## replay the same map on Play Again; unlocked matches re-roll per match.
+func set_map_seed(s: int) -> void:
+	map_seed = s
+	map_seed_locked = true
+	DebugLog.log_command("GameManager", "set_map_seed", str(s))
+
+
+## Back to rolling a fresh, randomly generated map per match.
+func clear_map_seed() -> void:
+	map_seed = -1
+	map_seed_locked = false
+	DebugLog.log_command("GameManager", "clear_map_seed", "random")
 
 
 ## Mid-match smoothing offset in tier steps (see _difficulty_offset).

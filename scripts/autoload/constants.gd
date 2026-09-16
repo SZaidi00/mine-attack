@@ -846,6 +846,21 @@ const UNIT_REGEN_PER_SEC: float = 2.0
 const WALL_HP: float = 5000.0
 const WALL_DAMAGE_PER_MINER: float = 5.0
 
+# ─── MAP PROFILE (per-seed map knobs) ───
+# Every match rolls a map profile from the map seed (see GridMapGeneration):
+# a central-wall HP multiplier and an ore richness curve. Weighted pick from
+# MAP_WALL_HP_MULTS; ore probability per cell is curve.base + layer *
+# curve.slope, plus curve.center_bonus for |x| <= MAP_RICH_CENTER_HALF_WIDTH
+# (the midfield contest zone in front of the central wall).
+const MAP_WALL_HP_MULTS: Array[float] = [0.6, 1.0, 1.0, 1.5]  # fractured / standard×2 / fortress
+const MAP_ORE_CURVES: Dictionary = {
+	"standard": {"base": 0.10, "slope": 0.05, "center_bonus": 0.0},
+	"shallow_rich": {"base": 0.17, "slope": 0.03, "center_bonus": 0.0},
+	"deep_rich": {"base": 0.06, "slope": 0.08, "center_bonus": 0.0},
+	"rich_center": {"base": 0.10, "slope": 0.05, "center_bonus": 0.10},
+}
+const MAP_RICH_CENTER_HALF_WIDTH: int = 8
+
 # ─── UNDERGROUND ───
 const LAYERS: int = 7
 const LAYER_HEIGHT: int = 100

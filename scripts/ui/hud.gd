@@ -879,4 +879,8 @@ func _play_again() -> void:
 	# Return to the main menu so the player can pick difficulty/faction again.
 	# Global state is reset, but difficulty and faction selections survive
 	# (FactionManager keeps the ids; GameManager keeps the difficulty).
+	# An unlocked (rolled) map seed is cleared so the next match generates a
+	# fresh map; a user-pinned seed survives so the rematch replays it.
+	if not GameManager.map_seed_locked:
+		GameManager.map_seed = -1
 	_quit_to_menu()
