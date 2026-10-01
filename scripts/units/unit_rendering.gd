@@ -161,6 +161,10 @@ func draw() -> void:
 			var fill_rect: Rect2 = Rect2(-10, body_top - 8, 20 * hp_pct, 4)
 			var src_rect: Rect2 = Rect2(0, 0, fill_texture.get_width() * hp_pct, fill_texture.get_height())
 			unit.draw_texture_rect_region(fill_texture, fill_rect, src_rect)
+		# Colorblind mode: the green/orange fill is hue-only, so enemy bars get
+		# a white frame as a second, shape-based cue.
+		if SettingsManager.get_colorblind() and unit.team == GameManager.Team.ENEMY:
+			unit.draw_rect(bar_rect, Color.WHITE, false, 1.0)
 
 	# Cargo readout above miners: carried / capacity, shown while hauling and
 	# whenever the miner is hovered or selected.

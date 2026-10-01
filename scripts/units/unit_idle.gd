@@ -8,6 +8,9 @@ func _init(u: Unit) -> void:
 
 
 func _handle_idle_fighter() -> void:
+	if unit._attack_move_active:
+		_handle_attack_move_idle()
+		return
 	if unit._rally_active:
 		if _engage_rally_target_if_any():
 			return
@@ -59,6 +62,43 @@ func _engage_rally_target_if_any() -> bool:
 	unit._navigation._repath(target.global_position)
 	unit._set_state(Unit.State.ATTACK, "rally engage")
 	return true
+
+
+## Attack-move idle: re-engage any enemy in auto-attack range; otherwise
+## resume the path toward the attack-move point (arriving ends the order).
+func _handle_attack_move_idle() -> void:
+	if _engage_attack_move_target_if_any():
+		return
+	_resume_attack_move_path()
+
+
+## Attack-move engagement: engage the best auto-attack target without
+## cancelling the attack-move order (same bookkeeping as the rally engage —
+## explicit commands would clear the flag via _clear_target).
+func _engage_attack_move_target_if_any() -> bool:
+	var target = unit._vision._find_auto_attack_target()
+	if target == null:
+		return false
+	DebugLog.log_command("Unit %d" % unit.get_instance_id(), "attack-move engage", "target=%d" % target.get_instance_id())
+	if target is Unit:
+		unit._target_unit = target
+		unit._navigation._repath(target.global_position)
+	else:
+		unit._target_building = target
+		unit._navigation._repath(unit._navigation._building_stand_point(target))
+	unit._auto_engaged = true
+	unit._set_state(Unit.State.ATTACK, "attack-move engage")
+	return true
+
+
+func _resume_attack_move_path() -> void:
+	if unit.global_position.distance_to(unit._attack_move_point) <= GridWorld.CELL_SIZE:
+		unit._attack_move_active = false
+		return
+	unit._target_position = unit._attack_move_point
+	unit._navigation._repath(unit._attack_move_point)
+	if not unit._path.is_empty():
+		unit._set_state(Unit.State.MOVE, "resume attack-move")
 
 
 func _return_to_rally_point() -> void:

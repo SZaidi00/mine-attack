@@ -40,6 +40,11 @@ var _view_slide_target: Vector2 = Vector2.INF
 var _shake_strength: float = 0.0
 # Rally stance armed: the next left-click sets the rally point for all fighters.
 var _rally_armed: bool = false
+# Attack-move armed: the next left-click issues an attack-move order for the
+# selected fighters. Toggled by the attack_move action (Q).
+var _attack_move_armed: bool = false
+# Control groups (Ctrl+1-9 assign, Alt+1-9 recall): digit int -> Array of units.
+var _control_groups: Dictionary = {}
 # Persistent army mode set by the Attack/Defend/Garrison buttons: newly
 # trained fighters automatically receive this order when they spawn.
 var _current_stance: String = "defend"
@@ -189,6 +194,24 @@ func _unhandled_input(event: InputEvent) -> void:
 		_commands._handle_rally_input(event)
 		return
 
+	# Control groups: raw digit keys with Ctrl (assign) / Alt (recall), checked
+	# before the action chain so they can't fall through to the train_* hotkeys
+	# (digits 1-8 are bound there). Intentionally not remappable.
+	if event is InputEventKey and event.pressed and not event.echo \
+			and event.keycode >= KEY_1 and event.keycode <= KEY_9:
+		_handle_control_group_key(event)
+		return
+
+	# Attack-move (Q): arm only with a fighter selected; the next left-click
+	# issues the order, right-click/Esc cancels (see the armed block below).
+	if event.is_action_pressed(_Constants.INPUT_ATTACK_MOVE):
+		_toggle_attack_move_arm()
+		return
+
+	if _attack_move_armed:
+		_commands._handle_attack_move_input(event)
+		return
+
 	if event.is_action_pressed(_Constants.INPUT_SELECT):
 		_drag_start = get_viewport().get_mouse_position()
 		_is_dragging = true
@@ -239,13 +262,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_VIEW):
 		_camera_helper._toggle_view()
 	elif event.is_action_pressed(_Constants.INPUT_TOGGLE_RESEARCH):
-		var hud: CanvasLayer = get_node_or_null("/root/Main/UI/HUD")
+		var hud: HUD = get_node_or_null("/root/Main/UI/HUD")
 		if hud:
 			hud.toggle_research_panel()
 	elif event.is_action_pressed(_Constants.INPUT_KILL_UNITS):
 		kill_selected()
 	elif event.is_action_pressed(_Constants.INPUT_PAUSE):
-		var hud: CanvasLayer = get_node_or_null("/root/Main/UI/HUD")
+		var hud: HUD = get_node_or_null("/root/Main/UI/HUD")
 		if hud != null and hud.is_research_panel_open():
 			hud.toggle_research_panel()
 		else:
@@ -307,6 +330,31 @@ func kill_selected() -> void:
 
 func is_rally_armed() -> bool:
 	return _rally_armed
+
+
+## Control groups: Ctrl+digit stores a snapshot of the current selection under
+## that digit (even an empty one — that is how a group is cleared); Alt+digit
+## recalls it, dropping units that died in the meantime.
+func _handle_control_group_key(event: InputEventKey) -> void:
+	var digit: int = event.keycode - KEY_0
+	if event.ctrl_pressed:
+		_control_groups[digit] = _selected_units.duplicate()
+		DebugLog.log_command("PlayerController", "control_group_assign", "group=%d units=%d" % [digit, _control_groups[digit].size()])
+	elif event.alt_pressed:
+		var group: Array = _control_groups.get(digit, [])
+		var living: Array = group.filter(func(u): return is_instance_valid(u))
+		_selection._select_units(living)
+		DebugLog.log_command("PlayerController", "control_group_recall", "group=%d units=%d" % [digit, living.size()])
+
+
+## Attack-move (Q): toggle the armed state when a fighter is selected.
+func _toggle_attack_move_arm() -> void:
+	var fighters: Array = _selection._filter_fighters(_selected_units.filter(func(u): return is_instance_valid(u)))
+	if fighters.is_empty():
+		DebugLog.log_reject("PlayerController", "attack_move", "no fighters selected")
+		return
+	_attack_move_armed = not _attack_move_armed
+	DebugLog.log_command("PlayerController", "attack_move", "armed" if _attack_move_armed else "disarmed")
 
 
 func start_build_placement(kind: String) -> void:

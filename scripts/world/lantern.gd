@@ -11,6 +11,7 @@ extends Node2D
 signal hp_changed(current: int, maximum: int)
 signal destroyed(lantern: Lantern)
 signal construction_complete(lantern: Lantern)
+signal upgraded(tier: int)
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
 
@@ -36,6 +37,9 @@ var _last_damage_time: float = -999.0
 
 var _build_progress: float = 0.0
 var _is_built: bool = false
+# Set by upgrade(): the next construction completion is an upgrade finishing,
+# not a fresh placement (which is what construction_complete reports).
+var _upgrade_pending: bool = false
 
 # Selection highlight (set by PlayerController when the player clicks this
 # structure; drawn as a gold ring around the base).
@@ -85,6 +89,7 @@ func upgrade() -> void:
 	_apply_tier_stats()
 	_is_built = false
 	_build_progress = 0.0
+	_upgrade_pending = true
 	queue_redraw()
 
 
@@ -115,6 +120,9 @@ func _process(delta: float) -> void:
 			if is_underground_lantern:
 				_reveal_ore()
 			construction_complete.emit(self)
+			if _upgrade_pending:
+				_upgrade_pending = false
+				upgraded.emit(tier)
 		queue_redraw()
 	elif _is_built:
 		# Keep the glow halo flickering.

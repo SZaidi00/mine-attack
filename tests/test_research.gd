@@ -407,7 +407,7 @@ func test_overlay_pause_pauses_and_resumes_automatically() -> void:
 	# read tooltips and queue techs without time progressing. Closing the overlay
 	# releases exactly that pause. No awaits here — the tree is briefly paused,
 	# and frames must not pass until it resumes.
-	var hud: CanvasLayer = _main.get_node("UI/HUD")
+	var hud: HUD = _main.get_node("UI/HUD")
 	var panel: Control = hud.get_node("ResearchPanel")
 	assert_false(get_tree().paused)
 	panel.visible = true
@@ -425,7 +425,7 @@ func test_overlay_pause_pauses_and_resumes_automatically() -> void:
 func test_soft_pause_button_pauses_without_menu() -> void:
 	# The HUD has a Pause (0×) button in the speed row that pauses via time_scale
 	# without bringing up the exit menu. Selecting any speed resumes.
-	var hud: CanvasLayer = _main.get_node("UI/HUD")
+	var hud: HUD = _main.get_node("UI/HUD")
 	Engine.time_scale = 1.0
 	GameManager.soft_paused = false
 	GameManager.game_speed = 1.0

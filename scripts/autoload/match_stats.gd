@@ -1,10 +1,10 @@
 extends Node
 
-## MatchStats records per-match counters and a coarse coin/population timeline
-## for the post-match summary (HUD game-over panel) and the JSON match log
-## written at game over. It feeds balance analysis: every match leaves a file
-## under user://match_logs/ that can be diffed across difficulties, factions,
-## and AI openers.
+## MatchStats records per-match counters and a coarse coin/population/base-HP
+## timeline for the post-match summary (HUD game-over panel, coaching hints) and
+## the JSON match log written at game over. It feeds balance analysis: every
+## match leaves a file under user://match_logs/ that can be diffed across
+## difficulties, factions, and AI openers.
 ##
 ## Lifecycle: HUD._ready calls reset() at the start of every match (mirroring
 ## the WeatherManager/AIBeliefSystem resets — GameManager.match_time has been
@@ -70,7 +70,33 @@ func _sample_timeline() -> void:
 		"enemy_coin": EconomyManager.get_coin(GameManager.Team.ENEMY),
 		"player_pop": EconomyManager.get_population(GameManager.Team.PLAYER),
 		"enemy_pop": EconomyManager.get_population(GameManager.Team.ENEMY),
+		"player_base_hp": _base_hp_fraction(GameManager.Team.PLAYER),
+		"enemy_base_hp": _base_hp_fraction(GameManager.Team.ENEMY),
 	})
+
+
+## Current base HP as a 0-1 fraction (1.0 when the base is missing or undamaged).
+## Building._hp is private; read it reflectively like the structure tests do.
+func _base_hp_fraction(team: GameManager.Team) -> float:
+	for building in get_tree().get_nodes_in_group("buildings"):
+		if building.get("team") == team:
+			var max_hp: int = int(building.get("max_hp"))
+			if max_hp <= 0:
+				return 1.0
+			return clampf(float(building.get("_hp")) / float(max_hp), 0.0, 1.0)
+	return 1.0
+
+
+## Highest research-tree tier (tree_pos column + 1) the team has completed,
+## 0 if nothing is researched.
+func _max_research_tier(team: GameManager.Team) -> int:
+	var max_tier: int = 0
+	for tech_id: String in Constants.RESEARCH_TECHS:
+		if ResearchManager.get_level(team, tech_id) <= 0:
+			continue
+		var tree_pos: Vector2i = Constants.RESEARCH_TECHS[tech_id].get("tree_pos", Vector2i.ZERO)
+		max_tier = maxi(max_tier, tree_pos.x + 1)
+	return max_tier
 
 
 ## Starts a fresh match's recording. Called from HUD._ready when the Main
@@ -157,6 +183,8 @@ func build_summary(winner: GameManager.Team) -> Dictionary:
 		"ai_opener": ai_opener,
 		"map_seed": map_seed,
 		"map_profile": map_profile.duplicate(),
+		"player_max_tier": _max_research_tier(GameManager.Team.PLAYER),
+		"enemy_max_tier": _max_research_tier(GameManager.Team.ENEMY),
 		"teams": teams,
 		"timeline": _timeline.duplicate(),
 	}

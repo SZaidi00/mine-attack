@@ -34,13 +34,13 @@ mine-attack/
 │   ├── resources/     # unit_data.gd, faction_data.gd, units/*.tres, factions/*.tres
 │   ├── ui/            # hud + helper modules, debug_overlay, layer_indicator,
 │                      # training_queue_panel, research_panel, unit_button, main_menu,
-│                      # match_graph
+│                      # match_graph, minimap, tutorial_hints, coaching_hints
 │   ├── effects/       # coin_popup, damage_popup, coin_pickup, reject_popup,
-│                      # burning_ground, meteor, volcano_background
+│                      # order_marker, burning_ground, meteor, volcano_background
 │   ├── units/         # unit.gd + helper modules, projectile.gd, unit_pigeon.gd
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
-├── tests/             # GUT test suite (~25 test scripts)
+├── tests/             # GUT test suite (~48 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
 │                      # gen_crawler_sprites.gd
 ├── .githooks/         # pre-push release hook
@@ -78,18 +78,18 @@ Global singletons. All hold per-match state that survives scene reloads; `hud.gd
 - `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Baseline income: both teams trickle `BASELINE_INCOME_COIN` every `BASELINE_INCOME_INTERVAL` from match start, no eligibility gates (AI scaled by the difficulty coin multiplier). Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (same AI scaling), so a wiped economy can always re-staff.
 - `research_manager.gd` — timed branch research tree: mutually-exclusive tiers, one-time 500g respec, active research slot with queue, Ore Sonar scan.
 - `audio_manager.gd` — synthesized SFX and ambience.
-- `settings_manager.gd` — window resolution persistence (desktop only) and SFX bus volume persistence (all platforms), both in `user://settings.cfg`.
+- `settings_manager.gd` — window resolution persistence (desktop only), SFX bus volume (all platforms), accessibility preferences (UI scale, colorblind palette, reduced motion/flash, tutorial-hint state), and remappable key bindings (`[input]` section), all in `user://settings.cfg`. Emits `setting_changed(what: StringName)` so live UI (HUD scale, camera shake, palettes) reacts without polling. `apply_saved_bindings()` rebuilds InputMap key events at startup (mouse buttons are never remapped).
 - `weather_manager.gd` — snowstorms + volcano eruptions: independent game-time state machines, scheduling/damage/duration scaled by difficulty. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` and `WeatherManager.set_volcano_events_enabled(false)` (tests force events instead).
 - `ai_belief_system.gd` — per-team belief maps (cells/unit sightings/enemy-faction guess) built only from that team's vision; confidence decays on stale intel. Reset per match via `AIBeliefSystem.reset()`.
-- `match_stats.gd` — per-match stats recording: units lost (hooked from `Unit._die`), damage dealt (hooked from unit `take_damage`, credited to the attacker's team), and a 5s coin/population timeline (relative to match start, with a t=0 baseline and a match-end point). Reset per match from `hud._ready` (metadata: difficulty/factions/opener captured there); on `GameManager.game_over` it finalizes `last_summary` for the game-over panel and writes a JSON log to `user://match_logs/`.
+- `match_stats.gd` — per-match stats recording: units lost (hooked from `Unit._die`), damage dealt (hooked from unit `take_damage`, credited to the attacker's team), and a 5s coin/population/base-HP timeline (relative to match start, with a t=0 baseline and a match-end point). `build_summary()` also records each team's max completed research tier (`player_max_tier`/`enemy_max_tier`) for post-game coaching hints. Reset per match from `hud._ready` (metadata: difficulty/factions/opener captured there); on `GameManager.game_over` it finalizes `last_summary` for the game-over panel and writes a JSON log to `user://match_logs/`.
 
 ### `scripts/controllers/`
 
 Controllers are split into thin main classes plus `RefCounted` helper modules.
 
-- `player_controller.gd` — exports, input routing, camera/view state, stance/build mode state; delegates to helpers.
+- `player_controller.gd` — exports, input routing, camera/view state, stance/build mode state; delegates to helpers. Also owns control groups (Ctrl+1-9 assign / Alt+1-9 recall via raw key handling ahead of the action chain) and the attack-move arm toggle (`Q`).
   - `player_selection.gd` — single/box selection and unit/building picking.
-  - `player_commands.gd` — right-click command resolution, train/upgrade/kill callbacks, stance/rally application.
+  - `player_commands.gd` — right-click command resolution, train/upgrade/kill callbacks, stance/rally application, attack-move orders, and the expanding-ring order markers (blue move / red attack / gold mining) spawned per accepted order.
   - `player_camera.gd` — zoom, pan, surface/underground view bookmarks, screen shake.
   - `player_build_placement.gd` — lantern/tower/wall/trap placement ghost and validation; towers and lanterns show a gold range/vision disc while placing (tower range includes research bonuses).
 - `ai_controller.gd` — tick fields, aggression state, scout memory; delegates to helpers.
@@ -127,7 +127,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `unit_abilities.gd` — faction abilities (blink, volley, swarm, rune blade, berserk, arcane shot, heavy bolt, crush, mana burn, miner reveal, supply drop, fight back — which also triggers against crawlers).
   - `unit_vision_targeting.gd` — vision radii, auto-attack target selection, splash targeting. Static structures are targetable on remembered intel, not just live vision. Auto-acquire only engages surface targets on the team's own half (midfield rule; Longbow blind-fire is exempt); explicit orders, stance marches, and rally hunts are exempt.
   - `unit_rendering.gd` — sprites, pickaxe animation, HP bar, cargo, selection ring.
-  - `unit_idle.gd` — idle fighter/miner behavior, rally hunt, patrol, return-to-post.
+  - `unit_idle.gd` — idle fighter/miner behavior, rally hunt, attack-move resume/re-engage, patrol, return-to-post.
   - `unit_repair.gd` — engineer repair channel (structure-only, coin per HP, recent-damage lockout) and idle auto-seek.
   - `unit_necromancy.gd` — Necromancy raise behavior: idle wizards with the raise toggle seek corpses, walk into range, and channel to summon an undead copy (per-wizard caps, claim reservation so two wizards never raise the same corpse; the channel breaks on any interruption).
 - `unit_pigeon.gd` — flying scout behavior (trained from towers, anti-air vulnerable).
@@ -135,13 +135,17 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 ### `scripts/ui/`
 
-- `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners.
-- `hud.gd` — node references (bottom-bar buttons are looked up by `%Name` unique name so layout moves can't break paths), signal wiring, game-over flow (summary table + `MatchGraph` coin/population charts), lava/weather/volcano warning banners, faction-identified popup, research-completion toasts; delegates to helpers. The BottomBar is two rows: `TrainRow` (7 train buttons) on top, `CommandRow` (upgrades + stance/kill/research/build) below. The Necromancy Raise toggle is created at runtime and inserted after the Rally button, visible only with the research done and a wizard selected.
+- `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners. Semantic colors that change under colorblind mode (`COLOR_ENEMY`, `COLOR_SUCCESS`, `COLOR_VICTORY`) are static-var mirrors swapped by `apply_colorblind_palette()`.
+- `hud.gd` — extends `Control` (the root is scaled for UI scale: `pivot_offset` zero, `scale = (s,s)`, fixed-offset virtual rect `window_size / s`, auto-capped so the bars always fit). Node references (bottom-bar buttons are looked up by `%Name` unique name so layout moves can't break paths), signal wiring, game-over flow (summary table + coaching hints from `CoachingHints.generate()` + `MatchGraph` coin/population charts), lava/weather/volcano warning banners (pulse skipped when reduced-flash is on), faction-identified popup, research-completion + production (unit trained / lantern upgraded) toasts; delegates to helpers. The BottomBar is two rows: `TrainRow` (7 train buttons) on top, `CommandRow` (upgrades + stance/kill/research/build) below. The Necromancy Raise toggle is created at runtime and inserted after the Rally button, visible only with the research done and a wizard selected.
   - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
   - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists).
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
 - `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system.
-- `settings_panel.gd` — shared settings popup (SFX volume slider on the SFX bus) opened from the main menu and pause menu Settings buttons.
+- `settings_panel.gd` — shared settings popup opened from the main menu and pause menu Settings buttons; scrollable card with three groups — Display (map seed, UI scale slider, colorblind / reduced motion / reduced flash / tutorial checkboxes, tutorial reset), Audio (SFX volume slider on the SFX bus), Controls (capture-key rebinding rows for `Constants.REMAPPABLE_ACTIONS` with conflict rejection). Main menu and pause menu keep their own inline resolution rows (desktop only).
+- `minimap.gd` — canvas-drawn minimap Control (terrain by `CellType`, 3-state fog overlay, team-colored unit/building dots, camera viewport rect, click/drag to move the camera; shape-coded ore/lava when colorblind mode is on).
+- `tutorial_hints.gd` — first-match contextual hints (~10 trigger conditions polled on a 1s tick, one card at a time, dismiss persists to `SettingsManager.tutorial_seen`).
+- `coaching_hints.gd` — `class_name CoachingHints` pure function generating 2–3 post-game observations from the `MatchStats` summary (fast-loss, base-damage, economy ratio, army trade, max-tier rules).
+- `match_graph.gd` — post-game coin/population charts from the MatchStats timeline.
 - `research_panel.gd` — Doctrine Deck research overlay: spatial branch map with tech cards (icon, state badge, discipline-colored accent, active progress strip) and elbow/OR-dashed connectors, persistent detail rail (cost/time/prereq/exclusion + action button) and footer queue chips with cancel/respec/scan.
 - `training_queue_panel.gd` — Frosted Steel production module: active training with progress, scrollable queued-items list, capacity readout, Pause/Resume and Clear actions.
 - `unit_button.gd` — training buttons; cost/time labels and the affordability gate read the building's `get_train_cost`/`get_train_time` so research discounts (e.g. Broodmother's dragon discount) show immediately, refreshed via `ResearchManager.research_completed`/`research_changed`.
@@ -214,11 +218,20 @@ Defined in `project.godot` under `[input]`:
 - `lmb` / `rmb` — select / command
 - `Ctrl+A` / `Ctrl+M` / `Ctrl+F` / `Ctrl+D` — select all / miners / fighters / dragons
 - `1`–`8` — train miner / swordsman / archer / wizard / dragon / pigeon / engineer / crawler
+- `Ctrl+1`–`Ctrl+9` / `Alt+1`–`Alt+9` — assign / recall control groups (raw key handling in `PlayerController._unhandled_input`, not remappable)
+- `Q` (`attack_move`) — arm attack-move; next left-click orders selected fighters to attack-move (works underground; right-click/Esc cancels)
 - `Tab` (`toggle_view`) — toggle surface/underground camera bookmark
 - `R` (`toggle_research`) — toggle research panel
 - `K` / `Delete` (`kill_units`) — disband selection
 - `Space` / `Esc` (`pause`) — pause
 - `F3` (`toggle_debug`) — debug overlay
+
+Most keyboard bindings are remappable at runtime (Settings → Controls;
+`Constants.REMAPPABLE_ACTIONS`, persisted in `user://settings.cfg` `[input]`,
+applied by `SettingsManager.apply_saved_bindings()` at startup). Fixed:
+`lmb`/`rmb`, control-group digits (Ctrl/Alt+1–9), and F3. Remapping an action
+with multiple default keys (e.g. `kill_units` = K+Delete) collapses to the
+single new binding.
 
 ## Build, run, and export
 
@@ -296,7 +309,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself. Map generation does NOT follow the global RNG stream (dedicated map RNG, see `grid_map_generation.gd`) — tests that need a fixed map pin `GameManager.set_map_seed(n)` in setup and `GameManager.clear_map_seed()` in teardown.
-- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare.
+- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare, control groups, attack-move, minimap, tutorial hints, coaching hints, production toasts, accessibility settings, key remapping.
 
 ## Security and deployment considerations
 
@@ -317,6 +330,8 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - **Test harness teardown:** free `main.tscn` immediately with `_main.free()` in `after_all`, not `queue_free()`, to avoid node-name collisions.
 - **Web full-bleed:** web export uses custom head include for canvas sizing.
 - **Viewport stretch:** logical UI is 1920×1080; camera base zoom adapts to physical window size.
+- **HUD root is a Control, not a CanvasLayer:** it applies UI scale via its own `scale` + a fixed-offset virtual rect (`window_size / ui_scale`), re-fit on window resize. Don't re-anchor the HUD root or assume canvas-layer behavior; parent `UI` in `main.tscn` is the CanvasLayer.
+- **Settings tests write `user://settings.cfg` for real:** tests that flip settings (volume, accessibility, key bindings) restore the prior values in `after_all` — follow `tests/test_settings_volume.gd`.
 
 ## Useful files to read first
 

@@ -10,7 +10,7 @@ const PLAYER: int = 0
 const ENEMY: int = 1
 
 var _main: Node
-var _hud: CanvasLayer
+var _hud: HUD
 
 
 func before_all() -> void:

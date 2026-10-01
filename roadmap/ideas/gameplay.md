@@ -26,18 +26,10 @@ conversion; several items pair well with it (noted inline).
       `grid_map_generation.gd`; even a simple "copy this seed" UI adds
       replayability for near-zero cost. Full archetypes (shaft
       positions, caverns, dimensions) remain open in IDEAS.md.
-- [ ] **Replays / spectator mode** — `MatchStats` already writes
-      per-match JSON logs; recording the order stream would give
-      replays *and* a balance-analysis gold mine. Bigger lift than it
-      sounds (needs deterministic sim or full state snapshots).
 - [ ] **Meta-progression (out-of-match unlocks)** — cosmetic-only
       first (faction banners, unit tints); anything stat-affecting
       risks invalidating the difficulty ladder. Defer until the core
       game is where we want it.
-- [ ] **Multiplayer** — deliberately listed last: the entire AI/economy
-      stack is local-deterministic, so networked lockstep or state-sync
-      is a project of its own. Not planned; noted so the question has
-      a written answer.
 
 ## Presentation-driven gameplay
 

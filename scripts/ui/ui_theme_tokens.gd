@@ -8,7 +8,14 @@ extends RefCounted
 
 # ─── Team / faction colors ───
 const COLOR_PLAYER: Color = Color("#3B82F6")
-const COLOR_ENEMY: Color = Color("#B91C1C")
+# COLOR_ENEMY/COLOR_SUCCESS/COLOR_VICTORY are static-var mirrors so the
+# colorblind palette can swap them at runtime (apply_colorblind_palette).
+const COLOR_ENEMY_DEFAULT: Color = Color("#B91C1C")
+const COLOR_SUCCESS_DEFAULT: Color = Color("#3d7a4a")
+const COLOR_VICTORY_DEFAULT: Color = Color("#3d7a4a")
+static var COLOR_ENEMY: Color = COLOR_ENEMY_DEFAULT
+static var COLOR_SUCCESS: Color = COLOR_SUCCESS_DEFAULT
+static var COLOR_VICTORY: Color = COLOR_VICTORY_DEFAULT
 const COLOR_ARCANE: Color = Color("#AF84FB")
 const COLOR_BRUTE: Color = Color("#DF6B6B")
 const COLOR_INDUSTRIAL: Color = Color("#FBBF24")
@@ -76,6 +83,20 @@ enum WarningVariant {
 	LAVA,
 	VOLCANO,
 }
+
+
+## Colorblind palette: swaps hue-only semantic colors for a redundant set
+## (enemy red → orange, semantic green → teal). Callers re-read the static
+## vars when they (re)style; per-frame drawing picks it up automatically.
+static func apply_colorblind_palette(enabled: bool) -> void:
+	if enabled:
+		COLOR_ENEMY = Color("#D97A26")
+		COLOR_SUCCESS = Color("#2AA8A0")
+		COLOR_VICTORY = Color("#2AA8A0")
+	else:
+		COLOR_ENEMY = COLOR_ENEMY_DEFAULT
+		COLOR_SUCCESS = COLOR_SUCCESS_DEFAULT
+		COLOR_VICTORY = COLOR_VICTORY_DEFAULT
 
 
 # ─── Panel factories ───

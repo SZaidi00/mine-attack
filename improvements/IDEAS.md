@@ -20,9 +20,9 @@ Proposed improvements for MineAttack, grouped by area. Status legend: `[ ]` not 
 
 ## UX polish
 
-- [ ] **Control groups (Ctrl+1–9)** — saved selection groups; natural home is `player_selection.gd`.
-- [ ] **Attack-move (A+click)** — per-order attack-move instead of only the global Attack stance.
-- [ ] **Minimap** — canvas-drawn minimap fed by `GridWorld` fog maps; ties fog, layers, and lava events together visually.
+- [x] **Control groups (Ctrl+1–9)** — saved selection groups; natural home is `player_selection.gd`. (Implemented: Ctrl+digit assigns, Alt+digit recalls in `player_controller.gd` — digits 1–8 stay train hotkeys; `tests/test_control_groups.gd`.)
+- [x] **Attack-move (Q+click)** — per-order attack-move instead of only the global Attack stance. (Implemented: Q instead of A since A is camera pan; armed-click flow in `player_controller.gd`/`player_commands.gd`, `_attack_move_active` flag in `unit.gd`/`unit_commands.gd`/`unit_idle.gd`; `tests/test_attack_move.gd`.)
+- [x] **Minimap** — canvas-drawn minimap fed by `GridWorld` fog maps; ties fog, layers, and lava events together visually. (Implemented: `scripts/ui/minimap.gd` + `scenes/ui/minimap.tscn` — terrain by CellType, 3-state fog overlay, team-colored unit/building dots, camera viewport rect, click/drag to move the camera; `tests/test_minimap.gd`.)
 
 ## Technical
 

@@ -1077,6 +1077,7 @@ const INPUT_TOGGLE_VIEW: StringName = &"toggle_view"
 const INPUT_TOGGLE_RESEARCH: StringName = &"toggle_research"
 const INPUT_KILL_UNITS: StringName = &"kill_units"
 const INPUT_PAUSE: StringName = &"pause"
+const INPUT_ATTACK_MOVE: StringName = &"attack_move"
 
 const INPUT_CAMERA_UP: StringName = &"camera_up"
 const INPUT_CAMERA_DOWN: StringName = &"camera_down"
@@ -1084,3 +1085,26 @@ const INPUT_CAMERA_LEFT: StringName = &"camera_left"
 const INPUT_CAMERA_RIGHT: StringName = &"camera_right"
 const INPUT_CAMERA_ZOOM_IN: StringName = &"camera_zoom_in"
 const INPUT_CAMERA_ZOOM_OUT: StringName = &"camera_zoom_out"
+
+## Hotkey-remapping entries for the settings panel: action → human label.
+## Control groups (Ctrl/Alt+1-9), F3 (debug overlay), camera keys, and the
+## mouse buttons (lmb/rmb) are intentionally not remappable.
+const REMAPPABLE_ACTIONS: Array[Dictionary] = [
+	{"action": "train_miner", "label": "Train Miner"},
+	{"action": "train_swordsman", "label": "Train Swordsman"},
+	{"action": "train_archer", "label": "Train Archer"},
+	{"action": "train_wizard", "label": "Train Wizard"},
+	{"action": "train_dragon", "label": "Train Dragon"},
+	{"action": "train_pigeon", "label": "Train Pigeon"},
+	{"action": "train_engineer", "label": "Train Engineer"},
+	{"action": "train_crawler", "label": "Train Crawler"},
+	{"action": "select_all", "label": "Select All"},
+	{"action": "select_miners", "label": "Select Miners"},
+	{"action": "select_fighters", "label": "Select Fighters"},
+	{"action": "select_dragons", "label": "Select Dragons"},
+	{"action": "toggle_view", "label": "Toggle View"},
+	{"action": "toggle_research", "label": "Toggle Research"},
+	{"action": "kill_units", "label": "Disband Selection"},
+	{"action": "pause", "label": "Pause"},
+	{"action": "attack_move", "label": "Attack Move"},
+]

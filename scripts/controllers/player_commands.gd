@@ -1,6 +1,8 @@
 class_name PlayerCommands
 extends RefCounted
 
+const _ORDER_MARKER_SCENE: PackedScene = preload("res://scenes/effects/order_marker.tscn")
+
 var pc: PlayerController
 
 
@@ -46,6 +48,7 @@ func _issue_command(screen_pos: Vector2) -> void:
 		DebugLog.log_command("PlayerController", "attack_unit", "target=%d fighters=%d" % [enemy_unit.get_instance_id(), capable.size()])
 		for u in capable:
 			u.attack_unit(enemy_unit)
+		_spawn_order_marker(world_pos, Color("#B91C1C"))
 		return
 
 	# 2. Enemy building clicked -> attack with fighters.
@@ -58,6 +61,7 @@ func _issue_command(screen_pos: Vector2) -> void:
 		DebugLog.log_command("PlayerController", "attack_building", "target=%d fighters=%d" % [enemy_building.get_instance_id(), fighters.size()])
 		for u in fighters:
 			u.attack_building(enemy_building)
+		_spawn_order_marker(world_pos, Color("#B91C1C"))
 		return
 
 	# 2b. Enemy structure clicked (lantern/tower/wall) -> attack with fighters.
@@ -70,6 +74,7 @@ func _issue_command(screen_pos: Vector2) -> void:
 		DebugLog.log_command("PlayerController", "attack_structure", "target=%d fighters=%d" % [enemy_structure.get_instance_id(), fighters.size()])
 		for u in fighters:
 			u.attack_building(enemy_structure)
+		_spawn_order_marker(world_pos, Color("#B91C1C"))
 		return
 
 	# 2c. Damaged friendly structure clicked with engineers selected -> repair.
@@ -90,6 +95,7 @@ func _issue_command(screen_pos: Vector2) -> void:
 		DebugLog.log_command("PlayerController", "breach_wall", "cell=%s miners=%d" % [str(grid_pos), miners.size()])
 		for u in miners:
 			u.mine_cell(grid_pos)
+		_spawn_order_marker(world_pos, Color("#FBBF24"))
 		return
 
 	# 4. Diggable cell clicked with miners selected -> mine it.
@@ -99,6 +105,7 @@ func _issue_command(screen_pos: Vector2) -> void:
 		DebugLog.log_command("PlayerController", "mine_cell", "cell=%s miners=%d" % [str(grid_pos), miners.size()])
 		for u in miners:
 			u.mine_cell(grid_pos)
+		_spawn_order_marker(world_pos, Color("#FBBF24"))
 		return
 
 	# 5. Own mine entry clicked -> deposit (miners with coin), enter, or exit.
@@ -123,6 +130,16 @@ func _issue_command(screen_pos: Vector2) -> void:
 	DebugLog.log_command("PlayerController", "move_to", "pos=%s units=%d" % [str(world_pos), pc._selected_units.size()])
 	for u in pc._selected_units:
 		u.move_to(world_pos)
+	_spawn_order_marker(world_pos, Color("#3B82F6"))
+
+
+## Brief expanding ring flashed at the world destination of a player order.
+## Player-only feedback: this command path never runs for the AI.
+func _spawn_order_marker(at: Vector2, color: Color) -> void:
+	var marker: Node2D = _ORDER_MARKER_SCENE.instantiate()
+	marker.global_position = at
+	marker.setup(color)
+	pc.get_tree().current_scene.add_child(marker)
 
 
 func _reject_command(action: String, reason: String, at: Vector2) -> void:
@@ -185,6 +202,32 @@ func _handle_rally_input(event: InputEvent) -> void:
 	elif event.is_action_pressed(pc._Constants.INPUT_COMMAND):
 		pc._rally_armed = false
 		DebugLog.log_command("PlayerController", "rally", "placement cancelled")
+
+
+## Attack-move: order every selected fighter to attack-move to the click. The
+## order marker is red, matching the explicit attack branches.
+func attack_move_order(screen_pos: Vector2) -> void:
+	pc._attack_move_armed = false
+	var world_pos: Vector2 = _screen_to_world(screen_pos)
+	var fighters: Array = pc._selection._filter_fighters(pc._selected_units.filter(func(u): return is_instance_valid(u)))
+	if fighters.is_empty():
+		_reject_command("attack_move", "no fighters selected", world_pos)
+		return
+	DebugLog.log_command("PlayerController", "attack_move", "pos=%s fighters=%d" % [str(world_pos), fighters.size()])
+	for u in fighters:
+		u.attack_move_to(world_pos)
+	_spawn_order_marker(world_pos, Color("#B91C1C"))
+
+
+## Attack-move armed: left-click issues the order, right-click or Esc cancels.
+## Everything else is swallowed so no selection/command leaks through.
+func _handle_attack_move_input(event: InputEvent) -> void:
+	if event.is_action_pressed(pc._Constants.INPUT_SELECT):
+		var screen_pos: Vector2 = event.position if event is InputEventMouseButton else pc.get_viewport().get_mouse_position()
+		attack_move_order(screen_pos)
+	elif event.is_action_pressed(pc._Constants.INPUT_COMMAND) or event.is_action_pressed(pc._Constants.INPUT_PAUSE):
+		pc._attack_move_armed = false
+		DebugLog.log_command("PlayerController", "attack_move", "cancelled")
 
 
 func set_stance(stance: String) -> void:

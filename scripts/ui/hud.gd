@@ -1,4 +1,4 @@
-extends CanvasLayer
+extends Control
 class_name HUD
 
 const _Constants = preload("res://scripts/autoload/constants.gd")
@@ -8,6 +8,7 @@ const HUDStyling = preload("res://scripts/ui/hud_styling.gd")
 const HUDMenus = preload("res://scripts/ui/hud_menus.gd")
 const HUDUpdates = preload("res://scripts/ui/hud_updates.gd")
 const MatchGraph = preload("res://scripts/ui/match_graph.gd")
+const CoachingHints = preload("res://scripts/ui/coaching_hints.gd")
 
 const _ICON_COIN: Texture2D = preload("res://frost_mines_assets/icons/icon_coin.png")
 const _ICON_MINER: Texture2D = preload("res://frost_mines_assets/icons/icon_miner.png")
@@ -87,6 +88,11 @@ func _ready() -> void:
 	# The HUD must keep processing while the tree is paused so the pause menu
 	# stays visible and clickable (the classic pause-menu-pauses-itself bug).
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Accessibility preferences drive scale, palette, and banner animation.
+	UIThemeTokens.apply_colorblind_palette(SettingsManager.get_colorblind())
+	SettingsManager.setting_changed.connect(_on_setting_changed)
+	_apply_ui_scale()
+	get_window().size_changed.connect(_apply_ui_scale)
 	# A fresh Main scene means a fresh match: GameManager.match_time has been
 	# accumulating since boot (through the menu), so the weather schedule must
 	# restart here rather than trust any clock that survived the menu.
@@ -166,6 +172,7 @@ func _ready() -> void:
 	_build_volcano_banner()
 	_build_faction_popup()
 	_build_toast_container()
+	_wire_production_toasts()
 	_on_economy_changed(GameManager.Team.PLAYER)
 	_updates._sync_view_buttons()
 	_updates._sync_speed_buttons()
@@ -176,6 +183,40 @@ func _ready() -> void:
 	if _weather_overlay != null:
 		_weather_overlay.set_snowstorm_active(WeatherManager.is_snowstorm_active())
 		_weather_overlay.set_volcano_active(WeatherManager.is_volcano_active())
+
+
+func _on_setting_changed(what: StringName) -> void:
+	match what:
+		&"colorblind":
+			UIThemeTokens.apply_colorblind_palette(SettingsManager.get_colorblind())
+			# Re-apply the theme color overrides that read the palette.
+			_style_top_bar()
+		&"ui_scale":
+			_apply_ui_scale()
+
+
+## UI scale (accessibility): the root Control stops using full-rect anchors
+## and instead occupies a virtual rect of window/s, scaled by s. Anchor-fraction
+## children lay out against the virtual rect and the scale maps them back onto
+## the full window, so every HUD element grows/shrinks around the top-left.
+## The bars have intrinsic minimum widths (train/command buttons), so the
+## effective scale is capped to keep the widest bar inside the window — on the
+## 1920x1080 logical canvas a 1.5x bar would not otherwise fit.
+func _apply_ui_scale() -> void:
+	var s: float = SettingsManager.get_ui_scale()
+	var logical: Vector2 = get_viewport_rect().size
+	if logical.x <= 0.0 or logical.y <= 0.0:
+		return
+	var bottom: Control = $BottomBar
+	var bars_min: float = maxf($TopBar.get_combined_minimum_size().x, bottom.get_combined_minimum_size().x)
+	var margins: float = bottom.offset_left - bottom.offset_right
+	if bars_min + margins > 0.0:
+		s = minf(s, logical.x / (bars_min + margins))
+	pivot_offset = Vector2.ZERO
+	scale = Vector2(s, s)
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	position = Vector2.ZERO
+	size = logical / s
 
 
 func _style_top_bar() -> void:
@@ -227,6 +268,8 @@ func _build_raise_button() -> void:
 	_command_row.move_child(_raise_button, _rally_button.get_index() + 1)
 	_raise_button.pressed.connect(_cycle_raise_mode)
 	_raise_button.pressed.connect(func(): AudioManager.play("click"))
+	# The extra button widens the BottomBar's minimum: re-fit the UI scale.
+	_apply_ui_scale.call_deferred()
 
 
 func _cycle_raise_mode() -> void:
@@ -542,9 +585,17 @@ func _update_lava_banner() -> void:
 		_lava_banner.visible = false
 		return
 	_lava_banner_label.text = "LAVA RISING IN %ds" % ceili(remaining)
-	# Flashing orange pulse.
+	_pulse_banner(_lava_banner)
+
+
+## Warning-banner flash (0.6..1.0 alpha sine pulse). Skipped — banner held
+## static — when the reduced-flash accessibility setting is on.
+func _pulse_banner(banner: PanelContainer) -> void:
+	if SettingsManager.get_reduced_flash():
+		banner.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		return
 	var pulse: float = 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0)
-	_lava_banner.modulate = Color(1.0, 1.0, 1.0, pulse)
+	banner.modulate = Color(1.0, 1.0, 1.0, pulse)
 
 
 func _build_weather_banner() -> void:
@@ -606,9 +657,7 @@ func _update_weather_banner() -> void:
 			_weather_banner.visible = false
 		else:
 			_weather_banner_label.text = "SNOWSTORM IN %ds" % ceili(remaining)
-			# Flashing red pulse.
-			var pulse: float = 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0)
-			_weather_banner.modulate = Color(1.0, 1.0, 1.0, pulse)
+			_pulse_banner(_weather_banner)
 
 
 func _build_volcano_banner() -> void:
@@ -669,9 +718,7 @@ func _update_volcano_banner() -> void:
 			_volcano_banner.visible = false
 		else:
 			_volcano_banner_label.text = "VOLCANO ERUPTION IN %ds" % ceili(remaining)
-			# Flashing red-orange pulse.
-			var pulse: float = 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0)
-			_volcano_banner.modulate = Color(1.0, 1.0, 1.0, pulse)
+			_pulse_banner(_volcano_banner)
 
 
 # Faction identified popup (Revamp Phase 7): a brief center-screen banner
@@ -763,6 +810,48 @@ func _on_research_completed_toast(team: GameManager.Team, tech_id: String) -> vo
 	show_toast(tech_name, "RESEARCH COMPLETE")
 
 
+## Production/structure toast wiring. The two base buildings are static scene
+## nodes (World precedes UI in tree order), so their unit_spawned signals are
+## connected directly in _ready. Lanterns are placed at runtime at any point in
+## the match, so they are caught via SceneTree.node_added — group membership
+## would miss them because add_to_group runs in _ready, after node_added fires.
+func _wire_production_toasts() -> void:
+	for building in get_tree().get_nodes_in_group("buildings"):
+		if not building.unit_spawned.is_connected(_on_unit_spawned_toast):
+			building.unit_spawned.connect(_on_unit_spawned_toast)
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		_wire_lantern_toast(lantern)
+	get_tree().node_added.connect(_on_node_added_toast_wiring)
+
+
+func _on_node_added_toast_wiring(node: Node) -> void:
+	if node is Lantern:
+		_wire_lantern_toast(node)
+
+
+func _wire_lantern_toast(lantern: Lantern) -> void:
+	if not lantern.upgraded.is_connected(_on_lantern_upgraded_toast):
+		lantern.upgraded.connect(_on_lantern_upgraded_toast.bind(lantern))
+
+
+func _on_unit_spawned_toast(unit: Node2D) -> void:
+	if unit.get("team") != GameManager.Team.PLAYER:
+		return
+	var data: UnitData = unit.get("data") as UnitData
+	if data == null:
+		return
+	# Miners train in a constant trickle; toasting each one drowns the signal.
+	if data.is_miner:
+		return
+	show_toast("%s ready" % data.unit_name, "TRAINING COMPLETE")
+
+
+func _on_lantern_upgraded_toast(tier: int, lantern: Lantern) -> void:
+	if lantern.team != GameManager.Team.PLAYER:
+		return
+	show_toast("Lantern upgraded to T%d" % tier, "STRUCTURE")
+
+
 ## Frosted card with a gold accent bar on the left edge.
 func _make_toast_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -833,14 +922,12 @@ func _on_game_over(winner: GameManager.Team) -> void:
 	var label: Label = $GameOverPanel/MarginContainer/VBoxContainer/ResultLabel
 	if winner == GameManager.Team.PLAYER:
 		label.text = "VICTORY"
-		label.modulate = Color.GREEN
+		label.modulate = UIThemeTokens.COLOR_VICTORY
 	else:
 		label.text = "DEFEAT"
-		label.modulate = Color.RED
+		label.modulate = UIThemeTokens.COLOR_ENEMY
 
-	var stats: Label = Label.new()
-	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stats.text = _format_game_over_stats()
+	var stats: Control = _build_game_over_stats()
 	container.add_child(stats)
 	container.move_child(stats, 1)
 	# Coin/population graphs from the MatchStats timeline (needs at least the
@@ -854,25 +941,79 @@ func _on_game_over(winner: GameManager.Team) -> void:
 	fade.tween_property(_game_over_panel, "modulate:a", 1.0, 0.5)
 
 
-## Post-match summary table for the game-over panel. Reads MatchStats'
+## Post-match summary table for the game-over panel, built from MatchStats'
 ## finalized summary (written to user://match_logs/ on game over) so the panel
-## and the JSON log always agree.
-func _format_game_over_stats() -> String:
+## and the JSON log always agree. Real container columns keep the numbers
+## aligned under their headers — a space-padded plain-text table drifts
+## because the default UI font is proportional, not monospace.
+func _build_game_over_stats() -> Control:
 	var summary: Dictionary = MatchStats.last_summary
 	var total_seconds: int = int(summary.get("duration_sec", GameManager.match_time))
-	var lines: Array[String] = ["Time: %d:%02d" % [total_seconds / 60, total_seconds % 60]]
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+
+	var time := Label.new()
+	time.text = "Time: %d:%02d" % [total_seconds / 60, total_seconds % 60]
+	time.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	time.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	box.add_child(time)
+
 	var teams: Dictionary = summary.get("teams", {})
 	if not teams.is_empty():
 		var player: Dictionary = teams["player"]
 		var enemy: Dictionary = teams["enemy"]
-		lines.append("%-14s %6s %6s" % ["", "You", "Enemy"])
-		lines.append("%-14s %6d %6d" % ["Units trained", player.units_trained, enemy.units_trained])
-		lines.append("%-14s %6d %6d" % ["Units lost", player.units_lost, enemy.units_lost])
-		lines.append("%-14s %6d %6d" % ["Coin mined", player.coin_mined, enemy.coin_mined])
-		lines.append("%-14s %6d %6d" % ["Damage dealt", player.damage_dealt, enemy.damage_dealt])
+		var grid := GridContainer.new()
+		grid.columns = 3
+		grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		grid.add_theme_constant_override("h_separation", 24)
+		grid.add_theme_constant_override("v_separation", 3)
+		_stat_cell(grid, "", HORIZONTAL_ALIGNMENT_LEFT, UIThemeTokens.COLOR_TEXT_DIM)
+		_stat_cell(grid, "You", HORIZONTAL_ALIGNMENT_RIGHT, UIThemeTokens.COLOR_PLAYER)
+		_stat_cell(grid, "Enemy", HORIZONTAL_ALIGNMENT_RIGHT, UIThemeTokens.COLOR_ENEMY)
+		var rows: Array = [
+			["Units trained", player.units_trained, enemy.units_trained],
+			["Units lost", player.units_lost, enemy.units_lost],
+			["Coin mined", player.coin_mined, enemy.coin_mined],
+			["Damage dealt", player.damage_dealt, enemy.damage_dealt],
+		]
+		for row: Array in rows:
+			_stat_cell(grid, row[0], HORIZONTAL_ALIGNMENT_LEFT, UIThemeTokens.COLOR_TEXT_PRIMARY)
+			_stat_cell(grid, str(row[1]), HORIZONTAL_ALIGNMENT_RIGHT, UIThemeTokens.COLOR_TEXT_PRIMARY)
+			_stat_cell(grid, str(row[2]), HORIZONTAL_ALIGNMENT_RIGHT, UIThemeTokens.COLOR_TEXT_PRIMARY)
+		box.add_child(grid)
+
+	# Coaching hints: dim, small observations under the table (above the log line).
+	var hints: Array[String] = CoachingHints.generate(summary)
+	if not hints.is_empty():
+		var spacer := Control.new()
+		spacer.custom_minimum_size = Vector2(0, 4)
+		box.add_child(spacer)
+	for hint: String in hints:
+		var hint_label := Label.new()
+		hint_label.text = hint
+		hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		hint_label.custom_minimum_size = Vector2(520, 0)
+		hint_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_DIM)
+		hint_label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
+		box.add_child(hint_label)
+
 	if MatchStats.last_log_path != "":
-		lines.append("Match log: %s" % ProjectSettings.globalize_path(MatchStats.last_log_path))
-	return "\n".join(lines)
+		var log := Label.new()
+		log.text = "Match log: %s" % ProjectSettings.globalize_path(MatchStats.last_log_path)
+		log.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		log.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_DIM)
+		log.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
+		box.add_child(log)
+	return box
+
+
+func _stat_cell(grid: GridContainer, text: String, align: HorizontalAlignment, color: Color) -> void:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = align
+	label.add_theme_color_override("font_color", color)
+	grid.add_child(label)
 
 
 func _play_again() -> void:

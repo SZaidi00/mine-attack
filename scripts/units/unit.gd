@@ -73,6 +73,11 @@ var _movement_offset: Vector2 = Vector2.ZERO
 var _rally_active: bool = false
 var _rally_point: Vector2 = Vector2.ZERO
 var _rally_scan_timer: float = 0.0
+# Attack-move (Q + click): move toward the point while engaging any enemy in
+# auto-attack range — surface or underground. Cancelled by _clear_target, so
+# any explicit order ends the attack-move.
+var _attack_move_active: bool = false
+var _attack_move_point: Vector2 = Vector2.ZERO
 # Team-wide fighter upgrade level already applied to this unit's data.
 var _fighter_level_applied: int = 1
 # Research tree bonuses: the base combat stats below are captured once so
@@ -366,12 +371,15 @@ func _process(delta: float) -> void:
 			# rules apply.
 			if not (data.unit_name.to_lower() == "wizard" and _necromancy._handle_idle_necromancer()):
 				_idle._handle_idle_fighter()
-		elif _rally_active and _state == State.MOVE:
-			# Attack-move: scan for surface enemies while travelling.
+		elif (_rally_active or _attack_move_active) and _state == State.MOVE:
+			# Attack-move / rally hunt: scan for enemies while travelling.
 			_rally_scan_timer -= delta
 			if _rally_scan_timer <= 0.0:
 				_rally_scan_timer = 0.25
-				_idle._engage_rally_target_if_any()
+				if _rally_active:
+					_idle._engage_rally_target_if_any()
+				else:
+					_idle._engage_attack_move_target_if_any()
 	elif data.is_engineer:
 		# Idle engineers auto-seek the nearest damaged friendly structure.
 		if _state == State.IDLE:
@@ -463,6 +471,10 @@ func garrison_home() -> void:
 
 func rally_to(world_pos: Vector2) -> void:
 	_commands.rally_to(world_pos)
+
+
+func attack_move_to(world_pos: Vector2) -> void:
+	_commands.attack_move_to(world_pos)
 
 
 func repair_structure(target: Node2D) -> void:
@@ -632,6 +644,8 @@ func _clear_target() -> void:
 	_release_claim()
 	_rally_active = false
 	_auto_engaged = false
+	_attack_move_active = false
+	_attack_move_point = Vector2.ZERO
 	# Rune Blade (Arcane): a new engagement means the first-hit bonus re-arms.
 	_has_hit_this_engagement = false
 	_target_unit = null

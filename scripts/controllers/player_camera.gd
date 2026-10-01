@@ -113,9 +113,11 @@ func _process_camera(delta: float) -> void:
 			if pc.camera.position.distance_to(pc._view_slide_target) < 4.0:
 				pc.camera.position = pc._view_slide_target
 				pc._view_slide_target = Vector2.INF
-	# Screen shake decays back to a clean zero offset.
+	# Screen shake decays back to a clean zero offset. The offset itself is
+	# skipped (but the strength still decays) under reduced motion.
 	if pc._shake_strength > 0.2:
-		pc.camera.offset = Vector2(randf_range(-pc._shake_strength, pc._shake_strength), randf_range(-pc._shake_strength, pc._shake_strength))
+		if not SettingsManager.get_reduced_motion():
+			pc.camera.offset = Vector2(randf_range(-pc._shake_strength, pc._shake_strength), randf_range(-pc._shake_strength, pc._shake_strength))
 		pc._shake_strength = move_toward(pc._shake_strength, 0.0, delta * 30.0)
 	elif pc.camera.offset != Vector2.ZERO:
 		pc.camera.offset = Vector2.ZERO

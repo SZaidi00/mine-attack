@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="1_hud"]
 [ext_resource type="Script" path="res://scripts/ui/unit_button.gd" id="2_unit_btn"]
@@ -6,8 +6,15 @@
 [ext_resource type="Script" path="res://scripts/ui/layer_indicator.gd" id="4_layer_ind"]
 [ext_resource type="Script" path="res://scripts/ui/research_panel.gd" id="5_research_panel"]
 [ext_resource type="Script" path="res://scripts/ui/weather_overlay_renderer.gd" id="6_weather_overlay"]
+[ext_resource type="PackedScene" path="res://scenes/ui/minimap.tscn" id="7_minimap"]
+[ext_resource type="Script" path="res://scripts/ui/tutorial_hints.gd" id="8_tutorial"]
 
-[node name="HUD" type="CanvasLayer"]
+[node name="HUD" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 script = ExtResource("1_hud")
 
 [node name="WeatherOverlay" type="Control" parent="."]
@@ -736,12 +743,30 @@ anchor_left = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = -230.0
-offset_top = 100.0
+offset_top = 170.0
 offset_right = -10.0
 offset_bottom = -186.0
 grow_horizontal = 0
 grow_vertical = 2
 script = ExtResource("3_queue_panel")
+
+[node name="Minimap" parent="." instance=ExtResource("7_minimap")]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -236.0
+offset_top = 96.0
+offset_right = -16.0
+offset_bottom = 160.0
+grow_horizontal = 0
+
+[node name="TutorialHints" type="Control" parent="."]
+offset_left = 16.0
+offset_top = 300.0
+offset_right = 16.0
+offset_bottom = 300.0
+mouse_filter = 2
+script = ExtResource("8_tutorial")
 
 [node name="ResearchPanel" type="Control" parent="."]
 visible = false

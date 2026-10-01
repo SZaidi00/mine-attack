@@ -312,6 +312,33 @@ func rally_to(world_pos: Vector2) -> void:
 	unit._set_state(Unit.State.MOVE, "rally_to command")
 
 
+## Attack-move order (fighters only): move to the point while engaging any
+## enemy that comes into auto-attack range — on the surface or underground
+## (unlike rally, which is a surface-only hunt). Explicitly bypasses
+## move_to()/attack_unit(), because those clear the attack-move flag via
+## _clear_target() and this order must survive its own engagements: after the
+## kill the unit goes idle and resumes toward the point.
+func attack_move_to(world_pos: Vector2) -> void:
+	if unit.data == null or not unit.data.is_fighter:
+		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "attack_move_to", "not a fighter")
+		return
+	unit._clear_target()
+	unit._hold_post = false  # attack-move chases targets anywhere on the way
+	unit._target_position = world_pos
+	unit._navigation._repath(world_pos)
+	if unit._path.is_empty():
+		# No route (e.g. clicked solid dirt): hold position and fight from here.
+		DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "attack_move_to", "no path to " + str(world_pos))
+		unit._attack_move_point = unit.global_position
+		unit._attack_move_active = true
+		unit._set_state(Unit.State.IDLE, "attack-move target unreachable")
+		return
+	unit._attack_move_point = world_pos
+	unit._attack_move_active = true
+	DebugLog.log_command("Unit %d" % unit.get_instance_id(), "attack_move_to", str(world_pos))
+	unit._set_state(Unit.State.MOVE, "attack_move_to command")
+
+
 func _process_enter_mine(delta: float) -> void:
 	var entry: Node2D = unit._nearest_friendly_mine_entry()
 	if entry == null:

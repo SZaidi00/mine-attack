@@ -47,12 +47,21 @@ var _clouds: Array = []
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	resized.connect(_on_resized)
+	UIThemeTokens.apply_colorblind_palette(SettingsManager.get_colorblind())
+	SettingsManager.setting_changed.connect(_on_setting_changed)
 	_build_background()
 	_build_card()
 	_build_side_status()
 	_build_faction_select()
 	_settings_panel = SettingsPanel.create()
 	add_child(_settings_panel)
+
+
+func _on_setting_changed(what: StringName) -> void:
+	if what == &"colorblind":
+		UIThemeTokens.apply_colorblind_palette(SettingsManager.get_colorblind())
+		if _right_status != null:
+			_right_status.get_meta("team_light").color = UIThemeTokens.COLOR_ENEMY
 
 
 func _on_resized() -> void:
@@ -456,6 +465,7 @@ func _make_status_panel(label: String, status: String, color: Color) -> PanelCon
 	var light := ColorRect.new()
 	light.custom_minimum_size = Vector2(10, 10)
 	light.color = color
+	panel.set_meta("team_light", light)
 	hbox.add_child(light)
 
 	var vbox := VBoxContainer.new()
