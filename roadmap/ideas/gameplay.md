@@ -1,0 +1,49 @@
+# Gameplay Ideas
+
+New mechanics, modes, and content. Nothing here blocks the 3D
+conversion; several items pair well with it (noted inline).
+
+## Controls & orders
+
+- [ ] **Waypoints / queued orders (Shift)** — queue multiple
+      move/mine/attack orders per unit or group. Natural fit with
+      existing right-click context orders (`player_commands.gd`).
+- [ ] **Unit formations** — column / line / spread when moving fighter
+      groups; interacts with existing archer/wizard standoff logic.
+- [ ] **Attack/threat alerts** — audible ping + screen-edge indicator
+      when miners or the base take damage; cheap, high value, and the
+      AI raid logic already produces the events.
+
+## Modes & content
+
+- [ ] **Scenario / challenge mode** — handcrafted missions on top of
+      the skirmish loop ("survive a lava flood with only miners",
+      "defend against three timed sieges"). Reuses all existing
+      systems; the weather/lava/cave-in managers are already the
+      mission toolkit.
+- [ ] **Map editor or seed-sharing screen** — map seeds and archetype
+      knobs (`MAP_WALL_HP_MULTS`, `MAP_ORE_CURVES`) already exist in
+      `grid_map_generation.gd`; even a simple "copy this seed" UI adds
+      replayability for near-zero cost. Full archetypes (shaft
+      positions, caverns, dimensions) remain open in IDEAS.md.
+- [ ] **Replays / spectator mode** — `MatchStats` already writes
+      per-match JSON logs; recording the order stream would give
+      replays *and* a balance-analysis gold mine. Bigger lift than it
+      sounds (needs deterministic sim or full state snapshots).
+- [ ] **Meta-progression (out-of-match unlocks)** — cosmetic-only
+      first (faction banners, unit tints); anything stat-affecting
+      risks invalidating the difficulty ladder. Defer until the core
+      game is where we want it.
+- [ ] **Multiplayer** — deliberately listed last: the entire AI/economy
+      stack is local-deterministic, so networked lockstep or state-sync
+      is a project of its own. Not planned; noted so the question has
+      a written answer.
+
+## Presentation-driven gameplay
+
+- [ ] **Dynamic music** — tie `audio_manager.gd` layers to combat
+      intensity and weather state; snowstorms already mute visibility,
+      let them thin the score too. (Pairs well with Phase 2 lighting.)
+- [ ] **Juice pass on signature moments** — cave-in screen shake,
+      dragon-crush hit-stop, raise-dead channel VFX. Zero gameplay
+      cost; do during the 3D art pass where the tooling is freshest.
