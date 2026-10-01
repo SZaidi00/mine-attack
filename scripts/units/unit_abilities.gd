@@ -15,11 +15,14 @@ func apply_slow(mult: float, duration: float) -> void:
 	unit._slow_timer = duration
 
 
-## Crush (Brute dragon): brief hard stun — no movement or attacks.
+## Crush (Brute dragon): brief hard stun — no movement or attacks. The landed
+## hit gets a short hit-stop for impact (skipped under reduced motion and
+## while the win slow-mo owns the time scale — see GameManager.hit_stop).
 func apply_stun(duration: float) -> void:
 	if unit._state == Unit.State.DEAD:
 		return
 	unit._stun_timer = maxf(unit._stun_timer, duration)
+	GameManager.hit_stop(0.35, 0.15)
 
 
 ## Blink (wizard): when a melee enemy gets point-blank, teleport a few cells

@@ -10,7 +10,7 @@ func _init(p: PlayerController) -> void:
 	pc = p
 
 
-func _issue_command(screen_pos: Vector2) -> void:
+func _issue_command(screen_pos: Vector2, shift_queued: bool = false) -> void:
 	# Belt and braces: a right-click while rally placement is armed cancels it
 	# (normally swallowed earlier in _unhandled_input).
 	if pc._rally_armed:
@@ -47,8 +47,8 @@ func _issue_command(screen_pos: Vector2) -> void:
 			return
 		DebugLog.log_command("PlayerController", "attack_unit", "target=%d fighters=%d" % [enemy_unit.get_instance_id(), capable.size()])
 		for u in capable:
-			u.attack_unit(enemy_unit)
-		_spawn_order_marker(world_pos, Color("#B91C1C"))
+			_issue_or_queue(u, {"type": "attack_unit", "target": enemy_unit}, shift_queued)
+		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#B91C1C"), 0.75 if shift_queued else 1.0)
 		return
 
 	# 2. Enemy building clicked -> attack with fighters.
@@ -60,8 +60,8 @@ func _issue_command(screen_pos: Vector2) -> void:
 			return
 		DebugLog.log_command("PlayerController", "attack_building", "target=%d fighters=%d" % [enemy_building.get_instance_id(), fighters.size()])
 		for u in fighters:
-			u.attack_building(enemy_building)
-		_spawn_order_marker(world_pos, Color("#B91C1C"))
+			_issue_or_queue(u, {"type": "attack_building", "target": enemy_building}, shift_queued)
+		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#B91C1C"), 0.75 if shift_queued else 1.0)
 		return
 
 	# 2b. Enemy structure clicked (lantern/tower/wall) -> attack with fighters.
@@ -73,8 +73,8 @@ func _issue_command(screen_pos: Vector2) -> void:
 			return
 		DebugLog.log_command("PlayerController", "attack_structure", "target=%d fighters=%d" % [enemy_structure.get_instance_id(), fighters.size()])
 		for u in fighters:
-			u.attack_building(enemy_structure)
-		_spawn_order_marker(world_pos, Color("#B91C1C"))
+			_issue_or_queue(u, {"type": "attack_building", "target": enemy_structure}, shift_queued)
+		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#B91C1C"), 0.75 if shift_queued else 1.0)
 		return
 
 	# 2c. Damaged friendly structure clicked with engineers selected -> repair.
@@ -94,8 +94,8 @@ func _issue_command(screen_pos: Vector2) -> void:
 	if pc._grid.is_central_wall(grid_pos) and not miners.is_empty():
 		DebugLog.log_command("PlayerController", "breach_wall", "cell=%s miners=%d" % [str(grid_pos), miners.size()])
 		for u in miners:
-			u.mine_cell(grid_pos)
-		_spawn_order_marker(world_pos, Color("#FBBF24"))
+			_issue_or_queue(u, {"type": "mine_cell", "cell": grid_pos}, shift_queued)
+		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#FBBF24"), 0.75 if shift_queued else 1.0)
 		return
 
 	# 4. Diggable cell clicked with miners selected -> mine it.
@@ -104,8 +104,8 @@ func _issue_command(screen_pos: Vector2) -> void:
 	if diggable and not miners.is_empty():
 		DebugLog.log_command("PlayerController", "mine_cell", "cell=%s miners=%d" % [str(grid_pos), miners.size()])
 		for u in miners:
-			u.mine_cell(grid_pos)
-		_spawn_order_marker(world_pos, Color("#FBBF24"))
+			_issue_or_queue(u, {"type": "mine_cell", "cell": grid_pos}, shift_queued)
+		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#FBBF24"), 0.75 if shift_queued else 1.0)
 		return
 
 	# 5. Own mine entry clicked -> deposit (miners with coin), enter, or exit.
@@ -126,19 +126,125 @@ func _issue_command(screen_pos: Vector2) -> void:
 		_reject_command("mine_entry", "cannot enter the enemy mine", world_pos)
 		return
 
-	# 7. Default: move.
-	DebugLog.log_command("PlayerController", "move_to", "pos=%s units=%d" % [str(world_pos), pc._selected_units.size()])
-	for u in pc._selected_units:
-		u.move_to(world_pos)
-	_spawn_order_marker(world_pos, Color("#3B82F6"))
+	# 7. Default: move. A plain (non-queued) order to 3+ fighters forms up
+	# around the click (line/column/spread, F to cycle); miners, engineers and
+	# other non-fighters still go to the exact point. Shift+click queues exact
+	# waypoints instead — formations never apply to queued orders.
+	var fighters: Array = pc._selection._filter_fighters(pc._selected_units)
+	if not shift_queued and fighters.size() >= 3:
+		DebugLog.log_command("PlayerController", "move_to", "pos=%s units=%d formation=%s" % [str(world_pos), pc._selected_units.size(), pc.get_formation_mode()])
+		var destinations: Array = _formation_destinations(fighters, world_pos, pc.get_formation_mode())
+		for i in range(fighters.size()):
+			fighters[i].move_to(destinations[i])
+		for u in pc._selected_units:
+			if not fighters.has(u):
+				u.move_to(world_pos)
+	else:
+		DebugLog.log_command("PlayerController", "move_to" + (" (queued)" if shift_queued else ""), "pos=%s units=%d" % [str(world_pos), pc._selected_units.size()])
+		for u in pc._selected_units:
+			_issue_or_queue(u, {"type": "move", "pos": world_pos}, shift_queued)
+	_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#3B82F6"), 0.75 if shift_queued else 1.0)
+
+
+## Dispatch an order dict to one unit, or append it to the unit's waypoint
+## queue when Shift was held (queued orders execute one per IDLE tick).
+func _issue_or_queue(u: Unit, order: Dictionary, shift_queued: bool) -> void:
+	if shift_queued:
+		u.queue_order(order)
+		return
+	match String(order["type"]):
+		"move":
+			u.move_to(order["pos"])
+		"attack_unit":
+			u.attack_unit(order["target"])
+		"attack_building":
+			u.attack_building(order["target"])
+		"mine_cell":
+			u.mine_cell(order["cell"])
+
+
+## Per-fighter destinations for a group move / attack-move order. The
+## formation is built from the click point and the direction from the group's
+## centroid to the click: "line" spreads the squad perpendicular to the travel
+## direction (centred on the click), "column" marches single file through the
+## click, "spread" forms a shallow 3-column grid with the front rank on the
+## click. Offsets are one cell apart and snapped to the nearest walkable spot.
+func _formation_destinations(fighters: Array, click: Vector2, mode: String) -> Array:
+	var n: int = fighters.size()
+	var centroid: Vector2 = Vector2.ZERO
+	for u in fighters:
+		centroid += u.global_position
+	centroid /= n
+	var dir: Vector2 = click - centroid
+	if dir.length_squared() < 1.0:
+		dir = Vector2.RIGHT
+	dir = dir.normalized()
+	var perp: Vector2 = Vector2(-dir.y, dir.x)
+	var spacing: float = GridWorld.CELL_SIZE
+	var offsets: Array = []
+	match mode:
+		"column":
+			# Single file: lead fighter on the click, the rest trailing behind.
+			for i in range(n):
+				offsets.append(-dir * spacing * i)
+		"spread":
+			# Shallow grid, 3 columns; each rank centred, following ranks fall
+			# back behind the click.
+			var cols: int = 3
+			for i in range(n):
+				var row: int = i / cols
+				var col: int = i % cols
+				var rank_n: int = mini(cols, n - row * cols)
+				offsets.append(perp * spacing * (col - (rank_n - 1) * 0.5) - dir * spacing * row)
+		_:
+			# "line" (default): side by side, centred on the click.
+			for i in range(n):
+				offsets.append(perp * spacing * (i - (n - 1) * 0.5))
+	var destinations: Array = []
+	var claimed: Array = []  # Slots already taken, so snap-search skips them.
+	for i in range(n):
+		var dest: Vector2 = _snap_walkable(fighters[0], click + offsets[i], claimed)
+		destinations.append(dest)
+		claimed.append(dest)
+	return destinations
+
+
+## Nearest walkable point to a formation destination: the raw point when it is
+## walkable, otherwise the closest candidate of the two surrounding cell rings,
+## otherwise the raw point (a blocked slot is still a coherent order). Slots in
+## `claimed` are skipped — on the one-cell-tall surface row a perpendicular
+## "line" cannot stand abreast, so this lets the squad file along the axis it
+## can actually occupy instead of stacking every slot onto the same cell.
+func _snap_walkable(fighter: Unit, point: Vector2, claimed: Array) -> Vector2:
+	if fighter._is_walkable_point(point) and not claimed.has(point):
+		return point
+	var best: Vector2 = point
+	var best_d: float = INF
+	for ring in range(1, 3):
+		for dx in range(-ring, ring + 1):
+			for dy in range(-ring, ring + 1):
+				if maxi(absi(dx), absi(dy)) != ring:
+					continue
+				var candidate: Vector2 = point + Vector2(dx, dy) * GridWorld.CELL_SIZE
+				if claimed.has(candidate):
+					continue
+				if fighter._is_walkable_point(candidate):
+					var d: float = point.distance_squared_to(candidate)
+					if d < best_d:
+						best_d = d
+						best = candidate
+		if best_d < INF:
+			return best
+	return point
 
 
 ## Brief expanding ring flashed at the world destination of a player order.
-## Player-only feedback: this command path never runs for the AI.
-func _spawn_order_marker(at: Vector2, color: Color) -> void:
+## Player-only feedback: this command path never runs for the AI. Queued
+## (Shift) orders use a smaller ring so they read as waypoints, not orders.
+func _spawn_order_marker(at: Vector2, color: Color, scale_mult: float = 1.0) -> void:
 	var marker: Node2D = _ORDER_MARKER_SCENE.instantiate()
 	marker.global_position = at
-	marker.setup(color)
+	marker.setup(color, scale_mult)
 	pc.get_tree().current_scene.add_child(marker)
 
 
@@ -213,9 +319,15 @@ func attack_move_order(screen_pos: Vector2) -> void:
 	if fighters.is_empty():
 		_reject_command("attack_move", "no fighters selected", world_pos)
 		return
-	DebugLog.log_command("PlayerController", "attack_move", "pos=%s fighters=%d" % [str(world_pos), fighters.size()])
-	for u in fighters:
-		u.attack_move_to(world_pos)
+	if fighters.size() >= 3:
+		DebugLog.log_command("PlayerController", "attack_move", "pos=%s fighters=%d formation=%s" % [str(world_pos), fighters.size(), pc.get_formation_mode()])
+		var destinations: Array = _formation_destinations(fighters, world_pos, pc.get_formation_mode())
+		for i in range(fighters.size()):
+			fighters[i].attack_move_to(destinations[i])
+	else:
+		DebugLog.log_command("PlayerController", "attack_move", "pos=%s fighters=%d" % [str(world_pos), fighters.size()])
+		for u in fighters:
+			u.attack_move_to(world_pos)
 	_spawn_order_marker(world_pos, Color("#B91C1C"))
 
 

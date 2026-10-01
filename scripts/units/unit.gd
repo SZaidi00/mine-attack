@@ -167,6 +167,16 @@ var _raise_mode: String = "off"
 # Undead only: the wizard that raised this unit. When the necromancer dies,
 # the magic fails and the undead collapses with it.
 var _necro_owner: Unit = null
+# Queued waypoint orders (Shift+right-click): dictionaries
+# {"type": "move", "pos": Vector2}, {"type": "attack_unit" / "attack_building",
+# "target": Node2D}, or {"type": "mine_cell", "cell": Vector2i}. One order is
+# popped per IDLE tick (see _process) before any idle handler can grab the
+# unit. Any plain explicit order drops the whole queue via _clear_target();
+# _executing_queued_order keeps the tail alive while a queued order itself is
+# being dispatched (the order runs through _clear_target too).
+var _order_queue: Array = []
+# True only while a queued order is being dispatched from _order_queue.
+var _executing_queued_order: bool = false
 
 # Instance helpers (created in _init so other nodes can call Unit APIs from
 # their own _ready() before this node's _ready() runs).
@@ -323,6 +333,15 @@ func _process(delta: float) -> void:
 		_guerrilla_timer = 0.25
 		_update_guerrilla()
 	_sync_flight_visuals()
+	# Queued waypoints (Shift): an idle unit with pending orders pops the next
+	# one BEFORE any idle handler (mining seek, idle auto-engage, return-to-
+	# post, the necromancy corpse claim) can grab the tick — idle initiative
+	# would otherwise overwrite the queued order. Rally/attack-move hunts are
+	# mutually exclusive with a non-empty queue: arming either clears it, and
+	# while either flag is set no queue was allowed to form.
+	if _state == State.IDLE and not _order_queue.is_empty() \
+			and not _rally_active and not _attack_move_active:
+		_commands.execute_next_queued_order()
 	if data.is_scout:
 		_pigeon._process(delta)
 		_apply_research_bonuses()
@@ -475,6 +494,16 @@ func rally_to(world_pos: Vector2) -> void:
 
 func attack_move_to(world_pos: Vector2) -> void:
 	_commands.attack_move_to(world_pos)
+
+
+## Shift-queued waypoint order (see _order_queue). Only the plain context
+## orders are queueable — rally and attack-move are not.
+func queue_order(order: Dictionary) -> void:
+	_commands.queue_order(order)
+
+
+func get_order_queue() -> Array:
+	return _order_queue
 
 
 func repair_structure(target: Node2D) -> void:
@@ -656,6 +685,8 @@ func _clear_target() -> void:
 	_target_position = Vector2.ZERO
 	_path.clear()
 	_path_index = 0
+	if not _executing_queued_order:
+		_order_queue.clear()
 
 
 func _release_claim() -> void:

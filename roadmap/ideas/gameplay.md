@@ -5,12 +5,12 @@ conversion; several items pair well with it (noted inline).
 
 ## Controls & orders
 
-- [ ] **Waypoints / queued orders (Shift)** — queue multiple
+- [x] **Waypoints / queued orders (Shift)** — queue multiple
       move/mine/attack orders per unit or group. Natural fit with
       existing right-click context orders (`player_commands.gd`).
-- [ ] **Unit formations** — column / line / spread when moving fighter
+- [x] **Unit formations** — column / line / spread when moving fighter
       groups; interacts with existing archer/wizard standoff logic.
-- [ ] **Attack/threat alerts** — audible ping + screen-edge indicator
+- [x] **Attack/threat alerts** — audible ping + screen-edge indicator
       when miners or the base take damage; cheap, high value, and the
       AI raid logic already produces the events.
 
@@ -33,9 +33,9 @@ conversion; several items pair well with it (noted inline).
 
 ## Presentation-driven gameplay
 
-- [ ] **Dynamic music** — tie `audio_manager.gd` layers to combat
+- [x] **Dynamic music** — tie `audio_manager.gd` layers to combat
       intensity and weather state; snowstorms already mute visibility,
       let them thin the score too. (Pairs well with Phase 2 lighting.)
-- [ ] **Juice pass on signature moments** — cave-in screen shake,
+- [x] **Juice pass on signature moments** — cave-in screen shake,
       dragon-crush hit-stop, raise-dead channel VFX. Zero gameplay
       cost; do during the 3D art pass where the tooling is freshest.

@@ -48,6 +48,10 @@ var _control_groups: Dictionary = {}
 # Persistent army mode set by the Attack/Defend/Garrison buttons: newly
 # trained fighters automatically receive this order when they spawn.
 var _current_stance: String = "defend"
+# Group formation for plain move / attack-move orders to 3+ fighters
+# (F cycles line -> column -> spread). Queued Shift orders always use exact
+# clicked positions — formations never apply to them.
+var _formation_mode: String = "line"
 # Lantern placement mode (Revamp Phase 1): "" when inactive, otherwise
 # "lantern" (surface) or "underground_lantern". A ghost sprite follows the
 # cursor — green where placement is valid, red where it is not.
@@ -208,6 +212,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_attack_move_arm()
 		return
 
+	# Formation mode (F): cycles line -> column -> spread for group moves.
+	if event.is_action_pressed(_Constants.INPUT_CYCLE_FORMATION):
+		_cycle_formation()
+		return
+
 	if _attack_move_armed:
 		_commands._handle_attack_move_input(event)
 		return
@@ -230,7 +239,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			if selection_box:
 				selection_box.visible = false
 	elif event.is_action_pressed(_Constants.INPUT_COMMAND):
-		_commands._issue_command(get_viewport().get_mouse_position())
+		var shift_queued: bool = event is InputEventMouseButton and event.shift_pressed
+		_commands._issue_command(get_viewport().get_mouse_position(), shift_queued)
 	elif event.is_action_pressed(_Constants.INPUT_SELECT_ALL):
 		_selection._select_units(get_tree().get_nodes_in_group("player"))
 	elif event.is_action_pressed(_Constants.INPUT_SELECT_MINERS):
@@ -304,6 +314,10 @@ func get_stance() -> String:
 	return _current_stance
 
 
+func get_formation_mode() -> String:
+	return _formation_mode
+
+
 func set_view(underground: bool) -> void:
 	_camera_helper.set_view(underground)
 
@@ -355,6 +369,22 @@ func _toggle_attack_move_arm() -> void:
 		return
 	_attack_move_armed = not _attack_move_armed
 	DebugLog.log_command("PlayerController", "attack_move", "armed" if _attack_move_armed else "disarmed")
+
+
+## Formation mode (F): cycles line -> column -> spread. Applies to plain
+## (non-queued) group move and attack-move orders; the HUD shows the new mode.
+func _cycle_formation() -> void:
+	match _formation_mode:
+		"line":
+			_formation_mode = "column"
+		"column":
+			_formation_mode = "spread"
+		_:
+			_formation_mode = "line"
+	DebugLog.log_command("PlayerController", "cycle_formation", _formation_mode)
+	var hud: HUD = get_node_or_null("/root/Main/UI/HUD")
+	if hud:
+		hud.show_formation_mode(_formation_mode)
 
 
 func start_build_placement(kind: String) -> void:

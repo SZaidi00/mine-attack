@@ -507,7 +507,7 @@ func _trigger_cave_in(center: Vector2i) -> void:
 
 	DebugLog.log_command("GridEvents", "cave_in", "center=%s cells=%d" % [str(center), _cave_in_cells.size()])
 	AudioManager.play("blast", grid.grid_to_world(center), -4.0)
-	_shake(6.0)
+	_shake(8.0)
 	grid.cave_in_occurred.emit(center)
 	_cavein_next_at = _clock + randf_range(_Constants.CAVEIN_MIN_INTERVAL, _Constants.CAVEIN_MAX_INTERVAL)
 	grid.queue_redraw()

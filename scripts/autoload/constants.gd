@@ -1078,6 +1078,7 @@ const INPUT_TOGGLE_RESEARCH: StringName = &"toggle_research"
 const INPUT_KILL_UNITS: StringName = &"kill_units"
 const INPUT_PAUSE: StringName = &"pause"
 const INPUT_ATTACK_MOVE: StringName = &"attack_move"
+const INPUT_CYCLE_FORMATION: StringName = &"cycle_formation"
 
 const INPUT_CAMERA_UP: StringName = &"camera_up"
 const INPUT_CAMERA_DOWN: StringName = &"camera_down"
@@ -1107,4 +1108,5 @@ const REMAPPABLE_ACTIONS: Array[Dictionary] = [
 	{"action": "kill_units", "label": "Disband Selection"},
 	{"action": "pause", "label": "Pause"},
 	{"action": "attack_move", "label": "Attack Move"},
+	{"action": "cycle_formation", "label": "Cycle Formation"},
 ]

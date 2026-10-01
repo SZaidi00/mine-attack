@@ -13,6 +13,17 @@ var _streams: Dictionary = {}
 var _pool: Array[AudioStreamPlayer2D] = []
 var _pool_idx: int = 0
 
+# Dynamic music layers (all synthesized, no assets): the calm wind/drips loops
+# always run; a combat percussion loop fades in with combat intensity (pulsed
+# by UnitCombat.take_damage when the player team is involved) and everything
+# thins under weather so storms and eruptions still read.
+const _COMBAT_DECAY_SEC: float = 4.5
+
+var _wind_player: AudioStreamPlayer = null
+var _drips_player: AudioStreamPlayer = null
+var _drums_player: AudioStreamPlayer = null
+var _combat_intensity: float = 0.0
+
 
 func _ready() -> void:
 	# Keep ambience running while the tree is paused.
@@ -21,6 +32,51 @@ func _ready() -> void:
 	_build_streams()
 	_build_pool()
 	_start_ambience()
+
+
+func _process(delta: float) -> void:
+	# Combat intensity decays over ~COMBAT_DECAY_SEC and every music layer
+	# eases toward its (weather-ducked) target. Runs while paused, matching
+	# the ambient loops.
+	_combat_intensity = maxf(0.0, _combat_intensity - delta / _COMBAT_DECAY_SEC)
+	var ease: float = 1.0 - exp(-delta * 5.0)
+	if _drums_player != null:
+		_drums_player.volume_db = lerpf(_drums_player.volume_db, get_combat_drum_target_db(), ease)
+	if _drips_player != null:
+		_drips_player.volume_db = lerpf(_drips_player.volume_db, get_drips_target_db(), ease)
+
+
+# ---------- Dynamic music ----------
+
+
+## Combat intensity driver: raises the intensity (0..1) toward `strength`.
+## Called from combat code whenever damage involves the player team.
+func combat_pulse(strength: float) -> void:
+	_combat_intensity = clampf(maxf(_combat_intensity, strength), 0.0, 1.0)
+
+
+func get_combat_intensity() -> float:
+	return _combat_intensity
+
+
+## Target volume for the combat percussion layer: full at intensity 1, silent
+## floor at 0, ducked under a snowstorm so the howling wind stays on top.
+func get_combat_drum_target_db() -> float:
+	var db: float = lerpf(-36.0, -8.0, _combat_intensity)
+	if WeatherManager.is_snowstorm_active():
+		db -= 9.0
+	return db
+
+
+## Target volume for the cave-drips layer: thinned under both weather events —
+## a snowstorm and, especially, the volcano rumble, which owns the low end.
+func get_drips_target_db() -> float:
+	var db: float = 0.0
+	if WeatherManager.is_snowstorm_active():
+		db -= 10.0
+	if WeatherManager.is_volcano_active():
+		db -= 12.0
+	return db
 
 
 # ---------- Playback ----------
@@ -74,6 +130,17 @@ func _start_ambience() -> void:
 		player.bus = &"Ambient"
 		add_child(player)
 		player.play()
+		if sound == "wind":
+			_wind_player = player
+		else:
+			_drips_player = player
+	# Combat percussion: starts inaudible and fades in with combat intensity.
+	_drums_player = AudioStreamPlayer.new()
+	_drums_player.stream = _streams["combat_drums"]
+	_drums_player.bus = &"Ambient"
+	_drums_player.volume_db = -36.0
+	add_child(_drums_player)
+	_drums_player.play()
 
 
 # ---------- Synthesis ----------
@@ -89,6 +156,9 @@ func _build_streams() -> void:
 	_streams["click"] = _tone(1400.0, 1000.0, 0.04, 0.3, "sine")
 	_streams["alarm"] = _tone(620.0, 620.0, 0.18, 0.3, "square")
 	_streams["sonar"] = _sonar_ping()
+	# Threat alert: two bright urgent notes — sharper and higher than the
+	# snowstorm "alarm" so an attack reads differently from weather.
+	_streams["alert_ping"] = _alert_ping()
 	# Revamp Phase 4: low rolling rumble for lava warnings and the rise.
 	_streams["rumble"] = _rumble(1.6)
 	# Revamp Phase 5: howling storm wind (looped while a snowstorm rages) and
@@ -102,6 +172,7 @@ func _build_streams() -> void:
 	# Ambience (looping).
 	_streams["wind"] = _wind_loop(4.0)
 	_streams["drips"] = _drip_loop(5.0)
+	_streams["combat_drums"] = _combat_drum_loop(2.0)
 
 
 func _make_stream(frames: int, bytes: PackedByteArray) -> AudioStreamWAV:
@@ -174,6 +245,59 @@ func _sonar_ping() -> AudioStreamWAV:
 			phase += lerpf(1500.0, 900.0, t) / _MIX_RATE
 			_write_sample(bytes, start_frame + i, sin(phase * TAU) * (1.0 - t) * ping[1])
 	return _make_stream(frames, bytes)
+
+
+## Threat alert ping: two bright, urgent notes in sequence — sharper and
+## higher than the snowstorm alarm so an attack on the player reads instantly
+## as "under fire", not "weather coming".
+func _alert_ping() -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * 0.4)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	for ping in [[0.0, 1250.0, 0.14], [0.16, 1660.0, 0.2]]:
+		var start_frame: int = int(_MIX_RATE * ping[0])
+		var ping_frames: int = int(_MIX_RATE * ping[2])
+		var phase: float = 0.0
+		for i in range(ping_frames):
+			var t: float = float(i) / ping_frames
+			phase += ping[1] / _MIX_RATE
+			_write_sample(bytes, start_frame + i, sin(phase * TAU) * (1.0 - t) * 0.45)
+	return _make_stream(frames, bytes)
+
+
+## Combat percussion loop: deep synthesized drum hits (a decaying low sine
+## plus a noise thump) on a driving pattern. Fades in with combat intensity.
+func _combat_drum_loop(duration: float) -> AudioStreamWAV:
+	var frames: int = int(_MIX_RATE * duration)
+	var bytes: PackedByteArray = _new_buffer(frames)
+	# [beat offset (s), accent]: four on-beats plus two ghost off-beats.
+	for hit in [[0.0, 1.0], [0.5, 0.6], [0.75, 0.45], [1.0, 0.7], [1.25, 0.45], [1.5, 0.6]]:
+		_render_drum_hit(bytes, int(_MIX_RATE * hit[0]), hit[1])
+	# Fade the loop seam so the wrap-around doesn't click.
+	var fade_frames: int = int(_MIX_RATE * 0.08)
+	for i in range(mini(fade_frames, frames / 2)):
+		var g: float = float(i) / fade_frames
+		bytes.encode_s16(i * 2, int(bytes.decode_s16(i * 2) * g))
+		var tail_idx: int = frames - 1 - i
+		bytes.encode_s16(tail_idx * 2, int(bytes.decode_s16(tail_idx * 2) * g))
+	var stream: AudioStreamWAV = _make_stream(frames, bytes)
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = frames
+	return stream
+
+
+## One drum hit written into a loop buffer at `offset` frames: a pitch-dropping
+## low sine body with a short noise snap on top, fast exponential decay.
+func _render_drum_hit(bytes: PackedByteArray, offset: int, accent: float) -> void:
+	var hit_frames: int = int(_MIX_RATE * 0.22)
+	var phase: float = 0.0
+	var noise_smoothed: float = 0.0
+	for i in range(hit_frames):
+		var t: float = float(i) / hit_frames
+		var env: float = exp(-t * 9.0) * accent
+		phase += lerpf(85.0, 48.0, t) / _MIX_RATE
+		noise_smoothed = lerpf(noise_smoothed, randf() * 2.0 - 1.0, 0.3)
+		_write_sample(bytes, offset + i, (sin(phase * TAU) * 0.8 + noise_smoothed * 0.25) * env * 0.5)
 
 
 ## Two bright sine notes in sequence (deposit chime).

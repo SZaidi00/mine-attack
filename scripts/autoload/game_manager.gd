@@ -106,6 +106,10 @@ var map_seed_locked: bool = false
 var soft_paused: bool = false
 # Slow-mo end time (Time.get_ticks_msec()) after a win; -1 = not in slow-mo.
 var _slowmo_end_msec: int = -1
+# Hit-stop end time (Time.get_ticks_msec()) after a signature impact (Brute
+# dragon Crush); -1 = no hit-stop. Kept separate from the win slow-mo so the
+# two never restore over each other.
+var _hitstop_end_msec: int = -1
 
 
 func _process(delta: float) -> void:
@@ -114,6 +118,32 @@ func _process(delta: float) -> void:
 	if _slowmo_end_msec >= 0 and Time.get_ticks_msec() >= _slowmo_end_msec:
 		_slowmo_end_msec = -1
 		Engine.time_scale = 0.0 if soft_paused else game_speed
+	elif _hitstop_end_msec >= 0 and Time.get_ticks_msec() >= _hitstop_end_msec:
+		_hitstop_end_msec = -1
+		# A kill can land mid-hit-stop and hand the time scale to the win
+		# slow-mo — never restore over it.
+		if _slowmo_end_msec < 0:
+			Engine.time_scale = 0.0 if soft_paused else game_speed
+
+
+## Brief hit-stop juice for a signature impact (Brute dragon Crush): drops
+## Engine.time_scale to `scale` for `duration_sec` REAL seconds, mirroring the
+## win slow-mo's wall-clock pattern. Yields to the win slow-mo entirely (a
+## hit-stop during the collapse is a no-op), and an active hit-stop is only
+## tightened by a new one — earliest expiry wins, so spammed Crushes can't
+## stretch the freeze. Skipped under the reduced-motion accessibility setting.
+func hit_stop(scale: float, duration_sec: float) -> void:
+	if not game_active:
+		return
+	if SettingsManager.get_reduced_motion():
+		return
+	if _slowmo_end_msec >= 0:
+		return
+	var end_msec: int = Time.get_ticks_msec() + int(duration_sec * 1000.0)
+	if _hitstop_end_msec >= 0 and end_msec >= _hitstop_end_msec:
+		return
+	_hitstop_end_msec = end_msec
+	Engine.time_scale = scale
 
 
 func declare_winner(winner: Team) -> void:
@@ -175,6 +205,7 @@ func reset() -> void:
 	game_active = true
 	match_time = 0.0
 	_slowmo_end_msec = -1
+	_hitstop_end_msec = -1
 	soft_paused = false
 	Engine.time_scale = game_speed
 	_difficulty_offset = 0.0

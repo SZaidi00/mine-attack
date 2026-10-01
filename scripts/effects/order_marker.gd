@@ -10,10 +10,12 @@ const RADIUS_END: float = 24.0
 
 var _timer: float = LIFETIME
 var _color: Color = Color.WHITE
+var _scale_mult: float = 1.0
 
 
-func setup(color: Color) -> void:
+func setup(color: Color, scale_mult: float = 1.0) -> void:
 	_color = color
+	_scale_mult = scale_mult
 
 
 func _process(delta: float) -> void:
@@ -25,6 +27,6 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var t: float = 1.0 - clampf(_timer / LIFETIME, 0.0, 1.0)
-	var radius: float = lerpf(RADIUS_START, RADIUS_END, t)
+	var radius: float = lerpf(RADIUS_START, RADIUS_END, t) * _scale_mult
 	var alpha: float = 1.0 - t
 	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 32, Color(_color, alpha), 2.0)

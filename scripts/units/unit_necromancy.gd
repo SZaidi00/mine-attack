@@ -17,6 +17,8 @@ var unit: Unit
 # Channel state: the corpse being raised and the remaining channel time.
 var _channel_target: Corpse = null
 var _channel_timer: float = 0.0
+# Channel VFX: sickly-green rising energy over the corpse (frees itself).
+var _channel_fx: NecroChannelFX = null
 
 
 func _init(u: Unit) -> void:
@@ -39,6 +41,9 @@ func _process_necromancy(delta: float) -> void:
 	if _channel_timer <= 0.0:
 		var corpse: Corpse = _channel_target
 		_channel_target = null
+		if _channel_fx != null and is_instance_valid(_channel_fx):
+			_channel_fx.queue_free()
+		_channel_fx = null
 		unit._spawn_undead_from(corpse)
 
 
@@ -106,6 +111,10 @@ func _start_channel(corpse: Corpse) -> void:
 	_channel_timer = Constants.NECRO_RAISE_CHANNEL_TIME
 	corpse.claim(unit)
 	unit._path.clear()
+	var fx := NecroChannelFX.new()
+	fx.setup(corpse, unit)
+	corpse.add_child(fx)
+	_channel_fx = fx
 	DebugLog.log_command("Unit %d" % unit.get_instance_id(), "necro_channel", "corpse=%d" % corpse.get_instance_id())
 
 
@@ -114,4 +123,7 @@ func _stop_channel(reason: String) -> void:
 		_channel_target.release(unit)
 	_channel_target = null
 	_channel_timer = 0.0
+	if _channel_fx != null and is_instance_valid(_channel_fx):
+		_channel_fx.queue_free()
+	_channel_fx = null
 	DebugLog.log_command("Unit %d" % unit.get_instance_id(), "necro_channel_stop", reason)

@@ -339,6 +339,48 @@ func attack_move_to(world_pos: Vector2) -> void:
 	unit._set_state(Unit.State.MOVE, "attack_move_to command")
 
 
+## Shift-queued waypoint order: appended to the unit's queue and executed one
+## per IDLE tick once the current order finishes (see Unit._process). Any plain
+## explicit order (it runs through _clear_target) drops the whole queue.
+func queue_order(order: Dictionary) -> void:
+	unit._order_queue.append(order)
+	DebugLog.log_command("Unit %d" % unit.get_instance_id(), "queue_push", \
+			"%s depth=%d" % [String(order.get("type", "?")), unit._order_queue.size()])
+
+
+## Pops and executes the next queued order. Orders whose target died while
+## waiting are skipped; at most one order is dispatched per call so state
+## transitions settle between orders. Returns true when an order was consumed.
+func execute_next_queued_order() -> bool:
+	while not unit._order_queue.is_empty():
+		var order: Dictionary = unit._order_queue.pop_front()
+		var kind: String = String(order.get("type", ""))
+		# The dispatched command runs through _clear_target(), which wipes the
+		# queue — guard the remaining tail for the duration of the dispatch.
+		unit._executing_queued_order = true
+		match kind:
+			"move":
+				move_to(order["pos"])
+			"attack_unit", "attack_building":
+				var target: Node2D = order["target"]
+				if target != null and is_instance_valid(target):
+					if kind == "attack_unit":
+						attack_unit(target)
+					else:
+						attack_building(target)
+				else:
+					DebugLog.log_command("Unit %d" % unit.get_instance_id(), "queue_skip", kind + " target gone")
+			"mine_cell":
+				mine_cell(order["cell"])
+			_:
+				DebugLog.log_reject("Unit %d" % unit.get_instance_id(), "queue_pop", "unknown order " + kind)
+		unit._executing_queued_order = false
+		DebugLog.log_command("Unit %d" % unit.get_instance_id(), "queue_pop", \
+				"%s remaining=%d" % [kind, unit._order_queue.size()])
+		return true
+	return false
+
+
 func _process_enter_mine(delta: float) -> void:
 	var entry: Node2D = unit._nearest_friendly_mine_entry()
 	if entry == null:

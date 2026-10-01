@@ -77,6 +77,22 @@ var _styling: HUDStyling
 var _menus: HUDMenus
 var _updates: HUDUpdates
 
+# Threat alerts (attack/threat notification): active threats reported via
+# report_threat() render as fading screen-edge arrows on _threat_layer, with a
+# throttled alert ping. One ping per _THREAT_PING_COOLDOWN_MS even when many
+# threats land at once (burn ticks, raids).
+const _THREAT_LIFETIME: float = 4.0
+const _THREAT_PING_COOLDOWN_MS: int = 1750
+const _THREAT_MAX: int = 10
+
+var _threats: Array = []  # { pos: Vector2, kind: String, age: float }
+var _threat_layer: ThreatAlertLayer = null
+var _last_ping_msec: int = -100000
+var _ping_count: int = 0  # test hook: how many pings have actually sounded
+var _ui_scale: float = 1.0
+# Last seen player-building HP, so hp_changed can tell damage from regen.
+var _player_building_hp: int = -1
+
 
 func _init() -> void:
 	_styling = HUDStyling.new(self)
@@ -85,6 +101,8 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	# Looked up by unit_combat.gd for threat reports without a hard dependency.
+	add_to_group("hud")
 	# The HUD must keep processing while the tree is paused so the pause menu
 	# stays visible and clickable (the classic pause-menu-pauses-itself bug).
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -159,6 +177,8 @@ func _ready() -> void:
 	var player_building: Node2D = _get_player_building()
 	if player_building:
 		player_building.hp_changed.connect(_on_building_hp_changed.bind(player_building))
+		if not player_building.destroyed.is_connected(_on_player_building_destroyed):
+			player_building.destroyed.connect(_on_player_building_destroyed.bind(player_building))
 	var enemy_building: Node2D = _get_enemy_building()
 	if enemy_building:
 		enemy_building.hp_changed.connect(_on_building_hp_changed.bind(enemy_building))
@@ -172,6 +192,8 @@ func _ready() -> void:
 	_build_volcano_banner()
 	_build_faction_popup()
 	_build_toast_container()
+	_build_formation_label()
+	_build_threat_layer()
 	_wire_production_toasts()
 	_on_economy_changed(GameManager.Team.PLAYER)
 	_updates._sync_view_buttons()
@@ -217,6 +239,7 @@ func _apply_ui_scale() -> void:
 	set_anchors_preset(Control.PRESET_TOP_LEFT)
 	position = Vector2.ZERO
 	size = logical / s
+	_ui_scale = s
 
 
 func _style_top_bar() -> void:
@@ -288,7 +311,8 @@ func _cycle_raise_mode() -> void:
 	pc.set_raise_mode(next_mode)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_update_threat_layer(delta)
 	var pc: PlayerController = _get_player_controller()
 	if pc:
 		_updates._update_selection_label(pc)
@@ -308,6 +332,11 @@ func _process(_delta: float) -> void:
 	_update_lava_banner()
 	_update_weather_banner()
 	_update_volcano_banner()
+	# Formation-mode readout: brief label, hidden again after ~2s.
+	if _formation_label != null and _formation_label_timer > 0.0:
+		_formation_label_timer -= delta
+		if _formation_label_timer <= 0.0:
+			_formation_label.visible = false
 	if _build_menu != null and _build_menu.visible:
 		_menus._update_build_menu()
 	# If a build card is selected and the placement mode is cancelled (right-click,
@@ -473,13 +502,73 @@ func _on_economy_changed(team: GameManager.Team) -> void:
 	_unit_count_label.text = "%d/%d" % [EconomyManager.get_population(team), _Constants.MAX_UNITS]
 
 
-func _on_building_hp_changed(current: int, _maximum: int, building: Node2D) -> void:
+func _on_building_hp_changed(current: int, maximum: int, building: Node2D) -> void:
 	if building == null:
 		return
 	if building.get("team") == GameManager.Team.PLAYER:
 		_player_hp_label.text = "%d" % current
+		_on_player_building_damaged(current, maximum, building)
 	else:
 		_enemy_hp_label.text = "%d" % current
+
+
+## Threat alerts: a DROP in the player building's HP is an attack (regen and
+## Earth Shield heals raise it). Report an edge arrow at the base and push the
+## combat music to full intensity — the base being hit is the loudest signal.
+func _on_player_building_damaged(current: int, maximum: int, building: Node2D) -> void:
+	# First sighting (no baseline yet): the building sits at full HP, so any
+	# current below max is damage.
+	var prev: int = _player_building_hp if _player_building_hp >= 0 else maximum
+	if current < prev and GameManager.game_active:
+		report_threat(building.global_position, "base")
+		AudioManager.combat_pulse(1.0)
+	_player_building_hp = current
+
+
+func _on_player_building_destroyed(_team: GameManager.Team, building: Node2D) -> void:
+	if building != null and is_instance_valid(building):
+		report_threat(building.global_position, "base")
+
+
+# ─── Threat alerts ───
+
+func _build_threat_layer() -> void:
+	_threat_layer = ThreatAlertLayer.new()
+	_threat_layer.hud = self
+	add_child(_threat_layer)
+
+
+## Player-facing threat notification: called from unit combat (player miners
+## under attack) and the player-building damage handlers. Adds a fading edge
+## arrow at the threat's world position; the ping is globally throttled so
+## chip damage never machine-guns the player.
+func report_threat(world_pos: Vector2, kind: String) -> void:
+	if not GameManager.game_active:
+		return
+	if _threat_layer == null:
+		return
+	if _threats.size() >= _THREAT_MAX:
+		_threats.pop_front()
+	_threats.append({"pos": world_pos, "kind": kind, "age": 0.0})
+	var now: int = Time.get_ticks_msec()
+	if now - _last_ping_msec >= _THREAT_PING_COOLDOWN_MS:
+		_last_ping_msec = now
+		_ping_count += 1
+		AudioManager.play("alert_ping", Vector2.INF, -2.0)
+	_threat_layer.queue_redraw()
+
+
+func _update_threat_layer(delta: float) -> void:
+	if _threat_layer == null:
+		return
+	var alive: Array = []
+	for threat in _threats:
+		threat.age += delta
+		if threat.age < _THREAT_LIFETIME:
+			alive.append(threat)
+	_threats = alive
+	if not _threats.is_empty():
+		_threat_layer.queue_redraw()
 
 
 func _get_player_controller() -> PlayerController:
@@ -784,6 +873,33 @@ func _on_faction_identified_popup(team: GameManager.Team) -> void:
 # out.
 var _toast_container: VBoxContainer = null
 const _TOAST_MAX_VISIBLE: int = 4
+
+# Formation-mode readout (F cycles line/column/spread): a brief label above
+# the bottom bar, shown by PlayerController on change and faded out in _process.
+var _formation_label: Label = null
+var _formation_label_timer: float = 0.0
+
+
+func _build_formation_label() -> void:
+	_formation_label = Label.new()
+	_formation_label.name = "FormationLabel"
+	_formation_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_formation_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_formation_label.position = Vector2(-70, -140)
+	_formation_label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
+	_formation_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	_formation_label.visible = false
+	add_child(_formation_label)
+
+
+## Brief formation-mode readout above the bottom bar (PlayerController, F key).
+func show_formation_mode(mode: String) -> void:
+	if _formation_label == null:
+		return
+	_formation_label.text = "Formation: %s" % mode.capitalize()
+	_formation_label.visible = true
+	_formation_label.modulate.a = 1.0
+	_formation_label_timer = 2.0
 
 
 func _build_toast_container() -> void:

@@ -89,6 +89,7 @@ func take_damage(amount: int, attacker: Node2D = null, environmental: bool = fal
 		var attacker_team = attacker.get("team")
 		if attacker_team != null:
 			MatchStats.record_damage(attacker_team, amount)
+	_notify_player_threat(attacker, amount, environmental)
 	if not environmental:
 		# Only combat damage feeds the incoming-DPS window — cave-ins and lava
 		# must not read as an attack to the AI (crawler distress, retreats).
@@ -107,6 +108,27 @@ func take_damage(amount: int, attacker: Node2D = null, environmental: bool = fal
 			unit._navigation._start_flee()
 		else:
 			_maybe_retaliate(attacker)
+
+
+## Player-facing threat notification + dynamic music. Only real attacks count:
+## environmental chip damage (burns, storms, cave-ins) has no attacker and is
+## attrition, not a threat. Combat involving the player team pulses the combat
+## music; a player MINER taking attacker damage reports an edge arrow (fighters
+## fighting is normal — a miner or the base being hit is the alarm).
+func _notify_player_threat(attacker: Node2D, amount: int, environmental: bool) -> void:
+	if environmental or attacker == null:
+		return
+	if not GameManager.game_active:
+		return
+	var attacker_team = attacker.get("team")
+	if unit.team == GameManager.Team.PLAYER or attacker_team == GameManager.Team.PLAYER:
+		AudioManager.combat_pulse(clampf(amount / 40.0, 0.2, 1.0))
+	if unit.team == GameManager.Team.PLAYER and unit.data != null and unit.data.is_miner:
+		var hud: Node = unit.get_tree().get_first_node_in_group("hud")
+		if hud == null:
+			hud = unit.get_node_or_null("/root/Main/UI/HUD")
+		if hud != null:
+			hud.report_threat(unit.global_position, "miner")
 
 
 ## Damage per second taken over the rolling 3s window (0 when untouched).
