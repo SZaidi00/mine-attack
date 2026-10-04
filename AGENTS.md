@@ -34,7 +34,8 @@ mine-attack/
 │   ├── resources/     # unit_data.gd, faction_data.gd, units/*.tres, factions/*.tres
 │   ├── ui/            # hud + helper modules, debug_overlay, layer_indicator,
 │                      # training_queue_panel, research_panel, unit_button, main_menu,
-│                      # match_graph, minimap, tutorial_hints, coaching_hints
+│                      # match_graph, minimap, tutorial_hints, tutorial_panel,
+│                      # coaching_hints
 │   ├── effects/       # coin_popup, damage_popup, coin_pickup, reject_popup,
 │                      # order_marker, burning_ground, meteor, volcano_background
 │   ├── units/         # unit.gd + helper modules, projectile.gd, unit_pigeon.gd
@@ -142,6 +143,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
 - `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system.
 - `settings_panel.gd` — shared settings popup opened from the main menu and pause menu Settings buttons; scrollable card with three groups — Display (map seed, UI scale slider, colorblind / reduced motion / reduced flash / tutorial checkboxes, tutorial reset), Audio (SFX volume slider on the SFX bus), Controls (capture-key rebinding rows for `Constants.REMAPPABLE_ACTIONS` with conflict rejection). Main menu and pause menu keep their own inline resolution rows (desktop only).
+- `tutorial_panel.gd` — paginated first-time-player tutorial (7 screens: goal, economy, units, structures, research, weather/terrain, controls/tips) opened from the main menu's Tutorial button; `create()` returns a hidden full-rect overlay like `SettingsPanel`, with Back/Next/Finish navigation and icon-illustrated entry rows built from `_PAGES` data.
 - `minimap.gd` — canvas-drawn minimap Control (terrain by `CellType`, 3-state fog overlay, team-colored unit/building dots, camera viewport rect, click/drag to move the camera; shape-coded ore/lava when colorblind mode is on).
 - `tutorial_hints.gd` — first-match contextual hints (~10 trigger conditions polled on a 1s tick, one card at a time, dismiss persists to `SettingsManager.tutorial_seen`).
 - `coaching_hints.gd` — `class_name CoachingHints` pure function generating 2–3 post-game observations from the `MatchStats` summary (fast-loss, base-damage, economy ratio, army trade, max-tier rules).
@@ -312,7 +314,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself. Map generation does NOT follow the global RNG stream (dedicated map RNG, see `grid_map_generation.gd`) — tests that need a fixed map pin `GameManager.set_map_seed(n)` in setup and `GameManager.clear_map_seed()` in teardown.
-- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare, control groups, attack-move, minimap, tutorial hints, coaching hints, production toasts, accessibility settings, key remapping, waypoint orders, formations, threat alerts, dynamic music, juice (hit-stop / necro VFX).
+- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare, control groups, attack-move, minimap, tutorial hints, tutorial panel, coaching hints, production toasts, accessibility settings, key remapping, waypoint orders, formations, threat alerts, dynamic music, juice (hit-stop / necro VFX).
 
 ## Security and deployment considerations
 
@@ -334,7 +336,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - **GUT filtering:** `-gtest` unions with `-gdir` in GUT 9.7 (passing both runs everything). To run a single script, omit `-gdir` and pass `-gtest=res://tests/<file>.gd` alone.
 - **Web full-bleed:** web export uses custom head include for canvas sizing.
 - **Viewport stretch:** logical UI is 1920×1080; camera base zoom adapts to physical window size.
-- **HUD root is a Control, not a CanvasLayer:** it applies UI scale via its own `scale` + a fixed-offset virtual rect (`window_size / ui_scale`), re-fit on window resize. Don't re-anchor the HUD root or assume canvas-layer behavior; parent `UI` in `main.tscn` is the CanvasLayer.
+- **HUD root is a Control, not a CanvasLayer:** it applies UI scale via its own `scale` + a fixed-offset virtual rect (`window_size / ui_scale`), re-fit on window resize. Don't re-anchor the HUD root or assume canvas-layer behavior; parent `UI` in `main.tscn` is the CanvasLayer. The root MUST keep `mouse_filter = IGNORE` — as a full-window Control it would otherwise swallow every click (default STOP) and starve `PlayerController._unhandled_input` (selection, commands, structure placement); interactive children set their own filters.
 - **Settings tests write `user://settings.cfg` for real:** tests that flip settings (volume, accessibility, key bindings) restore the prior values in `after_all` — follow `tests/test_settings_volume.gd`.
 
 ## Useful files to read first
