@@ -24,8 +24,10 @@ mine-attack/
 │   ├── ladder.tscn
 │   ├── lantern.tscn / tower.tscn / wall_segment.tscn / trap.tscn
 │   ├── ui/                    # main_menu, hud, debug_overlay
-│   └── effects/               # coin_popup, damage_popup, coin_pickup,
-│                              # reject_popup, burning_ground, meteor, volcano_background
+│   ├── effects/               # coin_popup, damage_popup, coin_pickup,
+│   │                          # reject_popup, burning_ground, meteor, volcano_background
+│   └── main_3d.tscn           # Phase 0 3D spike root (branch feat/3d-conversion only;
+│                              # instances main.tscn at /root/Main, hides its 2D layers)
 ├── scripts/
 │   ├── autoload/      # constants, game_manager, economy_manager, faction_manager,
 │                      # research_manager, debug_log, audio_manager, settings_manager,
@@ -39,6 +41,8 @@ mine-attack/
 │   ├── effects/       # coin_popup, damage_popup, coin_pickup, reject_popup,
 │                      # order_marker, burning_ground, meteor, volcano_background
 │   ├── units/         # unit.gd + helper modules, projectile.gd, unit_pigeon.gd
+│   ├── three_d/       # Phase 0 3D spike: main_3d.gd (camera rig + sim mount),
+│   │                  # terrain_3d.gd (GridWorld._cells → vertex-colored mesh)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~48 test scripts)
