@@ -1,14 +1,19 @@
-## Phase 0 spike root (see roadmap/3d-conversion/phase-0-spike.md).
+## Phase 1 shell (roadmap/3d-conversion/phase-1-25d-port.md).
 ##
-## Hosts the untouched 2D simulation — instanced at "/root/Main" so every
-## hard-coded path in the game resolves exactly as shipped — and renders a 3D
-## RTS camera rig plus a terrain projection on top of it. The sim's CanvasItem
-## layers are hidden; the simulation itself keeps running untouched (this
-## script reads unit/grid state but never writes it).
+## Launched as the main scene; hosts the untouched 2D simulation — mounted
+## at "/root/Main" so every hard-coded path resolves exactly as shipped — and
+## the 3D presentation (World3D: terrain, entity proxies, effects container)
+## on top of it. The sim's CanvasItem layers are hidden; the simulation runs
+## untouched (presentation reads sim state, never writes it).
+##
+## The camera rig replaces player_camera.gd's visible role: PlayerController
+## stays the single input authority (its Tab handling emits view_mode_changed,
+## which this rig follows), while pan/zoom are applied to the 3D camera. The
+## 2D Camera2D keeps receiving the same input invisibly — harmless, and it
+## keeps player_camera.gd's bookmarks/logic exercised for the GUT suite.
 extends Node3D
 
 const SIM_SCENE: PackedScene = preload("res://scenes/main.tscn")
-const MINER_TEXTURE: Texture2D = preload("res://frost_mines_assets/units/miner_l1_player.png")
 
 ## 3D units per 2D pixel. The map is ~2560x800 px, i.e. ~26x8 units.
 const WORLD_SCALE: float = 0.01
@@ -19,37 +24,32 @@ const DOLLY_WHEEL_STEP: float = 1.1
 const DOLLY_START: float = 12.0
 const PAN_SPEED: float = 10.0
 const EDGE_PAN_MARGIN: float = 24.0
-const MINER_SCAN_INTERVAL: float = 0.25
-const BILLBOARD_PIXEL_SIZE: float = 0.011
 
 var _sim: Node2D
+var _pc: Node
 var _camera: Camera3D
-var _billboard: Sprite3D
+var _terrain: Node3D
+var _proxies: Node3D
 var _focus: Vector3 = Vector3.ZERO
 var _surface_focus: Vector3
 var _underground_focus: Vector3
-var _underground: bool = false
 var _dolly: float = DOLLY_START
-var _miner: Node2D
-var _scan_accum: float = 0.0
 
 
 func _ready() -> void:
 	_camera = $CameraRig/Camera3D
-	_billboard = $MinerBillboard
-	_billboard.texture = MINER_TEXTURE
-	_billboard.pixel_size = BILLBOARD_PIXEL_SIZE
-	_billboard.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	_billboard.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_terrain = $World3D/Terrain3D
+	_proxies = $World3D/EntityProxies
 
 	# Mount the untouched 2D game at "/root/Main" (deferred so the whole
 	# scene enters the tree normally), then hide its CanvasItem layers: the
 	# sim keeps running, only its 2D drawing is suppressed. The HUD
-	# (CanvasLayer) intentionally stays visible to prove Controls overlay a
-	# 3D viewport unchanged.
+	# (CanvasLayer) intentionally stays visible — Controls overlay a 3D
+	# viewport unchanged.
 	_sim = SIM_SCENE.instantiate()
 	get_tree().root.add_child.call_deferred(_sim)
 	await _sim.ready
+	get_tree().current_scene = _sim
 	_sim.get_node("World").visible = false
 	_sim.get_node("Units").visible = false
 	_sim.get_node("Projectiles").visible = false
@@ -63,7 +63,14 @@ func _ready() -> void:
 	_underground_focus = _to_ground(entry.call("get_underground_position"))
 	_focus = _surface_focus
 
-	$Terrain3D.setup(_sim.get_node("World/GridWorld") as GridWorld)
+	var grid: GridWorld = _sim.get_node("World/GridWorld") as GridWorld
+	_terrain.setup(grid)
+	_proxies.setup($World3D/Units3D, $World3D/Structures3D, grid, $World3D/Effects3D, _camera)
+
+	# PlayerController is the single input authority for view switching.
+	_pc = _sim.get_node("PlayerController")
+	_pc.view_mode_changed.connect(_on_view_mode_changed)
+	_apply_view(_pc.get_current_view_mode() == PlayerController.ViewMode.UNDERGROUND, true)
 
 
 func _to_ground(pos2d: Vector2) -> Vector3:
@@ -78,7 +85,6 @@ func _process(delta: float) -> void:
 	$CameraRig.position = _focus
 	_camera.position = Vector3(0.0, height, _dolly)
 	_camera.rotation_degrees = Vector3(-PITCH_DEGREES, 0.0, 0.0)
-	_track_miner(delta)
 
 
 func _pan(delta: float) -> void:
@@ -128,9 +134,7 @@ func _edge_pan_dir() -> Vector2:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed(Constants.INPUT_TOGGLE_VIEW):
-		_toggle_view()
-	elif event is InputEventMouseButton and event.pressed:
+	if event is InputEventMouseButton and event.pressed:
 		# Wheel events double as the camera_zoom_in/out actions in the input
 		# map; handling the raw button covers both bindings in one branch.
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -143,33 +147,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		_dolly = clampf(_dolly * DOLLY_WHEEL_STEP, DOLLY_MIN, DOLLY_MAX)
 
 
-func _toggle_view() -> void:
-	# Teleport between the two saved layer bookmarks, remembering where the
-	# view being left was parked (mirrors player_camera.set_view, minus slide).
-	if _underground:
-		_underground_focus = _focus
-		_focus = _surface_focus
-	else:
-		_surface_focus = _focus
-		_focus = _underground_focus
-	_underground = not _underground
+## PlayerController (input authority) says the Tab view changed; the rig
+## teleports to the bookmark of the requested layer, remembering where the
+## view being left was parked (mirrors player_camera.set_view, minus slide).
+func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
+	_apply_view(mode == PlayerController.ViewMode.UNDERGROUND, false)
 
 
-func _track_miner(delta: float) -> void:
-	_scan_accum += delta
-	if _scan_accum >= MINER_SCAN_INTERVAL:
-		_scan_accum = 0.0
-		if _miner == null or not is_instance_valid(_miner):
-			_miner = _find_player_miner()
-			_billboard.visible = _miner != null
-	if _miner != null and is_instance_valid(_miner):
-		var ground: Vector3 = _to_ground(_miner.global_position)
-		var height: float = MINER_TEXTURE.get_height() * BILLBOARD_PIXEL_SIZE
-		_billboard.position = Vector3(ground.x, height * 0.5 + 0.02, ground.z)
-
-
-func _find_player_miner() -> Node2D:
-	for unit in get_tree().get_nodes_in_group("units"):
-		if unit.team == GameManager.Team.PLAYER and unit.data != null and unit.data.is_miner:
-			return unit
-	return null
+func _apply_view(underground: bool, initial: bool) -> void:
+	if not initial:
+		if underground:
+			_surface_focus = _focus
+			_focus = _underground_focus
+		else:
+			_underground_focus = _focus
+			_focus = _surface_focus
+	_terrain.set_underground_view(underground)
+	_proxies.set_underground_view(underground)

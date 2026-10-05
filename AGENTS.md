@@ -5,7 +5,7 @@ MineAttack is a single-player 2D RTS built in Godot 4.7. The player controls the
 ## Technology stack
 
 - **Engine:** Godot 4.7 (standard build, not .NET)
-- **Renderer:** `gl_compatibility`
+- **Renderer:** `forward_plus` on desktop (Phase 1 2.5D port, branch `feat/3d-conversion`); `gl_compatibility` kept for mobile/web export overrides (`rendering_method.mobile`/`.web`)
 - **Physics:** Jolt Physics
 - **Language:** GDScript (static typing preferred on function signatures)
 - **Targets:** Web, macOS, Windows
@@ -26,8 +26,11 @@ mine-attack/
 │   ├── ui/                    # main_menu, hud, debug_overlay
 │   ├── effects/               # coin_popup, damage_popup, coin_pickup,
 │   │                          # reject_popup, burning_ground, meteor, volcano_background
-│   └── main_3d.tscn           # Phase 0 3D spike root (branch feat/3d-conversion only;
-│                              # instances main.tscn at /root/Main, hides its 2D layers)
+│   ├── world_3d.tscn          # Phase 1 World3D: lights, Terrain3D, EntityProxies,
+│   │                          # Units3D/Structures3D/Effects3D containers
+│   └── main_3d.tscn           # Phase 1 main scene (branch feat/3d-conversion): 3D shell
+│                              # that mounts main.tscn at /root/Main (sim untouched, 2D
+│                              # layers hidden) and renders the World3D presentation
 ├── scripts/
 │   ├── autoload/      # constants, game_manager, economy_manager, faction_manager,
 │                      # research_manager, debug_log, audio_manager, settings_manager,
@@ -41,8 +44,11 @@ mine-attack/
 │   ├── effects/       # coin_popup, damage_popup, coin_pickup, reject_popup,
 │                      # order_marker, burning_ground, meteor, volcano_background
 │   ├── units/         # unit.gd + helper modules, projectile.gd, unit_pigeon.gd
-│   ├── three_d/       # Phase 0 3D spike: main_3d.gd (camera rig + sim mount),
-│   │                  # terrain_3d.gd (GridWorld._cells → vertex-colored mesh)
+│   ├── three_d/       # Phase 1 2.5D port presentation layer (sim -> render only):
+│   │                  # main_3d.gd (shell + 55deg camera rig), terrain_3d.gd (chunked
+│   │                  # cell->mesh projection, layer-aware), entity_proxies_3d.gd
+│   │                  # (group reconcile), unit_proxy_3d.gd / structure_proxy_3d.gd
+│   │                  # (billboards/box stand-ins mirroring live 2D entities)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~48 test scripts)
@@ -56,7 +62,17 @@ mine-attack/
 
 ## Runtime architecture
 
-`scenes/ui/main_menu.tscn` is the main scene (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
+> **3D conversion branch (`feat/3d-conversion`):** `run/main_scene` is
+> `scenes/main_3d.tscn`, a Node3D shell that mounts the untouched
+> `scenes/main.tscn` sim at `/root/Main` (so every hard-coded path keeps
+> working), hides its CanvasItem layers, and renders the 3D presentation in
+> `scenes/world_3d.tscn` (chunked terrain projected from `GridWorld._cells`,
+> plus unit/structure proxies mirroring the live sim — sim → render only).
+> The HUD CanvasLayer and all input handling stay on the 2D sim; the 3D
+> camera rig follows `PlayerController.view_mode_changed` for Tab. On
+> `main`, the main scene remains `scenes/ui/main_menu.tscn` → `main.tscn`.
+
+`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
 
 - `World/VolcanoBackground` — decorative volcano sprite.
 - `World/GridWorld` — procedural map, A*, fog of war, rendering.

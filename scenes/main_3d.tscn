@@ -1,25 +1,14 @@
 [gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/three_d/main_3d.gd" id="1_main"]
-[ext_resource type="Script" path="res://scripts/three_d/terrain_3d.gd" id="2_terrain"]
-
-[sub_resource type="Environment" id="Environment_spike"]
-background_mode = 1
-background_color = Color(0.04, 0.055, 0.07, 1)
+[ext_resource type="PackedScene" path="res://scenes/world_3d.tscn" id="1_world3d"]
+[ext_resource type="Script" path="res://scripts/three_d/main_3d.gd" id="2_main"]
 
 [node name="Main3D" type="Node3D"]
-script = ExtResource("1_main")
+script = ExtResource("2_main")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = SubResource("Environment_spike")
+[node name="World3D" parent="." instance=ExtResource("1_world3d")]
 
 [node name="CameraRig" type="Node3D" parent="."]
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig"]
 current = true
-
-[node name="Terrain3D" type="MeshInstance3D" parent="."]
-script = ExtResource("2_terrain")
-
-[node name="MinerBillboard" type="Sprite3D" parent="."]
-visible = false
