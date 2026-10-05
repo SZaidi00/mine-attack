@@ -14,6 +14,7 @@ class_name StructureProxy3D
 const WORLD_SCALE: float = 0.01
 const CELL: float = 32.0 * WORLD_SCALE
 const CONSTRUCTION_ALPHA: float = 0.55
+const REMEMBERED_COLOR := Color(0.3, 0.3, 0.32)
 const MINE_ENTRY_TEXTURE: Texture2D = preload("res://frost_mines_assets/props/mine_entry.png")
 
 static var _lantern_head_material: StandardMaterial3D
@@ -25,6 +26,10 @@ var source_id: int = 0
 var _underground_structure := false
 var _shows_in_both_layers := false
 var _mat: StandardMaterial3D
+var _grid: GridWorld
+var _cell: Vector2i
+var _base_color := Color.WHITE
+var _enemy := false
 
 
 static func create(s: Node2D, grid: GridWorld) -> StructureProxy3D:
@@ -58,6 +63,13 @@ static func create(s: Node2D, grid: GridWorld) -> StructureProxy3D:
 	var pos: Vector2 = s.global_position
 	p.position = Vector3(pos.x * WORLD_SCALE, 0.0, pos.y * WORLD_SCALE)
 
+	# Fog mirror inputs: the sim only flips .visible on enemy buildings/traps,
+	# so refresh() checks the fog map itself for every enemy structure.
+	p._grid = grid
+	p._cell = grid.world_to_grid(pos)
+	var team: Variant = s.get("team")
+	p._enemy = team != null and team == GameManager.Team.ENEMY
+
 	if s.has_signal("destroyed"):
 		s.connect("destroyed", p._on_destroyed)
 	s.tree_exiting.connect(p._on_destroyed)
@@ -75,6 +87,7 @@ static func _is_underground_cell(s: Node2D, grid: GridWorld) -> bool:
 
 
 func _build_box(color: Color, size: Vector3, sink: float) -> void:
+	_base_color = color
 	_mat.albedo_color = color
 	var box := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
@@ -139,11 +152,27 @@ func refresh(underground_view: bool) -> void:
 	var layer_ok := true
 	if not _shows_in_both_layers:
 		layer_ok = (_underground_structure == underground_view)
-	visible = layer_ok and entity.visible
+	# The 2D sim only flips .visible per fog on enemy buildings/traps; every
+	# other enemy structure stays visible and is merely covered by the fog
+	# overlay. Mirror the fog honestly here: unexplored hides, remembered
+	# dims (like building.gd's gray modulate), visible shows.
+	var fog_ok := true
+	var remembered := false
+	if _enemy and _grid != null and is_instance_valid(_grid):
+		match _grid.fog_state_at(GameManager.Team.PLAYER, _cell):
+			0:
+				fog_ok = false
+			1:
+				remembered = true
+	visible = layer_ok and fog_ok and entity.visible
 	var built := true
 	if entity.has_method("is_built"):
 		built = bool(entity.call("is_built"))
-	_mat.albedo_color.a = 1.0 if built else CONSTRUCTION_ALPHA
+	var color := _base_color
+	if remembered:
+		color = color.lerp(REMEMBERED_COLOR, 0.7)
+	color.a = 1.0 if built else CONSTRUCTION_ALPHA
+	_mat.albedo_color = color
 	_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA if not built else BaseMaterial3D.TRANSPARENCY_DISABLED
 
 

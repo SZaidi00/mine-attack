@@ -1,8 +1,10 @@
 # Phase 0 findings — the spike (draft: feel judgments pending hands-on playtest)
 
 **Branch:** `feat/3d-conversion` (spike branch; `main` tagged `2d-legacy`).
-**Scene to run:** `scenes/main_3d.tscn` (set as `run/main_scene` on this
-branch only — revert to `scenes/ui/main_menu.tscn` to go back).
+**Scene flow:** boot lands on the main menu as usual; its Play button loads
+`scenes/main_3d.tscn` (the shell mounts `main.tscn` itself). On `main`,
+Play loads `scenes/main.tscn` directly — that one-line difference in
+`main_menu.gd` is the branch's only menu change.
 
 ## Rendering approach: per-cell meshes (not a SubViewport plane)
 

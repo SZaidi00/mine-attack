@@ -45,11 +45,14 @@ func _ready() -> void:
 	# scene enters the tree normally), then hide its CanvasItem layers: the
 	# sim keeps running, only its 2D drawing is suppressed. The HUD
 	# (CanvasLayer) intentionally stays visible — Controls overlay a 3D
-	# viewport unchanged.
+	# viewport unchanged. current_scene stays this shell: Play Again
+	# (reload_current_scene) and Quit to Menu reload/free the shell, and
+	# _exit_tree takes the root-mounted sim down with it.
 	_sim = SIM_SCENE.instantiate()
 	get_tree().root.add_child.call_deferred(_sim)
 	await _sim.ready
-	get_tree().current_scene = _sim
+	if not is_inside_tree():
+		return
 	_sim.get_node("World").visible = false
 	_sim.get_node("Units").visible = false
 	_sim.get_node("Projectiles").visible = false
@@ -115,6 +118,9 @@ func _pan(delta: float) -> void:
 
 
 func _edge_pan_dir() -> Vector2:
+	# Hovering an interactive HUD control (buttons, menus) must not pan.
+	if get_viewport().gui_get_hovered_control() != null:
+		return Vector2.ZERO
 	var window_size: Vector2i = get_window().size
 	if window_size.x <= 0:
 		return Vector2.ZERO
@@ -164,3 +170,19 @@ func _apply_view(underground: bool, initial: bool) -> void:
 			_focus = _surface_focus
 	_terrain.set_underground_view(underground)
 	_proxies.set_underground_view(underground)
+
+
+func _exit_tree() -> void:
+	# The sim is a child of the window root (so /root/Main resolves), not of
+	# this shell — free it or scene switches would leak it and leave a stale
+	# sim running under the next scene. Deferred: the root is busy propagating
+	# the tree exit right now, and the weakref makes a double-free (tests
+	# freeing Main themselves) a no-op. Runs before the next shell's deferred
+	# sim mount, so /root/Main is free by then.
+	if _sim == null or not is_instance_valid(_sim):
+		return
+	var sim_ref: WeakRef = weakref(_sim)
+	(func() -> void:
+		var s: Node = sim_ref.get_ref()
+		if s != null:
+			s.free()).call_deferred()

@@ -16,6 +16,7 @@ extends Node3D
 
 const WORLD_SCALE: float = 0.01
 const REBUILD_INTERVAL: float = 0.15
+const FOG_REFRESH_INTERVAL: float = 0.5
 const CHUNK_COLS: int = 21
 const CHUNK_ROWS: int = 8
 
@@ -37,6 +38,7 @@ var _dirty: Dictionary = {}  # Vector2i chunk coord -> true
 var _dirty_all := false
 var _underground_view := false
 var _accum := 0.0
+var _fog_accum := 0.0
 
 
 func setup(grid: GridWorld) -> void:
@@ -117,6 +119,13 @@ func _mark_all_dirty() -> void:
 
 
 func _process(delta: float) -> void:
+	# Fog moves with vision every frame but emits no signals, and a few cell
+	# mutations (cave-in restore, ore respawn, depletion tint) are signal-less
+	# too — a slow full sweep keeps the projection convergent.
+	_fog_accum += delta
+	if _fog_accum >= FOG_REFRESH_INTERVAL:
+		_fog_accum = 0.0
+		_mark_all_dirty()
 	if _dirty.is_empty() and not _dirty_all:
 		return
 	_accum += delta

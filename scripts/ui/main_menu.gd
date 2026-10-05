@@ -747,7 +747,9 @@ func _on_play() -> void:
 	FactionManager.set_player_faction(_selected_faction_id)
 	FactionManager.pick_random_enemy_faction()
 	GameManager.roll_ai_opener()
-	get_tree().change_scene_to_file("res://scenes/main.tscn")
+	# 3D conversion branch: Play enters the main_3d shell, which mounts the
+	# untouched main.tscn sim itself (on main this loads main.tscn directly).
+	get_tree().change_scene_to_file("res://scenes/main_3d.tscn")
 
 
 ## Empty or non-numeric seed field = fresh random map every match; a parsed

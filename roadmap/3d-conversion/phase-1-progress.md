@@ -24,8 +24,26 @@ milestone; open items carried forward.
 - **Fog/layer mirroring:** the sim already flips `unit.visible` per fog and
   tracks `is_underground`; proxies mirror those instead of re-deriving them.
 - **Zero sim-code changes so far:** all Phase 1 code is new files under
-  `scripts/three_d/` + `scenes/world_3d.tscn`; the only edited existing file
-  is `project.godot` (main scene + rendering method).
+  `scripts/three_d/` + `scenes/world_3d.tscn`; the only edited existing
+  files are `project.godot` (rendering method) and `main_menu.gd` (Play
+  loads `main_3d.tscn` on this branch).
+
+## Post-review fixes (M2 follow-up)
+
+- **Scene flow:** the shell no longer hijacks `current_scene` (Play Again
+  reloaded plain 2D `main.tscn` and leaked the shell; quit-to-menu leaked
+  the sim). The shell stays `current_scene` and frees the root-mounted sim
+  in `_exit_tree`; main-menu Play now loads `main_3d.tscn` and
+  `run/main_scene` is back to the menu. New existing-file edit:
+  `main_menu.gd` (one line).
+- **Structure fog honesty:** enemy towers/walls/lanterns/mine entries no
+  longer render through fog — proxies check `fog_state_at` themselves (the
+  sim only flips `.visible` on buildings/traps); remembered cells dim like
+  `building.gd`'s gray modulate.
+- **Terrain convergence:** a 0.5 s full sweep covers the signal-less
+  changes — fog movement, cave-in restores, ore respawns, depletion tint.
+- Minor: HP bar drains from a fixed left edge; edge pan ignores the cursor
+  over interactive HUD controls.
 
 ## Known gaps carried to M3/M4
 

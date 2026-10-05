@@ -62,15 +62,18 @@ mine-attack/
 
 ## Runtime architecture
 
-> **3D conversion branch (`feat/3d-conversion`):** `run/main_scene` is
-> `scenes/main_3d.tscn`, a Node3D shell that mounts the untouched
-> `scenes/main.tscn` sim at `/root/Main` (so every hard-coded path keeps
-> working), hides its CanvasItem layers, and renders the 3D presentation in
-> `scenes/world_3d.tscn` (chunked terrain projected from `GridWorld._cells`,
-> plus unit/structure proxies mirroring the live sim — sim → render only).
-> The HUD CanvasLayer and all input handling stay on the 2D sim; the 3D
-> camera rig follows `PlayerController.view_mode_changed` for Tab. On
-> `main`, the main scene remains `scenes/ui/main_menu.tscn` → `main.tscn`.
+> **3D conversion branch (`feat/3d-conversion`):** the main menu's Play
+> flow loads `scenes/main_3d.tscn` instead of `main.tscn` (the only menu
+> change; `run/main_scene` stays `scenes/ui/main_menu.tscn`). The Node3D
+> shell mounts the untouched `scenes/main.tscn` sim at `/root/Main` (so
+> every hard-coded path keeps working), hides its CanvasItem layers, and
+> renders the 3D presentation in `scenes/world_3d.tscn` (chunked terrain
+> projected from `GridWorld._cells`, plus unit/structure proxies mirroring
+> the live sim — sim → render only). The shell stays `current_scene` and
+> frees the root-mounted sim in `_exit_tree`, so Play Again / Quit to Menu
+> work unchanged. The HUD CanvasLayer and all input handling stay on the
+> 2D sim; the 3D camera rig follows `PlayerController.view_mode_changed`
+> for Tab. On `main`, Play loads `scenes/main.tscn` directly.
 
 `scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
 

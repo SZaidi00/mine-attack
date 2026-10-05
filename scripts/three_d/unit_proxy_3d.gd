@@ -158,6 +158,9 @@ func sync_from_entity(underground_view: bool, camera_yaw: float) -> void:
 		var ratio := clampf(float(unit.hp) / float(max_hp), 0.0, 1.0)
 		_hp_bar.visible = ratio < 1.0 and ratio > 0.0
 		_hp_fg.scale.x = maxf(ratio, 0.001)
+		# QuadMesh scales about its center; shift left so the bar drains
+		# right-to-left from a fixed left edge.
+		_hp_fg.position.x = -HP_BAR_WIDTH * (1.0 - ratio) * 0.5
 		_hp_mat.albedo_color = Color(1.0 - ratio, 0.75 * ratio + 0.15, 0.15, 1.0)
 	else:
 		_hp_bar.visible = false
