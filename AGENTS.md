@@ -44,11 +44,19 @@ mine-attack/
 │   ├── effects/       # coin_popup, damage_popup, coin_pickup, reject_popup,
 │                      # order_marker, burning_ground, meteor, volcano_background
 │   ├── units/         # unit.gd + helper modules, projectile.gd, unit_pigeon.gd
-│   ├── three_d/       # Phase 1 2.5D port presentation layer (sim -> render only):
-│   │                  # main_3d.gd (shell + 55deg camera rig), terrain_3d.gd (chunked
-│   │                  # cell->mesh projection, layer-aware), entity_proxies_3d.gd
-│   │                  # (group reconcile), unit_proxy_3d.gd / structure_proxy_3d.gd
-│   │                  # (billboards/box stand-ins mirroring live 2D entities)
+│   ├── three_d/       # Phase 1 2.5D port + Phase 2 art pass presentation layer
+│   │                  # (sim -> render only): main_3d.gd (shell + 55deg camera rig,
+│   │                  # shake, AudioListener3D, quality preset), terrain_3d.gd
+│   │                  # (chunked cell->mesh projection, sculpted heights, emissive
+│   │                  # lava pass, storm snow cover), terrain_detail_3d.gd (MultiMesh
+│   │                  # ore crystals / lava embers / snow drifts), entity_proxies_3d.gd
+│   │                  # (group reconcile), unit_proxy_3d.gd + unit_model_3d.gd
+│   │                  # (procedural low-poly rigs, state-driven animation, faction
+│   │                  # accents, undead tint), structure_proxy_3d.gd (keep/tower/wall
+│   │                  # damage states, lantern OmniLight tiers, faction-reveal
+│   │                  # accents), lighting_3d.gd (weather-reactive mood), effects_3d.gd
+│   │                  # (dust motes/storm snow/embers/cave-in bursts), art_style_3d.gd
+│   │                  # (palette, materials, Potato/Standard/Fancy quality switch)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~48 test scripts)
@@ -69,7 +77,15 @@ mine-attack/
 > every hard-coded path keeps working), hides its CanvasItem layers, and
 > renders the 3D presentation in `scenes/world_3d.tscn` (chunked terrain
 > projected from `GridWorld._cells`, plus unit/structure proxies mirroring
-> the live sim — sim → render only). The shell stays `current_scene` and
+> the live sim, sim → render only). Phase 2 (art pass, see
+> roadmap/3d-conversion/phase-2-art-pass.md + style-guide.md) replaced the
+> placeholder stand-ins with procedural flat-shaded low-poly models
+> (unit_model_3d.gd; structure models with damage states, faction-reveal
+> accents, lantern OmniLight tiers), sculpted terrain with an emissive lava
+> pass and storm snow cover, weather-reactive lighting (lighting_3d.gd),
+> particle effects (effects_3d.gd), camera shake, and Potato/Standard/Fancy
+> quality presets (ArtStyle3D.apply_quality()). The shell stays
+> `current_scene` and
 > frees the root-mounted sim in `_exit_tree`, so Play Again / Quit to Menu
 > work unchanged. The HUD CanvasLayer and all input handling stay on the
 > 2D sim; the 3D camera rig follows `PlayerController.view_mode_changed`

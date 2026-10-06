@@ -14,6 +14,7 @@
 extends Node3D
 
 const SIM_SCENE: PackedScene = preload("res://scenes/main.tscn")
+const EFFECTS_3D_SCRIPT: GDScript = preload("res://scripts/three_d/effects_3d.gd")
 
 ## 3D units per 2D pixel. The map is ~2560x800 px, i.e. ~26x8 units.
 const WORLD_SCALE: float = 0.01
@@ -30,16 +31,37 @@ var _pc: Node
 var _camera: Camera3D
 var _terrain: Node3D
 var _proxies: Node3D
+var _effects: Node3D
+var _lighting: Lighting3D
+var _listener: AudioListener3D
 var _focus: Vector3 = Vector3.ZERO
 var _surface_focus: Vector3
 var _underground_focus: Vector3
 var _dolly: float = DOLLY_START
+var _shake: float = 0.0
 
 
 func _ready() -> void:
+	# §2.7: the quality preset gates shadows/fog/particles globally; UI to
+	# switch presets is out of scope for the shell.
+	ArtStyle3D.apply_quality(ArtStyle3D.auto_detect_quality())
 	_camera = $CameraRig/Camera3D
 	_terrain = $World3D/Terrain3D
 	_proxies = $World3D/EntityProxies
+
+	# §2.6: positional audio pans against the live 2D Camera2D, which mirrors
+	# this rig (it still receives the same input invisibly), so a 3D listener
+	# parented to the rig keeps world-attached sounds positioned correctly.
+	_listener = AudioListener3D.new()
+	_listener.name = "AudioListener3D"
+	$CameraRig.add_child(_listener)
+	_listener.make_current()
+
+	# §2.4: weather-reactive mood driver, live next to the light rig it owns.
+	_lighting = Lighting3D.new()
+	_lighting.name = "Lighting3D"
+	$World3D.add_child(_lighting)
+	_lighting.setup(_camera)
 
 	# Mount the untouched 2D game at "/root/Main" (deferred so the whole
 	# scene enters the tree normally), then hide its CanvasItem layers: the
@@ -68,7 +90,17 @@ func _ready() -> void:
 
 	var grid: GridWorld = _sim.get_node("World/GridWorld") as GridWorld
 	_terrain.setup(grid)
+	# §2.5: art-directed effects attach the stub script onto the existing
+	# Effects3D container (node paths stay stable for tests/proxies); wire it
+	# after terrain, before the proxies reconcile.
+	_effects = $World3D/Effects3D
+	_effects.set_script(EFFECTS_3D_SCRIPT)
+	(_effects as Effects3D).setup(grid, _camera)
 	_proxies.setup($World3D/Units3D, $World3D/Structures3D, grid, $World3D/Effects3D, _camera)
+
+	# §2.5 juice: world events shake the rig (max-wins, reduced-motion aware).
+	grid.cave_in_occurred.connect(_on_cave_in_occurred)
+	grid.lava_risen.connect(_on_lava_risen)
 
 	# PlayerController is the single input authority for view switching.
 	_pc = _sim.get_node("PlayerController")
@@ -85,9 +117,35 @@ func _process(delta: float) -> void:
 	# Glue the Camera3D to the rig focus at the fixed pitch; dolly changes
 	# only the horizontal distance (and derived height), never the pitch.
 	var height: float = _dolly * tan(deg_to_rad(PITCH_DEGREES))
-	$CameraRig.position = _focus
+	$CameraRig.position = _focus + _shake_offset()
+	if _shake > 0.0:
+		_shake = maxf(0.0, _shake - 4.0 * delta)
 	_camera.position = Vector3(0.0, height, _dolly)
 	_camera.rotation_degrees = Vector3(-PITCH_DEGREES, 0.0, 0.0)
+
+
+## §2.5 juice: register a world-event rumble. Max-wins like the 2D
+## PlayerController shake; a no-op under the reduced-motion accessibility
+## setting (which also silences the invisible 2D shake).
+func add_shake(strength: float) -> void:
+	if SettingsManager.get_reduced_motion():
+		return
+	_shake = maxf(_shake, strength)
+
+
+func _shake_offset() -> Vector3:
+	if _shake <= 0.0:
+		return Vector3.ZERO
+	var amplitude: float = _shake * 0.05
+	return Vector3(randf() - 0.5, (randf() - 0.5) * 0.5, randf() - 0.5) * amplitude * 2.0
+
+
+func _on_cave_in_occurred(_center: Vector2i) -> void:
+	add_shake(0.5)
+
+
+func _on_lava_risen(_layers: int) -> void:
+	add_shake(0.3)
 
 
 func _pan(delta: float) -> void:
@@ -170,6 +228,8 @@ func _apply_view(underground: bool, initial: bool) -> void:
 			_focus = _surface_focus
 	_terrain.set_underground_view(underground)
 	_proxies.set_underground_view(underground)
+	if _lighting != null:
+		_lighting.set_underground_view(underground)
 
 
 func _exit_tree() -> void:
