@@ -50,7 +50,9 @@ mine-attack/
 │   │                  # AudioListener3D, quality preset), terrain_3d.gd
 │   │                  # (chunked cell->mesh projection, sculpted heights + a
 │   │                  # read-only world_height_at() ground query, emissive
-│   │                  # lava pass, storm snow cover), terrain_detail_3d.gd (MultiMesh
+│   │                  # lava pass, storm snow cover; 3D-rework phase 3 relit the
+│   │                  # albedo pass so the ground receives mood light, sun shadows,
+│   │                  # and depth fog), terrain_detail_3d.gd (MultiMesh
 │   │                  # ore crystals / lava embers / snow drifts), entity_proxies_3d.gd
 │   │                  # (group reconcile), unit_proxy_3d.gd (1.4x proxy-root
 │   │                  # scale-up, counter-scaled HP bars) + unit_model_3d.gd
@@ -59,7 +61,10 @@ mine-attack/
 │   │                  # wall-footprint-capped proxy-root scale — ladders stay 1x;
 │   │                  # keep/tower/wall damage states, lantern OmniLight tiers,
 │   │                  # counter-scaled range disc, faction-reveal
-│   │                  # accents), lighting_3d.gd (weather-reactive mood), effects_3d.gd
+│   │                  # accents), lighting_3d.gd (weather-reactive mood + the
+│   │                  # phase-3 post stack: ACES tonemap, emissive bloom, depth fog
+│   │                  # at every tier, SSAO on Fancy — Lighting3D.apply_quality_settings()),
+│   │                  # effects_3d.gd
 │   │                  # (dust motes/storm snow/embers/cave-in bursts), art_style_3d.gd
 │   │                  # (palette, materials, Potato/Standard/Fancy quality switch),
 │   │                  # plus the 3D-rework Phase 1 feedback layer:
@@ -99,7 +104,12 @@ mine-attack/
 > accents, lantern OmniLight tiers), sculpted terrain with an emissive lava
 > pass and storm snow cover, weather-reactive lighting (lighting_3d.gd),
 > particle effects (effects_3d.gd), camera shake, and Potato/Standard/Fancy
-> quality presets (ArtStyle3D.apply_quality()). The shell stays
+> quality presets (ArtStyle3D.apply_quality()). 3D-rework Phase 3
+> (roadmap/3d-rework/) relit the terrain (lit vertex-color albedo receiving
+> mood light, sun shadows, and fog) and added the post stack: ACES
+> tonemapping at every preset, emissive bloom on Standard+, depth fog at all
+> tiers, and SSAO on Fancy (Lighting3D.apply_quality_settings()).
+> The shell stays
 > `current_scene` and
 > frees the root-mounted sim in `_exit_tree`, so Play Again / Quit to Menu
 > work unchanged. The HUD CanvasLayer and all input handling stay on the

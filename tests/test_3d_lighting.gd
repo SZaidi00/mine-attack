@@ -9,6 +9,7 @@ var _shell: Node
 var _main: Node
 var _lighting: Lighting3D
 var _sun: DirectionalLight3D
+var _env: Environment
 var _prev_reduced_motion: bool
 
 
@@ -30,6 +31,7 @@ func before_all() -> void:
 	get_tree().current_scene = _main
 	_lighting = _shell.get_node("World3D/Lighting3D")
 	_sun = _shell.get_node("World3D/Lights/DirectionalLight3D")
+	_env = _shell.get_node("World3D/Lights/WorldEnvironment").environment
 	await _frames(10)
 
 
@@ -132,7 +134,8 @@ func test_underground_view_darkens_mine_and_back() -> void:
 	# directly; here the lighting hook is the contract under test).
 	_lighting.set_underground_view(true)
 	var darkened := false
-	for i in range(120):
+	# 200 frames: the headless runner's frame budget stretches the ~2s tween.
+	for i in range(200):
 		await get_tree().process_frame
 		if _lighting.get_mood_name() == "underground" and _sun.light_energy < base_energy * 0.6:
 			darkened = true
@@ -177,3 +180,63 @@ func test_quality_presets_flip_shadow_gate() -> void:
 	ArtStyle3D.apply_quality(ArtStyle3D.Quality.FANCY)
 	assert_true(ArtStyle3D.shadows_enabled(), "Fancy enables shadows")
 	ArtStyle3D.apply_quality(detected)  # Restore the shell's startup preset.
+
+
+# ─── 3D rework phase 3: post-processing & lit terrain ───
+
+func test_post_stack_tonemaps_and_glow_threshold_targets_emissives() -> void:
+	assert_not_null(_env)
+	if _env == null:
+		return
+	assert_eq(_env.tonemap_mode, Environment.TONE_MAPPER_ACES,
+		"the world environment tonemaps with ACES")
+	assert_true(_env.glow_hdr_threshold >= 1.0,
+		"glow threshold sits at/above 1.0 so only real emissives bloom")
+
+
+func test_quality_presets_flip_glow_ssao_fog_shadows() -> void:
+	var detected: int = ArtStyle3D.auto_detect_quality()
+	# Fancy: the full stack.
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.FANCY)
+	_lighting.apply_quality_settings()
+	assert_true(_env.glow_enabled, "Fancy blooms")
+	assert_true(_env.ssao_enabled, "Fancy gets SSAO")
+	assert_true(_env.fog_enabled, "depth fog runs on every preset")
+	assert_true(_sun.shadow_enabled, "Fancy keeps shadows")
+	assert_eq(_sun.directional_shadow_max_distance, ArtStyle3D.shadow_distance(),
+		"shadow distance tuned to the visible board")
+	# Standard: bloom + fog, no SSAO/shadows.
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.STANDARD)
+	_lighting.apply_quality_settings()
+	assert_true(_env.glow_enabled, "Standard blooms")
+	assert_false(_env.ssao_enabled, "Standard skips SSAO")
+	assert_true(_env.fog_enabled, "Standard keeps depth fog")
+	assert_false(_sun.shadow_enabled, "Standard keeps blob-shadow fallback")
+	# Potato: flat and cheap, fog-only.
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.POTATO)
+	_lighting.apply_quality_settings()
+	assert_false(_env.glow_enabled, "Potato stays flat (fps unchanged)")
+	assert_false(_env.ssao_enabled, "Potato skips SSAO")
+	assert_true(_env.fog_enabled, "Potato still gets cheap depth fog")
+	assert_false(_sun.shadow_enabled, "Potato keeps shadows off")
+	ArtStyle3D.apply_quality(detected)  # Restore the shell's startup preset.
+	_lighting.apply_quality_settings()
+
+
+func test_terrain_albedo_pass_is_lit_with_normals() -> void:
+	var terrain = _shell.get_node("World3D/Terrain3D")
+	assert_true(terrain.uses_lit_terrain(),
+		"terrain albedo material is lit (moods/shadows/fog reach the ground)")
+	# Surface view rebuilds every chunk from the start; a lit chunk mesh
+	# must carry per-face normals for the shading to work.
+	await _frames(20)
+	var found_normals := false
+	for child in terrain.get_children():
+		var chunk := child as MeshInstance3D
+		if chunk == null or chunk.mesh == null:
+			continue
+		var arrays: Array = chunk.mesh.surface_get_arrays(0)
+		if not arrays[Mesh.ARRAY_NORMAL].is_empty():
+			found_normals = true
+			break
+	assert_true(found_normals, "rebuilt terrain chunks have face normals")

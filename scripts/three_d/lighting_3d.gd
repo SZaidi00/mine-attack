@@ -2,7 +2,9 @@
 ##
 ## Weather-reactive mood controller: owns the WorldEnvironment + sun found
 ## under its parent's "Lights" node and tweens them toward per-mood targets
-## (rate ~2/s) in _process. Base overcast; the underground view drops to a
+## (rate ~2/s) in _process. Also applies the 3D rework phase 3 post stack:
+## ACES tonemapping, emissive bloom (Standard+), depth fog (all presets) and
+## SSAO (Fancy), all gated by ArtStyle3D.apply_quality_settings(). Base overcast; the underground view drops to a
 ## dark, faintly warm mine; snowstorms flatten to white gloom; volcano events
 ## cast a menacing red-orange from above (with the warning acting as a subtle
 ## pre-tension); an underground lava flood tints the ambient toward the lava
@@ -19,6 +21,9 @@ class_name Lighting3D
 const TWEEN_RATE: float = 2.0
 
 ## Per-mood light targets: sun color/energy + ambient color/energy.
+## 3D rework phase 3 retune: the terrain albedo pass is lit now, and ACES
+## tonemapping compresses brights — the underground mood needed a lift so the
+## mine reads dark-warm rather than black.
 const _MOODS: Dictionary = {
 	"overcast": {
 		"sun_color": Color(0.82, 0.87, 0.96),
@@ -28,9 +33,9 @@ const _MOODS: Dictionary = {
 	},
 	"underground": {
 		"sun_color": Color(0.9, 0.78, 0.6),
-		"sun_energy": 0.4,
+		"sun_energy": 0.5,
 		"ambient_color": Color(0.16, 0.19, 0.24),
-		"ambient_energy": 0.22,
+		"ambient_energy": 0.32,
 	},
 	"storm": {
 		"sun_color": Color(0.75, 0.8, 0.88),
@@ -71,20 +76,29 @@ func setup(camera: Camera3D) -> void:
 		var env_node: WorldEnvironment = parent.get_node_or_null("Lights/WorldEnvironment") as WorldEnvironment
 		if env_node != null:
 			_env = env_node.environment
-	if _sun != null:
-		_sun.shadow_enabled = ArtStyle3D.shadows_enabled()
-	if _env != null:
-		# Depth fog is a Fancy-only nicety; the dark background stays at
-		# every preset.
-		_env.fog_enabled = ArtStyle3D.shadows_enabled()
-		_env.fog_light_color = Color(0.09, 0.11, 0.15)
-		_env.fog_density = 0.012
+	if _sun != null or _env != null:
+		apply_quality_settings()
 	WeatherManager.snowstorm_started.connect(_on_snowstorm_started)
 	WeatherManager.snowstorm_ended.connect(_on_snowstorm_ended)
 	WeatherManager.volcano_warning_started.connect(_on_volcano_warning_started)
 	WeatherManager.volcano_started.connect(_on_volcano_started)
 	WeatherManager.volcano_ended.connect(_on_volcano_ended)
 	_fetch_grid()
+
+
+## 3D rework phase 3: the post-processing preset gates live on ArtStyle3D
+## (glow Standard+, SSAO Fancy, fog everywhere, Fancy-only shadows) and land
+## here on the owned rig — call again after a runtime quality flip.
+func apply_quality_settings() -> void:
+	if _sun != null:
+		_sun.shadow_enabled = ArtStyle3D.shadows_enabled()
+		_sun.directional_shadow_max_distance = ArtStyle3D.shadow_distance()
+	if _env != null:
+		_env.glow_enabled = ArtStyle3D.glow_enabled()
+		_env.ssao_enabled = ArtStyle3D.ssao_enabled()
+		# Atmospheric depth cueing at every tier; the fog color/density are
+		# scene defaults. Fog-of-war stays the much darker vertex-color read.
+		_env.fog_enabled = ArtStyle3D.fog_enabled()
 
 
 ## Underground-view mood hook. The shell's view switch and (lazily connected)

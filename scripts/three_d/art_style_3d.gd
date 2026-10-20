@@ -68,6 +68,29 @@ static func shadows_enabled() -> bool:
 	return quality == Quality.FANCY
 
 
+## Directional shadow frustum depth: covers the visible board (max-zoom
+## viewport span) rather than the whole map, so the shadow pass stays cheap.
+static func shadow_distance() -> float:
+	return 40.0
+
+
+## 3D rework phase 3: bloom on Standard and up — only true emissives
+## (energy > glow threshold) halo; Potato stays flat to protect fps.
+static func glow_enabled() -> bool:
+	return quality != Quality.POTATO
+
+
+## Screen-space ambient occlusion, Fancy only (gentlest depth cueing tier).
+static func ssao_enabled() -> bool:
+	return quality == Quality.FANCY
+
+
+## Atmospheric depth fog is nearly free, so it runs on every preset — the
+## fog-of-war darkening stays a separate, unmistakably darker read.
+static func fog_enabled() -> bool:
+	return true
+
+
 ## Particle emission count multiplier per preset.
 static func particle_mult() -> float:
 	match quality:

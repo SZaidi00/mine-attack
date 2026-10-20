@@ -67,14 +67,19 @@ are thin posts with a warm glowing head — the dynamic-light heroes.
 
 ## Quality presets (§2.7)
 
-| Preset | Shadows | Particles | Decorative detail |
-|---|---|---|---|
-| Potato | off | 35% | off |
-| Standard | off | 70% | on |
-| Fancy | on | 100% | on |
+| Preset | Shadows | Particles | Decorative detail | Bloom | Depth fog | SSAO |
+|---|---|---|---|---|---|---|
+| Potato | off | 35% | off | off | on | off |
+| Standard | off | 70% | on | on | on | off |
+| Fancy | on | 100% | on | on | on | on |
 
 `ArtStyle3D.apply_quality()` is the single switch; desktop defaults to Fancy,
-web to Standard (`auto_detect_quality()`).
+web to Standard (`auto_detect_quality()`). 3D rework phase 3 added the post
+stack on top of the scene's Environment (ACES tonemapping at every preset,
+emissive bloom gated by `glow_enabled()`, depth fog on all presets, SSAO on
+Fancy); `Lighting3D.apply_quality_settings()` lands the toggles on the live
+light rig, and the terrain albedo pass is lit, so shadows/fog/moods reach
+the ground.
 
 ## Animation
 

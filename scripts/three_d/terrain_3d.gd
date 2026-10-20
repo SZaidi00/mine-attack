@@ -18,9 +18,15 @@
 ## quad via fog_state_at() (fog / remembered / visible), same scheme as the
 ## 2D overlay; per-chunk decorations (ore crystals, snow drifts, embers)
 ## live in the TerrainDetail3D child.
+##
+## 3D rework phase 3: the albedo pass is a LIT vertex-color material, so the
+## ground receives the mood lighting, sun shadows, and depth fog (flat face
+## normals generated per rebuild). LIT_TERRAIN=false restores the old
+## unshaded matte for A/B.
 extends Node3D
 
 const WORLD_SCALE: float = 0.01
+const LIT_TERRAIN: bool = true
 const REBUILD_INTERVAL: float = 0.15
 const FOG_REFRESH_INTERVAL: float = 0.5
 const CHUNK_COLS: int = 21
@@ -61,8 +67,9 @@ func setup(grid: GridWorld) -> void:
 	_grid = grid
 	_mat = StandardMaterial3D.new()
 	_mat.vertex_color_use_as_albedo = true
-	_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_mat.roughness = 1.0
+	if not LIT_TERRAIN:
+		_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	# One shared emissive material for every glow chunk; _process pulses its
 	# emission_energy_multiplier (ArtStyle3D's cache makes it shared state).
 	_glow_mat = ArtStyle3D.get_material(ArtStyle3D.PALETTE.lava, ArtStyle3D.PALETTE.lava, 1.0)
@@ -107,6 +114,12 @@ func setup(grid: GridWorld) -> void:
 
 func get_snow_level() -> float:
 	return _snow_level
+
+
+## 3D rework phase 3: true when the albedo pass is a lit material (receives
+## mood light, sun shadows, and fog) instead of the old unshaded matte.
+func uses_lit_terrain() -> bool:
+	return _mat != null and _mat.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED
 
 
 ## Read-only ground height in world units at a world XZ position — the same
@@ -263,6 +276,10 @@ func _rebuild_chunk(key: Vector2i) -> void:
 				1:
 					color = color.lerp(Constants.FOG_COLOR, Constants.FOG_MEMORY_ALPHA)
 			_add_quad(st, cx, cz, color, heights[0], heights[1], heights[2], heights[3])
+	if LIT_TERRAIN:
+		# Flat per-face normals off the sculpted corner heights; the glow
+		# pass is unshaded/emissive and needs none.
+		st.generate_normals()
 	chunk.mesh = st.commit()
 	if chunk.mesh != null:
 		chunk.set_material_override(_mat)

@@ -1,6 +1,6 @@
 # 3D Readability Rework — Overview
 
-**Status:** Phase 1 implemented (2026-10-19); Phase 2 implemented (2026-10-20); phases 3–6 not started.
+**Status:** Phase 1 implemented (2026-10-19); Phase 2 implemented (2026-10-20); Phase 3 implemented (2026-10-20); phases 4–6 not started.
 **Branch:** `feat/3d-conversion` (Phase 1 + 2
 of the original 3D conversion are complete; see `roadmap/3d-conversion/`).
 
