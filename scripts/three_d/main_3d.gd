@@ -19,8 +19,16 @@ const EFFECTS_3D_SCRIPT: GDScript = preload("res://scripts/three_d/effects_3d.gd
 ## 3D units per 2D pixel. The map is ~2560x800 px, i.e. ~26x8 units.
 const WORLD_SCALE: float = 0.01
 const PITCH_DEGREES: float = 55.0
+## 3D rework Phase 2: narrow vertical FOV (Godot's default is 75). The SC2/
+## TAB trick — apparent size at the same dolly jumps ~1.6x and the board
+## stops reading like a tilted diorama. Same for every quality preset;
+## main_3d.gd re-asserts it in _ready so scene edits can't silently revert.
+const CAMERA_FOV: float = 45.0
+## Dolly retuned for the narrow FOV: DOLLY_START puts a 1.4x-scaled humanoid
+## at ~31 px on a 1080p frame, DOLLY_MAX still covers a player's half
+## (~13 units of ground width need dolly ~5.2; 16 shows the whole map).
 const DOLLY_MIN: float = 3.0
-const DOLLY_MAX: float = 25.0
+const DOLLY_MAX: float = 16.0
 const DOLLY_WHEEL_STEP: float = 1.1
 const DOLLY_START: float = 12.0
 const PAN_SPEED: float = 10.0
@@ -48,6 +56,7 @@ func _ready() -> void:
 	# switch presets is out of scope for the shell.
 	ArtStyle3D.apply_quality(ArtStyle3D.auto_detect_quality())
 	_camera = $CameraRig/Camera3D
+	_camera.fov = CAMERA_FOV
 	_terrain = $World3D/Terrain3D
 	_proxies = $World3D/EntityProxies
 
@@ -174,7 +183,12 @@ func _pan(delta: float) -> void:
 	var speed: float = PAN_SPEED * (_dolly / DOLLY_START)
 	_focus.x += dir.x * speed * delta
 	_focus.z += dir.y * speed * delta
-	# Same clamp rect player_camera.gd uses for the 2D camera, in 3D units.
+	_clamp_focus()
+
+
+## Same clamp rect player_camera.gd uses for the 2D camera, in 3D units —
+## shared by edge/arrow panning and zoom-to-cursor.
+func _clamp_focus() -> void:
 	var x_range := Vector2(
 		(GridWorld.X_MIN - 2) * GridWorld.CELL_SIZE,
 		(GridWorld.X_MAX + 3) * GridWorld.CELL_SIZE) * WORLD_SCALE
@@ -208,15 +222,62 @@ func _edge_pan_dir() -> Vector2:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		# Wheel events double as the camera_zoom_in/out actions in the input
-		# map; handling the raw button covers both bindings in one branch.
+		# map; handling the raw button covers both bindings in one branch and
+		# hands us the cursor position for zoom-to-cursor.
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_dolly = clampf(_dolly / DOLLY_WHEEL_STEP, DOLLY_MIN, DOLLY_MAX)
+			_zoom_toward(event.position, 1.0 / DOLLY_WHEEL_STEP)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_dolly = clampf(_dolly * DOLLY_WHEEL_STEP, DOLLY_MIN, DOLLY_MAX)
+			_zoom_toward(event.position, DOLLY_WHEEL_STEP)
 	elif event.is_action_pressed(Constants.INPUT_CAMERA_ZOOM_IN):
-		_dolly = clampf(_dolly / DOLLY_WHEEL_STEP, DOLLY_MIN, DOLLY_MAX)
+		_zoom_toward(null, 1.0 / DOLLY_WHEEL_STEP)
 	elif event.is_action_pressed(Constants.INPUT_CAMERA_ZOOM_OUT):
-		_dolly = clampf(_dolly * DOLLY_WHEEL_STEP, DOLLY_MIN, DOLLY_MAX)
+		_zoom_toward(null, DOLLY_WHEEL_STEP)
+
+
+## Wheel zoom dolls toward the cursor's terrain point (the SC2/TAB
+## convention) instead of the screen center: the focus glides along the line
+## to the anchor in proportion to the dolly change, so the ground point under
+## the cursor keeps its screen position across the zoom. Keyboard zoom (the
+## camera_zoom actions) passes a null screen pos and anchors on the viewport
+## center instead.
+func _zoom_toward(screen_pos: Variant, factor: float) -> void:
+	var new_dolly := clampf(_dolly * factor, DOLLY_MIN, DOLLY_MAX)
+	if is_equal_approx(new_dolly, _dolly):
+		return
+	var anchor: Variant = _terrain_point_at(screen_pos)
+	if anchor != null:
+		var t := 1.0 - new_dolly / _dolly
+		_focus.x += (anchor.x - _focus.x) * t
+		_focus.z += (anchor.z - _focus.z) * t
+		_clamp_focus()
+	_dolly = new_dolly
+
+
+## World-space ground point under a screen position (null = viewport
+## center): the camera ray is iterated a few times against the sculpted
+## terrain heights, which vary gently (+-0.03 open ground, wall ridges to
+## 0.2) so the fixed-point loop converges almost immediately. Null when the
+## ray never meets the ground (looking at the sky) or the rig isn't up yet.
+func _terrain_point_at(screen_pos: Variant) -> Variant:
+	if _camera == null or _terrain == null:
+		return null
+	var vp: Viewport = get_viewport()
+	if vp == null:
+		return null
+	var pos: Vector2 = vp.get_visible_rect().size * 0.5 if screen_pos == null else screen_pos
+	var origin := _camera.project_ray_origin(pos)
+	var dir := _camera.project_ray_normal(pos)
+	if dir.y > -0.001:
+		return null
+	var ground_y := 0.0
+	var hit := Vector3.ZERO
+	for i in range(3):
+		var t := (ground_y - origin.y) / dir.y
+		if t <= 0.0:
+			return null
+		hit = origin + dir * t
+		ground_y = float(_terrain.call("world_height_at", hit.x, hit.z))
+	return hit
 
 
 ## PlayerController (input authority) says the Tab view changed; the rig

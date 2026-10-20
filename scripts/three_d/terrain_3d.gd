@@ -109,6 +109,23 @@ func get_snow_level() -> float:
 	return _snow_level
 
 
+## Read-only ground height in world units at a world XZ position — the same
+## deterministic sculpted corner heights the render pass uses, so a query
+## lands on the visible ground (the underground layer is flat 0). The camera
+## rig's zoom-to-cursor ray marches against this.
+func world_height_at(world_x: float, world_z: float) -> float:
+	if _grid == null:
+		return 0.0
+	var cell_pos := _grid.world_to_grid(Vector2(world_x / WORLD_SCALE, world_z / WORLD_SCALE))
+	if not _grid.has_cell(cell_pos):
+		return 0.0
+	var cell: GridWorld.Cell = _grid.get_cell(cell_pos)
+	if _underground_view or cell.type == GridWorld.CellType.EMPTY:
+		return 0.0
+	var heights := _corner_heights(cell_pos, cell)
+	return (heights[0] + heights[1] + heights[2] + heights[3]) * 0.25
+
+
 func _on_snowstorm_started() -> void:
 	_snow_target = 1.0
 

@@ -45,15 +45,20 @@ mine-attack/
 │                      # order_marker, burning_ground, meteor, volcano_background
 │   ├── units/         # unit.gd + helper modules, projectile.gd, unit_pigeon.gd
 │   ├── three_d/       # Phase 1 2.5D port + Phase 2 art pass presentation layer
-│   │                  # (sim -> render only): main_3d.gd (shell + 55deg camera rig,
-│   │                  # shake, AudioListener3D, quality preset), terrain_3d.gd
-│   │                  # (chunked cell->mesh projection, sculpted heights, emissive
+│   │                  # (sim -> render only): main_3d.gd (shell + 45deg-FOV camera
+│   │                  # rig, dolly 12 within 3-16 with zoom-to-cursor, shake,
+│   │                  # AudioListener3D, quality preset), terrain_3d.gd
+│   │                  # (chunked cell->mesh projection, sculpted heights + a
+│   │                  # read-only world_height_at() ground query, emissive
 │   │                  # lava pass, storm snow cover), terrain_detail_3d.gd (MultiMesh
 │   │                  # ore crystals / lava embers / snow drifts), entity_proxies_3d.gd
-│   │                  # (group reconcile), unit_proxy_3d.gd + unit_model_3d.gd
+│   │                  # (group reconcile), unit_proxy_3d.gd (1.4x proxy-root
+│   │                  # scale-up, counter-scaled HP bars) + unit_model_3d.gd
 │   │                  # (procedural low-poly rigs, state-driven animation, faction
-│   │                  # accents, undead tint), structure_proxy_3d.gd (keep/tower/wall
-│   │                  # damage states, lantern OmniLight tiers, faction-reveal
+│   │                  # accents, undead tint), structure_proxy_3d.gd (1.08x
+│   │                  # wall-footprint-capped proxy-root scale — ladders stay 1x;
+│   │                  # keep/tower/wall damage states, lantern OmniLight tiers,
+│   │                  # counter-scaled range disc, faction-reveal
 │   │                  # accents), lighting_3d.gd (weather-reactive mood), effects_3d.gd
 │   │                  # (dust motes/storm snow/embers/cave-in bursts), art_style_3d.gd
 │   │                  # (palette, materials, Potato/Standard/Fancy quality switch),
@@ -107,7 +112,16 @@ mine-attack/
 > the sim spawn points branch to them via Presentation3D.shell() when the
 > shell is `current_scene`, keeping the 2D path for standalone main.tscn and
 > tests), and gold range discs for the selected tower and the build-ghost
-> preview (range_disc_3d.gd). On `main`, Play loads `scenes/main.tscn` directly.
+> preview (range_disc_3d.gd). 3D-rework Phase 2 (roadmap/3d-rework/) reframed
+> the camera and scale: a 45deg FOV (same for all quality presets), a retuned
+> dolly range (start 12, clamped 3-16) that keeps a scaled humanoid ~30 px
+> at 1080p while max zoom-out still covers a player's half, zoom-to-cursor
+> wheel zoom (the rig ray-marches the sculpted terrain via
+> `Terrain3D.world_height_at()` and glides the focus toward the cursor's
+> ground point), and a proxy-root scale-up — units 1.4x, structures 1.08x so a
+> wall still fits its cell (ladders unscaled) — with HP bars, selection-ring
+> radii, and the tower range disc counter-scaled to world units. On `main`,
+> Play loads `scenes/main.tscn` directly.
 
 `scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
 

@@ -17,8 +17,11 @@ class_name SelectionRings3D
 
 const SELECT_COLOR := Color(0.55, 0.85, 1.0, 0.95)
 const HOVER_COLOR := Color(0.55, 0.85, 1.0, 0.4)
-const BASE_RADIUS: float = 0.24
-const FLYER_RADIUS: float = 0.44
+## 3D rework Phase 2: the unit proxies are scaled up by
+## UnitProxy3D.PROXY_SCALE, and the rings track the model footprint so a
+## selected unit's ring still hugs its silhouette.
+const BASE_RADIUS: float = 0.24 * UnitProxy3D.PROXY_SCALE
+const FLYER_RADIUS: float = 0.44 * UnitProxy3D.PROXY_SCALE
 const PULSE_AMOUNT: float = 0.06
 const PULSE_PERIOD: float = 0.8
 

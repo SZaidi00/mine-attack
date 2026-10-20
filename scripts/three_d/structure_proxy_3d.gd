@@ -16,6 +16,14 @@ const WORLD_SCALE: float = 0.01
 const CELL: float = 32.0 * WORLD_SCALE
 const CONSTRUCTION_ALPHA: float = 0.55
 const REMEMBERED_COLOR := Color(0.3, 0.3, 0.32)
+## 3D rework Phase 2: proxy-root scale-up, capped by the wall footprint —
+## the widest wall part (the capstone at 0.92*CELL) must stay inside its
+## CELL, so PROXY_SCALE <= 1/0.92 ~= 1.087. World-absolute parts stay honest
+## under the root scale on their own: the lantern OmniLight3D range is a
+## world-unit light property (Godot ignores node scale for lights) and the
+## tower range disc is counter-scaled in _build_tower. Ladders skip the
+## scale entirely (their rail endpoints are exact world positions).
+const PROXY_SCALE: float = 1.08
 
 enum _Kind { GENERIC, BUILDING, TOWER, LANTERN, WALL, TRAP, MINE_ENTRY, LADDER }
 
@@ -107,6 +115,11 @@ static func create(s: Node2D, grid: GridWorld) -> StructureProxy3D:
 	else:
 		p._kind = _Kind.GENERIC
 		p._add_body(ArtStyle3D.make_box(Vector3(CELL, 0.5, CELL), Color(0.5, 0.5, 0.55)), Color(0.5, 0.5, 0.55))
+
+	# Phase 2 scale-up at the proxy root (see PROXY_SCALE); ladders keep
+	# scale 1 so their rail endpoints stay on the exact world positions.
+	if p._kind != _Kind.LADDER:
+		p.scale = Vector3.ONE * PROXY_SCALE
 
 	if p._kind == _Kind.TOWER or p._kind == _Kind.WALL:
 		p._tilt_sign = -1.0 if p._enemy else 1.0
@@ -259,8 +272,11 @@ func _build_tower() -> void:
 		rock.rotation.y = h * PI
 		_rubble.add_child(rock)
 
-	# Attack-range disc, shown while the sim tower is selected.
+	# Attack-range disc, shown while the sim tower is selected. The radius is
+	# authored in world units; counter the proxy-root scale so the world
+	# radius still matches Tower.attack_range exactly.
 	_range_disc = RangeDisc3D.create(1.0)
+	_range_disc.scale = Vector3.ONE / PROXY_SCALE
 	_range_disc.visible = false
 	add_child(_range_disc)
 

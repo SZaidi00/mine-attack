@@ -3,7 +3,8 @@
 ## A Node3D that mirrors one live 2D unit: position, flight altitude, fog
 ## visibility (the sim flips unit.visible per fog — mirrored, never
 ## reimplemented), the sim's layer (surface vs underground), HP as a tiny
-## camera-facing bar, and death (unit.died -> proxy dead; the manager frees
+## camera-facing bar (counter-scaled, so the Phase 2 proxy-root scale-up
+## doesn't grow it), and death (unit.died -> proxy dead; the manager frees
 ## it, the proxy never writes to the unit). The Phase 1 billboard Sprite3D
 ## is replaced by a procedural UnitModel3D rig; the ground blob shadow and
 ## the fog/HP mirroring are unchanged.
@@ -11,8 +12,14 @@ extends Node3D
 class_name UnitProxy3D
 
 const WORLD_SCALE: float = 0.01
+## 3D rework Phase 2: proxy-root scale-up so units read at RTS distance — the
+## models themselves stay untouched (unit_model_3d.gd). The blob shadow is a
+## child and scales along; the HP bar is counter-scaled so it keeps its
+## world size, and the selection rings track the scale via this constant.
+const PROXY_SCALE: float = 1.4
 ## Phase 1 3D-rework sizing: ~half the old bar, so a selected army reads as
 ## neat ticks instead of a stripe band; the dark plate behind is the border.
+## All sizes are world-space (pre-proxy-scale); _build_hp_bar counter-scales.
 const HP_BAR_WIDTH: float = 0.28
 const HP_BAR_HEIGHT: float = 0.04
 const HP_BAR_BORDER: float = 0.015
@@ -39,6 +46,7 @@ static func create(u: Node2D) -> UnitProxy3D:
 	var p := UnitProxy3D.new()
 	p.unit = u
 	p._underground_unit = u.is_underground
+	p.scale = Vector3.ONE * PROXY_SCALE
 
 	p._model = UnitModel3D.create(u)
 	p._model_height = p._model.model_height
@@ -84,7 +92,11 @@ static func _get_bg_material() -> StandardMaterial3D:
 
 func _build_hp_bar() -> void:
 	_hp_bar = Node3D.new()
-	_hp_bar.position.y = _model_height + HP_BAR_LIFT
+	# Counter the proxy-root scale: the bar keeps its authored world size and
+	# still crowns the scaled silhouette (model_height is pre-scale, so the
+	# lift is divided back out of the scaled parent space).
+	_hp_bar.scale = Vector3.ONE / PROXY_SCALE
+	_hp_bar.position.y = (_model_height + HP_BAR_LIFT) / PROXY_SCALE
 	# Dark border plate: slightly larger than the fill so it frames it.
 	var bg := MeshInstance3D.new()
 	var bg_mesh := QuadMesh.new()
