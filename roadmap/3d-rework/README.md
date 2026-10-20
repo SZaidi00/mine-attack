@@ -1,6 +1,7 @@
 # 3D Readability Rework — Overview
 
-**Status:** proposal, not started. **Branch:** `feat/3d-conversion` (Phase 1 + 2
+**Status:** Phase 1 implemented (2026-10-19); phases 2–6 not started.
+**Branch:** `feat/3d-conversion` (Phase 1 + 2
 of the original 3D conversion are complete; see `roadmap/3d-conversion/`).
 
 ## Problem statement

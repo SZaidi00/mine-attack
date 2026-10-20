@@ -34,6 +34,8 @@ var _proxies: Node3D
 var _effects: Node3D
 var _lighting: Lighting3D
 var _listener: AudioListener3D
+var _selection_rings: SelectionRings3D
+var _projectile_proxies: ProjectileProxies3D
 var _focus: Vector3 = Vector3.ZERO
 var _surface_focus: Vector3
 var _underground_focus: Vector3
@@ -97,6 +99,11 @@ func _ready() -> void:
 	_effects.set_script(EFFECTS_3D_SCRIPT)
 	(_effects as Effects3D).setup(grid, _camera)
 	_proxies.setup($World3D/Units3D, $World3D/Structures3D, grid, $World3D/Effects3D, _camera)
+	# 3D rework Phase 1: selection rings and projectile tracers (read-only
+	# mirrors of sim state, like the entity proxies).
+	_selection_rings = $World3D/SelectionRings3D
+	_projectile_proxies = $World3D/ProjectileProxies3D
+	_projectile_proxies.setup(grid)
 
 	# §2.5 juice: world events shake the rig (max-wins, reduced-motion aware).
 	grid.cave_in_occurred.connect(_on_cave_in_occurred)
@@ -105,6 +112,7 @@ func _ready() -> void:
 	# PlayerController is the single input authority for view switching.
 	_pc = _sim.get_node("PlayerController")
 	_pc.view_mode_changed.connect(_on_view_mode_changed)
+	_selection_rings.setup(_pc)
 	_apply_view(_pc.get_current_view_mode() == PlayerController.ViewMode.UNDERGROUND, true)
 
 
@@ -228,6 +236,8 @@ func _apply_view(underground: bool, initial: bool) -> void:
 			_focus = _surface_focus
 	_terrain.set_underground_view(underground)
 	_proxies.set_underground_view(underground)
+	_selection_rings.set_underground_view(underground)
+	_projectile_proxies.set_underground_view(underground)
 	if _lighting != null:
 		_lighting.set_underground_view(underground)
 

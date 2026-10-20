@@ -77,9 +77,12 @@ func _tick_damage() -> void:
 
 
 func _spawn_fire_popup(unit: Node2D, amount: int) -> void:
+	var pos: Vector2 = unit.get_combat_position()
+	if DamagePopup3D.spawn_fire(get_tree(), pos, amount):
+		return
 	var popup: DamagePopup = _DAMAGE_POPUP_SCENE.instantiate()
 	popup.setup_fire(amount)
-	popup.global_position = unit.get_combat_position() + Vector2(0, -20)
+	popup.global_position = pos + Vector2(0, -20)
 	get_tree().current_scene.add_child(popup)
 
 

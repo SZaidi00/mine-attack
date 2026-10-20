@@ -2,6 +2,13 @@
 
 Status: **implemented** (2026-10-05), pending visual sign-off (screenshots/playtest).
 
+> Follow-up (2026-10-19): 3D-rework Phase 1
+> (`roadmap/3d-rework/phase-1-selection-and-combat-feedback--k3.md`) layered
+> combat feedback on top of this art pass — selection/hover ground rings,
+> HP bars on selection, projectile tracers, 3D order markers/damage popups,
+> and tower/placement range discs. HP bars are now 0.28 wide with a dark
+> border and show when selected or hovered, not only when damaged.
+
 What landed, per §:
 
 - **§2.1 Art direction** — `roadmap/3d-conversion/style-guide.md` (palette,

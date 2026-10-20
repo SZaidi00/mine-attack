@@ -55,6 +55,10 @@ var _lantern_light: OmniLight3D
 var _lantern_head: MeshInstance3D
 var _lantern_underground := false
 
+## Selected-tower attack-range disc (3D rework Phase 1): the 2D gold disc in
+## Tower._draw is on the hidden canvas layer, so the proxy shows its own.
+var _range_disc: RangeDisc3D
+
 
 static func create(s: Node2D, grid: GridWorld) -> StructureProxy3D:
 	var p := StructureProxy3D.new()
@@ -254,6 +258,11 @@ func _build_tower() -> void:
 			ArtStyle3D.PALETTE.rock_dark, off + Vector3(0.0, 0.05, 0.0))
 		rock.rotation.y = h * PI
 		_rubble.add_child(rock)
+
+	# Attack-range disc, shown while the sim tower is selected.
+	_range_disc = RangeDisc3D.create(1.0)
+	_range_disc.visible = false
+	add_child(_range_disc)
 
 
 # ─── Wall: chunky stone segment, damage states ───
@@ -502,6 +511,12 @@ func refresh(underground_view: bool) -> void:
 	if _kind == _Kind.TOWER or _kind == _Kind.WALL:
 		_read_damage()
 	_tint_bodies(remembered, built)
+	if _range_disc != null:
+		# Live read: selection toggles and research range bonuses arrive
+		# between reconciles; the radius always matches Tower.attack_range.
+		_range_disc.visible = built and entity.get("selected") == true
+		if _range_disc.visible:
+			_range_disc.set_radius(float(entity.get("attack_range")) * WORLD_SCALE)
 	if _kind == _Kind.LANTERN and _lantern_light != null:
 		# Unbuilt lanterns give no light and wear a dim head.
 		_lantern_light.visible = built

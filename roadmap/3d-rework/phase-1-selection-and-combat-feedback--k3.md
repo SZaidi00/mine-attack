@@ -1,5 +1,8 @@
 # Phase 1 — Selection & Combat Feedback in 3D
 
+**Status:** implemented (2026-10-19). All five goals landed, including the
+range discs (goal 5 was not split out). Tests: `tests/test_3d_selection.gd`.
+
 **Parent plan:** `roadmap/3d-rework/README.md` (read it first for rules).
 **Priority: highest gameplay impact.** Today a player cannot see what is
 selected, what is being shot, or where they clicked in 3D mode.

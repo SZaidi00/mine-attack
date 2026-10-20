@@ -56,7 +56,17 @@ mine-attack/
 │   │                  # damage states, lantern OmniLight tiers, faction-reveal
 │   │                  # accents), lighting_3d.gd (weather-reactive mood), effects_3d.gd
 │   │                  # (dust motes/storm snow/embers/cave-in bursts), art_style_3d.gd
-│   │                  # (palette, materials, Potato/Standard/Fancy quality switch)
+│   │                  # (palette, materials, Potato/Standard/Fancy quality switch),
+│   │                  # plus the 3D-rework Phase 1 feedback layer:
+│   │                  # presentation_3d.gd (3D-shell detection + 2D->3D conversion
+│   │                  # for sim-side spawn points), flat_geo_3d.gd (shared unshaded
+│   │                  # ring/disc meshes + materials), selection_rings_3d.gd
+│   │                  # (MultiMesh selection + hover ground rings),
+│   │                  # projectile_proxies_3d.gd (per-frame projectile reconcile
+│   │                  # into pooled glowing tracers), order_marker_3d.gd +
+│   │                  # damage_popup_3d.gd (3D equivalents the sim spawns when the
+│   │                  # shell is current_scene), range_disc_3d.gd (selected-tower
+│   │                  # range disc + build-ghost range/vision disc)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~48 test scripts)
@@ -89,7 +99,15 @@ mine-attack/
 > frees the root-mounted sim in `_exit_tree`, so Play Again / Quit to Menu
 > work unchanged. The HUD CanvasLayer and all input handling stay on the
 > 2D sim; the 3D camera rig follows `PlayerController.view_mode_changed`
-> for Tab. On `main`, Play loads `scenes/main.tscn` directly.
+> for Tab. 3D-rework Phase 1 (roadmap/3d-rework/) added the combat-feedback
+> layer: MultiMesh selection/hover ground rings (selection_rings_3d.gd),
+> pooled glowing projectile tracers (projectile_proxies_3d.gd), HP bars that
+> also show on selection (unit_proxy_3d.gd), terrain-projected order markers
+> and billboarded damage popups (order_marker_3d.gd / damage_popup_3d.gd —
+> the sim spawn points branch to them via Presentation3D.shell() when the
+> shell is `current_scene`, keeping the 2D path for standalone main.tscn and
+> tests), and gold range discs for the selected tower and the build-ghost
+> preview (range_disc_3d.gd). On `main`, Play loads `scenes/main.tscn` directly.
 
 `scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
 

@@ -11,9 +11,12 @@ extends Node3D
 class_name UnitProxy3D
 
 const WORLD_SCALE: float = 0.01
-const HP_BAR_WIDTH: float = 0.6
-const HP_BAR_HEIGHT: float = 0.07
-const HP_BAR_LIFT: float = 0.18
+## Phase 1 3D-rework sizing: ~half the old bar, so a selected army reads as
+## neat ticks instead of a stripe band; the dark plate behind is the border.
+const HP_BAR_WIDTH: float = 0.28
+const HP_BAR_HEIGHT: float = 0.04
+const HP_BAR_BORDER: float = 0.015
+const HP_BAR_LIFT: float = 0.16
 
 static var _shadow_texture: ImageTexture
 static var _bg_material: StandardMaterial3D
@@ -82,9 +85,10 @@ static func _get_bg_material() -> StandardMaterial3D:
 func _build_hp_bar() -> void:
 	_hp_bar = Node3D.new()
 	_hp_bar.position.y = _model_height + HP_BAR_LIFT
+	# Dark border plate: slightly larger than the fill so it frames it.
 	var bg := MeshInstance3D.new()
 	var bg_mesh := QuadMesh.new()
-	bg_mesh.size = Vector2(HP_BAR_WIDTH, HP_BAR_HEIGHT)
+	bg_mesh.size = Vector2(HP_BAR_WIDTH + HP_BAR_BORDER * 2.0, HP_BAR_HEIGHT + HP_BAR_BORDER * 2.0)
 	bg.mesh = bg_mesh
 	bg.set_material_override(_get_bg_material())
 	_hp_bar.add_child(bg)
@@ -92,6 +96,8 @@ func _build_hp_bar() -> void:
 	var fg_mesh := QuadMesh.new()
 	fg_mesh.size = Vector2(HP_BAR_WIDTH, HP_BAR_HEIGHT)
 	_hp_fg.mesh = fg_mesh
+	# Sit a hair in front of the border plate so the frame never z-fights.
+	_hp_fg.position.z = 0.002
 	_hp_mat = StandardMaterial3D.new()
 	_hp_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_hp_fg.set_material_override(_hp_mat)
@@ -121,7 +127,11 @@ func sync_from_entity(underground_view: bool, camera_yaw: float) -> void:
 	var max_hp := int(unit.data.max_hp)
 	if max_hp > 0:
 		var ratio := clampf(float(unit.hp) / float(max_hp), 0.0, 1.0)
-		_hp_bar.visible = ratio < 1.0 and ratio > 0.0
+		# Selected or hovered units always show their bar (2D parity:
+		# unit_rendering.gd); otherwise only while damaged. get() so test
+		# doubles without those properties keep working.
+		var selected: bool = unit.get("selected") == true or unit.get("hovered") == true
+		_hp_bar.visible = ratio > 0.0 and (selected or ratio < 1.0)
 		_hp_fg.scale.x = maxf(ratio, 0.001)
 		# QuadMesh scales about its center; shift left so the bar drains
 		# right-to-left from a fixed left edge.

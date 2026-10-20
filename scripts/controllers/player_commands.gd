@@ -241,7 +241,11 @@ func _snap_walkable(fighter: Unit, point: Vector2, claimed: Array) -> Vector2:
 ## Brief expanding ring flashed at the world destination of a player order.
 ## Player-only feedback: this command path never runs for the AI. Queued
 ## (Shift) orders use a smaller ring so they read as waypoints, not orders.
+## In 3D mode (main_3d shell running the scene) the ring is a terrain-
+## projected 3D marker; the 2D canvas marker stays for the standalone scene.
 func _spawn_order_marker(at: Vector2, color: Color, scale_mult: float = 1.0) -> void:
+	if OrderMarker3D.spawn(pc.get_tree(), at, color, scale_mult):
+		return
 	var marker: Node2D = _ORDER_MARKER_SCENE.instantiate()
 	marker.global_position = at
 	marker.setup(color, scale_mult)

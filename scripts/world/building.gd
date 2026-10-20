@@ -436,6 +436,9 @@ func _make_dot_texture() -> Texture2D:
 
 
 func _spawn_damage_popup(amount: int) -> void:
+	# 3D mode: billboarded popup floating over the keep model.
+	if DamagePopup3D.spawn_damage(get_tree(), global_position, amount):
+		return
 	var popup: DamagePopup = preload("res://scenes/effects/damage_popup.tscn").instantiate()
 	popup.setup(amount)
 	popup.global_position = global_position + Vector2(0, -100)
