@@ -145,10 +145,14 @@ static func _is_underground_cell(s: Node2D, grid: GridWorld) -> bool:
 
 
 ## Register a mesh whose material is tinted per refresh() (construction
-## alpha, fog-memory lerp, damage darkening).
+## alpha, fog-memory lerp, damage darkening). Entity materials carry the
+## ArtStyle3D rim so structures separate from the darker terrain (phase 4).
 func _add_body(part: MeshInstance3D, base: Color, parent: Node3D = null) -> MeshInstance3D:
 	var mat := StandardMaterial3D.new()
 	mat.roughness = 1.0
+	mat.rim_enabled = true
+	mat.rim = ArtStyle3D.RIM_STRENGTH
+	mat.rim_tint = ArtStyle3D.RIM_TINT
 	mat.albedo_color = base
 	part.name = "Body"
 	part.set_material_override(mat)
@@ -167,6 +171,9 @@ func _add_body(part: MeshInstance3D, base: Color, parent: Node3D = null) -> Mesh
 func _add_accent(part: MeshInstance3D, parent: Node3D = null) -> MeshInstance3D:
 	var mat := StandardMaterial3D.new()
 	mat.roughness = 1.0
+	mat.rim_enabled = true
+	mat.rim = ArtStyle3D.RIM_STRENGTH
+	mat.rim_tint = ArtStyle3D.RIM_TINT
 	mat.albedo_color = ArtStyle3D.faction_accent_color(_team, false)
 	part.name = "Accent"
 	part.set_material_override(mat)

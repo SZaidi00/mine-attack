@@ -17,7 +17,9 @@ static var COLOR_ENEMY: Color = COLOR_ENEMY_DEFAULT
 static var COLOR_SUCCESS: Color = COLOR_SUCCESS_DEFAULT
 static var COLOR_VICTORY: Color = COLOR_VICTORY_DEFAULT
 const COLOR_ARCANE: Color = Color("#AF84FB")
-const COLOR_BRUTE: Color = Color("#DF6B6B")
+# Brute's identity moved from red to ember orange (3D rework phase 4): the
+# old salmon-red sat one hue step from the enemy team red.
+const COLOR_BRUTE: Color = Color("#EE6B1C")
 const COLOR_INDUSTRIAL: Color = Color("#FBBF24")
 
 # ─── Core UI colors (source of truth: design_tokens.json) ───

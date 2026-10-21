@@ -66,7 +66,9 @@ mine-attack/
 │   │                  # at every tier, SSAO on Fancy — Lighting3D.apply_quality_settings()),
 │   │                  # effects_3d.gd
 │   │                  # (dust motes/storm snow/embers/cave-in bursts), art_style_3d.gd
-│   │                  # (palette, materials, Potato/Standard/Fancy quality switch),
+│   │                  # (palette, materials, Potato/Standard/Fancy quality switch;
+│   │                  # 3D-rework phase 4: value-lifted team_color() with a live
+│   │                  # colorblind swap, entity rim materials, Brute ember accent),
 │   │                  # plus the 3D-rework Phase 1 feedback layer:
 │   │                  # presentation_3d.gd (3D-shell detection + 2D->3D conversion
 │   │                  # for sim-side spawn points), flat_geo_3d.gd (shared unshaded
@@ -130,7 +132,15 @@ mine-attack/
 > `Terrain3D.world_height_at()` and glides the focus toward the cursor's
 > ground point), and a proxy-root scale-up — units 1.4x, structures 1.08x so a
 > wall still fits its cell (ladders unscaled) — with HP bars, selection-ring
-> radii, and the tower range disc counter-scaled to world units. On `main`,
+> radii, and the tower range disc counter-scaled to world units. 3D-rework
+> Phase 4 (roadmap/3d-rework/) retuned the palette onto a luminance ladder
+> (terrain darkest, units brightest): value-lifted team colors routed through
+> `ArtStyle3D.team_color()` with a live colorblind swap (enemy scarlet ->
+> ember orange; the shell rebuilds all entity proxies on the settings
+> signal), a sky-side rim on unit/structure materials, Brute's accent moved
+> from red to ember `#EE6B1C` (2D `menu_color`/`COLOR_BRUTE` match),
+> darkened/cooled underground dirt and rock, and a full-strength snow-cover
+> lerp so storms visibly whiten the board. On `main`,
 > Play loads `scenes/main.tscn` directly.
 
 `scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:

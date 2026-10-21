@@ -124,6 +124,17 @@ func _ready() -> void:
 	_selection_rings.setup(_pc)
 	_apply_view(_pc.get_current_view_mode() == PlayerController.ViewMode.UNDERGROUND, true)
 
+	# 3D rework phase 4: colorblind toggle re-skins the board live — team
+	# colors are baked into proxy materials at build time, so rebuild them.
+	SettingsManager.setting_changed.connect(_on_setting_changed)
+
+
+## Live palette swap (phase 4): only the colorblind toggle changes 3D team
+## colors; other settings are handled by their own listeners.
+func _on_setting_changed(what: StringName) -> void:
+	if what == &"colorblind" and _proxies != null:
+		_proxies.rebuild_all()
+
 
 func _to_ground(pos2d: Vector2) -> Vector3:
 	return Vector3(pos2d.x * WORLD_SCALE, 0.0, pos2d.y * WORLD_SCALE)

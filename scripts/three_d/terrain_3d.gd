@@ -37,11 +37,16 @@ const GLOW_LIFT: float = 0.004  # glow quads hover above the albedo pass
 const LAVA_COLOR := Color(0.7, 0.14, 0.02)
 const MAGMA_ROCK_COLOR := Color(0.16, 0.12, 0.11)
 const FRESH_ORE_COLOR := Color(0.85, 0.42, 0.18)
-const SOLID_ROCK_COLOR := Color(0.22, 0.21, 0.24)
+const SOLID_ROCK_COLOR := Color(0.18, 0.17, 0.21)
 const DEPLETED_ORE_COLOR := Color(0.45, 0.38, 0.3)
 const WALL_DAMAGED_COLOR := Color(0.6, 0.15, 0.1)
 const BORDER_WALL_COLOR := Color(0.18, 0.2, 0.23)
 const ORE_TIER_BRIGHT := Color(0.95, 0.7, 0.2)
+## 3D rework phase 4 (luminance ladder: terrain darkest, units brightest):
+## the 2D dirt palette is shared with the sim's own renderer, so the ~15%
+## darken + cool shift for the 3D underground lives here as a multiplier
+## instead of editing GameManager.COLOR_DIRT_*.
+const DIRT_GRADE := Color(0.82, 0.83, 0.9)
 
 var _grid: GridWorld
 var _mat: StandardMaterial3D
@@ -369,8 +374,9 @@ func _cell_color(cell: GridWorld.Cell, pos: Vector2i, max_ore: int) -> Color:
 	match cell.type:
 		GridWorld.CellType.SURFACE_GROUND:
 			# Snow cover (§2.3): storms lerp the ice toward the snow palette,
-			# melting restores it.
-			return GameManager.COLOR_ICE.lerp(ArtStyle3D.PALETTE.snow, _snow_level * 0.85)
+			# melting restores it. Phase 4 buffed the swap to the full lerp —
+			# at 0.85 of the old ~0.07-value snow the cover was invisible.
+			return GameManager.COLOR_ICE.lerp(ArtStyle3D.PALETTE.snow, _snow_level)
 		GridWorld.CellType.DIRT:
 			return _dirt_color(cell.layer)
 		GridWorld.CellType.ORE:
@@ -398,7 +404,7 @@ func _cell_color(cell: GridWorld.Cell, pos: Vector2i, max_ore: int) -> Color:
 
 func _dirt_color(layer: int) -> Color:
 	if layer <= 2:
-		return GameManager.COLOR_DIRT_1
+		return GameManager.COLOR_DIRT_1 * DIRT_GRADE
 	if layer <= 4:
-		return GameManager.COLOR_DIRT_2
-	return GameManager.COLOR_DIRT_3
+		return GameManager.COLOR_DIRT_2 * DIRT_GRADE
+	return GameManager.COLOR_DIRT_3 * DIRT_GRADE

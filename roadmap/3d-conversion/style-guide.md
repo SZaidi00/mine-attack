@@ -15,27 +15,36 @@ weather is the drama.
 
 ## Palette
 
+3D rework phase 4 tuned this onto a luminance ladder — terrain darkest,
+structures mid, units brightest — so team color pops off the board at every
+zoom.
+
 | Role | Color | Notes |
 |---|---|---|
-| Snow / ice surface | `#EEF4F8` / `#DCECF5` | cold blue-grey desat |
+| Snow / ice surface | `#F5FAFF` / `#DCECF5` | cold blue-grey desat; storm cover lerps to the brighter snow |
 | Deep ice / shadow | `#3E5A6E` | distance fog, crevices |
-| Rock / coal | `#4A4F57` / `#1E1E23` | underground mass |
-| Dirt layers | `GameManager.COLOR_DIRT_1..3` | deeper = darker/warmer |
+| Rock / coal | `#3D404A` / `#1E1E23` | underground mass (phase 4: darkened + cooled ~15%) |
+| Dirt layers | `GameManager.COLOR_DIRT_1..3` × `0.82/0.83/0.90` | deeper = darker/warmer; the 3D pass darkens/cools via `DIRT_GRADE` |
 | Ore | `#C45C26` rust → `#F0B23C` bright | tier brightness by richness |
 | Lava | `#E8380D` emissive | always emissive, pulses |
 | Necromancy | `#9EDF9E` sickly green | undead tint only |
 | Wood / steel | `#5C4229` / `#5A6570` | structures, mine supports |
+| Team colors | player `#4A90F5` / enemy `#E03232` | value-lifted 3D variants via `ArtStyle3D.team_color()`; colorblind swaps enemy to `#E88A2E` live |
 
 ## Faction accents (material trims, banners, lamps)
 
 - **Arcane** — violet `#8C5CF6`
-- **Brute** — red `#DC2626`
+- **Brute** — ember `#EE6B1C` (phase 4: moved off red — it collided with the
+  enemy team scarlet; ember fits "raw power" and the lava world)
 - **Industrial** — brass `#C9A227`
 
-Bodies stay team-colored (player blue / enemy red). The accent is the
+Bodies stay team-colored (`ArtStyle3D.team_color()`; player blue / enemy
+scarlet, enemy ember-orange under the colorblind palette). The accent is the
 identifier. Enemy faction accents stay neutral grey `"???"` until
 `FactionManager.is_faction_identified(ENEMY)` — the reveal is already a game
-mechanic, the art honors it.
+mechanic, the art honors it. Entity materials (unit/structure bodies, not
+terrain) carry a subtle sky-side rim (`ArtStyle3D.RIM_*`) so dark units
+detach from dark ground even on Potato, where no shadows/SSAO exist.
 
 ## Silhouette rules (must read at max zoom-out)
 

@@ -42,6 +42,22 @@ func set_underground_view(underground: bool) -> void:
 		p.refresh(_underground_view)
 
 
+## 3D rework phase 4: live palette swap (colorblind toggle). Team colors
+## feed in through ArtStyle3D.team_color() at proxy build time, so dropping
+## every proxy and letting the next reconcile respawn them re-skins the
+## board without touching the sim.
+func rebuild_all() -> void:
+	for p in _unit_proxies:
+		p.queue_free()
+	_unit_proxies.clear()
+	_unit_proxy_ids.clear()
+	for p in _structure_proxies:
+		p.queue_free()
+	_structure_proxies.clear()
+	_structure_proxy_ids.clear()
+	_reconcile_accum = RECONCILE_INTERVAL
+
+
 func _process(delta: float) -> void:
 	_reconcile_accum += delta
 	if _reconcile_accum >= RECONCILE_INTERVAL:
