@@ -11,25 +11,27 @@ func _draw_surface() -> void:
 	var world_left: float = (grid.X_MIN - 1) * grid.CELL_SIZE - grid._BG_PAD
 	var world_right: float = (grid.X_MAX + 2) * grid.CELL_SIZE + grid._BG_PAD
 	var world_width: float = world_right - world_left
+	var band_top: float = grid.SURFACE_TOP * grid.CELL_SIZE
 
-	# Sky background, plus a solid band above it in its top-edge color so tall
-	# windows never show void (tiling it vertically would repeat the horizon).
+	# Sky background above the battlefield band, plus a solid band above it in
+	# its top-edge color so tall windows never show void (tiling it vertically
+	# would repeat the horizon).
 	var sky_height: float = grid._SKY_TEXTURE.get_height()
-	grid.draw_texture_rect(grid._SKY_TEXTURE, Rect2(world_left, -sky_height, world_width, sky_height), true)
-	grid.draw_rect(Rect2(world_left, -grid._BG_PAD, world_width, grid._BG_PAD - sky_height), grid._sky_top_color, true)
+	grid.draw_texture_rect(grid._SKY_TEXTURE, Rect2(world_left, band_top - sky_height, world_width, sky_height), true)
+	grid.draw_rect(Rect2(world_left, -grid._BG_PAD, world_width, band_top - sky_height + grid._BG_PAD), grid._sky_top_color, true)
 
 	# Draw the decorative background volcano between sky and ground so it sits
 	# behind buildings and units.
 	if grid.volcano_background != null:
 		grid.volcano_background.draw_onto(grid)
 
-	# Surface ground background.
-	var ground_height: float = grid._SURFACE_GROUND_TEXTURE.get_height()
-	grid.draw_texture_rect(grid._SURFACE_GROUND_TEXTURE, Rect2(world_left, 0, world_width, ground_height), true)
+	# Surface ground background, covering the whole battlefield band.
+	var ground_height: float = maxf(grid._SURFACE_GROUND_TEXTURE.get_height(), -band_top + grid.CELL_SIZE)
+	grid.draw_texture_rect(grid._SURFACE_GROUND_TEXTURE, Rect2(world_left, band_top, world_width, ground_height), true)
 
-	# Surface row only.
+	# Surface band only.
 	for pos in grid._cells.keys():
-		if pos.y != 0:
+		if not grid.is_surface_row(pos.y):
 			continue
 		var cell: GridWorld.Cell = grid._cells[pos]
 		var rect: Rect2 = Rect2(pos.x * grid.CELL_SIZE, pos.y * grid.CELL_SIZE, grid.CELL_SIZE, grid.CELL_SIZE)

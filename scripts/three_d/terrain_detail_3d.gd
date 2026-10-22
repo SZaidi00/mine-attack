@@ -46,13 +46,13 @@ func rebuild_chunk(key: Vector2i, x_start: int, y_start: int, underground_view: 
 	for dy in range(CHUNK_ROWS):
 		for dx in range(CHUNK_COLS):
 			var pos := Vector2i(x_start + dx, y_start + dy)
-			if pos.y < GridWorld.Y_MIN or pos.y > GridWorld.Y_MAX + 1:
+			if pos.y < GridWorld.SURFACE_TOP or pos.y > GridWorld.Y_MAX + 1:
 				continue
 			if not _grid.has_cell(pos):
 				continue
-			if underground_view and pos.y == 0:
+			if underground_view and _grid.is_surface_row(pos.y):
 				continue
-			if not underground_view and pos.y != 0:
+			if not underground_view and not _grid.is_surface_row(pos.y):
 				continue
 			var cell: GridWorld.Cell = _grid.get_cell(pos)
 			if cell.type == GridWorld.CellType.EMPTY:
@@ -172,4 +172,6 @@ func _drift_material() -> StandardMaterial3D:
 
 
 func _ember_material() -> StandardMaterial3D:
-	return ArtStyle3D.get_material(ArtStyle3D.PALETTE.lava, ArtStyle3D.PALETTE.lava, 2.0)
+	# 3D rework phase 5 emission hierarchy: decorative embers sit at the
+	# bottom (was 2.0 — they outshone the ambient lava glow they decorate).
+	return ArtStyle3D.get_material(ArtStyle3D.PALETTE.lava, ArtStyle3D.PALETTE.lava, 0.9)

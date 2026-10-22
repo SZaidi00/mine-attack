@@ -176,9 +176,10 @@ func _build_miner(body: Color, accent: Color) -> void:
 	_box(_body, Vector3(0.1, 0.12, 0.05), p, Vector3(0.0, 0.18, 0.065))
 	if ArtStyle3D.detail_enabled():
 		_cyl(_body, 0.025, 0.11, accent, 5, Vector3(0.0, 0.255, 0.065)).rotation.z = PI * 0.5
-	# Helmet + glowing lamp (the signature).
+	# Helmet + glowing lamp (the signature). Phase 5 emission hierarchy:
+	# ambient unit accents sit below the combat-tracer tier (2.2+).
 	_cone(_body, 0.075, 0.06, steel, 6, Vector3(0.0, 0.33, 0.0))
-	_glow(_body, Vector3(0.03, 0.03, 0.02), ArtStyle3D.PALETTE["lamp_warm"], 2.2, Vector3(0.0, 0.315, -0.055))
+	_glow(_body, Vector3(0.03, 0.03, 0.02), ArtStyle3D.PALETTE["lamp_warm"], 1.8, Vector3(0.0, 0.315, -0.055))
 	# Belt trim in the faction accent.
 	_box(_body, Vector3(0.135, 0.02, 0.09), accent, Vector3(0.0, 0.115, 0.0))
 	# Pickaxe in the right hand.
@@ -241,7 +242,7 @@ func _build_wizard(body: Color, accent: Color) -> void:
 	_tool.position = Vector3(0.095, 0.22, 0.0)
 	_body.add_child(_tool)
 	_cyl(_tool, 0.011, 0.34, p, 5, Vector3(0.0, 0.03, -0.01))
-	_glow(_tool, Vector3(0.045, 0.045, 0.045), accent, 1.8, Vector3(0.0, 0.22, -0.01))
+	_glow(_tool, Vector3(0.045, 0.045, 0.045), accent, 1.6, Vector3(0.0, 0.22, -0.01))
 	_arm_l = _limb(_body, Vector3(-0.075, 0.225, 0.0), Vector3(0.04, 0.1, 0.04), body, 0.09)
 	_arm_r = _limb(_body, Vector3(0.075, 0.225, 0.0), Vector3(0.04, 0.1, 0.04), body, 0.09)
 
@@ -277,8 +278,8 @@ func _build_dragon(body: Color, accent: Color) -> void:
 	# Neck + head + snout + horns.
 	_box(_body, Vector3(0.12, 0.12, 0.16), body, Vector3(0.0, 0.5, -0.3))
 	_box(_body, Vector3(0.09, 0.07, 0.12), body, Vector3(0.0, 0.47, -0.42))
-	_glow(_body, Vector3(0.025, 0.02, 0.015), accent, 1.6, Vector3(-0.045, 0.51, -0.37))
-	_glow(_body, Vector3(0.025, 0.02, 0.015), accent, 1.6, Vector3(0.045, 0.51, -0.37))
+	_glow(_body, Vector3(0.025, 0.02, 0.015), accent, 1.4, Vector3(-0.045, 0.51, -0.37))
+	_glow(_body, Vector3(0.025, 0.02, 0.015), accent, 1.4, Vector3(0.045, 0.51, -0.37))
 	_cone(_body, 0.02, 0.08, ArtStyle3D.PALETTE["steel"], 4, Vector3(-0.045, 0.585, -0.28)).rotation.x = -0.4
 	_cone(_body, 0.02, 0.08, ArtStyle3D.PALETTE["steel"], 4, Vector3(0.045, 0.585, -0.28)).rotation.x = -0.4
 	# Stubby legs.
@@ -329,8 +330,8 @@ func _build_crawler(body: Color, accent: Color) -> void:
 	# Low, long body — the underground read.
 	_box(_body, Vector3(0.16, 0.09, 0.4), rock, Vector3(0.0, 0.07, 0.0))
 	_box(_body, Vector3(0.13, 0.07, 0.12), rock, Vector3(0.0, 0.06, -0.24))
-	_glow(_body, Vector3(0.02, 0.015, 0.01), accent, 1.8, Vector3(-0.035, 0.07, -0.3))
-	_glow(_body, Vector3(0.02, 0.015, 0.01), accent, 1.8, Vector3(0.035, 0.07, -0.3))
+	_glow(_body, Vector3(0.02, 0.015, 0.01), accent, 1.6, Vector3(-0.035, 0.07, -0.3))
+	_glow(_body, Vector3(0.02, 0.015, 0.01), accent, 1.6, Vector3(0.035, 0.07, -0.3))
 	# Dorsal spikes.
 	for i in range(4):
 		_cone(_body, 0.025, 0.08 - i * 0.012, body, 4, Vector3(0.0, 0.145, 0.1 - i * 0.1))

@@ -44,6 +44,7 @@ var _lighting: Lighting3D
 var _listener: AudioListener3D
 var _selection_rings: SelectionRings3D
 var _projectile_proxies: ProjectileProxies3D
+var _event_proxies: EventProxies3D
 var _focus: Vector3 = Vector3.ZERO
 var _surface_focus: Vector3
 var _underground_focus: Vector3
@@ -113,10 +114,19 @@ func _ready() -> void:
 	_selection_rings = $World3D/SelectionRings3D
 	_projectile_proxies = $World3D/ProjectileProxies3D
 	_projectile_proxies.setup(grid)
+	# 3D rework Phase 5: meteors/burning-ground decals/event-zone warnings.
+	_event_proxies = $World3D/EventProxies3D
+	_event_proxies.setup(grid)
 
 	# §2.5 juice: world events shake the rig (max-wins, reduced-motion aware).
 	grid.cave_in_occurred.connect(_on_cave_in_occurred)
 	grid.lava_risen.connect(_on_lava_risen)
+	# Phase 5 volcano presence: a low rumble on the eruption warning, a hard
+	# jolt when the meteors start falling (the same signals the HUD banners
+	# use; add_shake honors the reduced-motion setting). WeatherManager
+	# outlives the shell — disconnected in _exit_tree.
+	WeatherManager.volcano_warning_started.connect(_on_volcano_warning_started)
+	WeatherManager.volcano_started.connect(_on_volcano_started)
 
 	# PlayerController is the single input authority for view switching.
 	_pc = _sim.get_node("PlayerController")
@@ -176,6 +186,14 @@ func _on_lava_risen(_layers: int) -> void:
 	add_shake(0.3)
 
 
+func _on_volcano_warning_started(_seconds: float) -> void:
+	add_shake(0.35)
+
+
+func _on_volcano_started() -> void:
+	add_shake(1.0)
+
+
 func _pan(delta: float) -> void:
 	var dir := Vector2.ZERO
 	if Input.is_action_pressed(Constants.INPUT_CAMERA_RIGHT):
@@ -203,7 +221,9 @@ func _clamp_focus() -> void:
 	var x_range := Vector2(
 		(GridWorld.X_MIN - 2) * GridWorld.CELL_SIZE,
 		(GridWorld.X_MAX + 3) * GridWorld.CELL_SIZE) * WORLD_SCALE
-	var z_range := Vector2(-300.0, (GridWorld.Y_MAX + 4) * GridWorld.CELL_SIZE) * WORLD_SCALE
+	var z_range := Vector2(
+		(GridWorld.SURFACE_TOP - 4) * GridWorld.CELL_SIZE,
+		(GridWorld.Y_MAX + 4) * GridWorld.CELL_SIZE) * WORLD_SCALE
 	_focus.x = clampf(_focus.x, x_range.x, x_range.y)
 	_focus.z = clampf(_focus.z, z_range.x, z_range.y)
 
@@ -310,11 +330,18 @@ func _apply_view(underground: bool, initial: bool) -> void:
 	_proxies.set_underground_view(underground)
 	_selection_rings.set_underground_view(underground)
 	_projectile_proxies.set_underground_view(underground)
+	_event_proxies.set_underground_view(underground)
 	if _lighting != null:
 		_lighting.set_underground_view(underground)
 
 
 func _exit_tree() -> void:
+	# WeatherManager is an autoload and outlives the shell; drop the volcano
+	# shake hooks or the next match's signals would call into a freed shell.
+	if WeatherManager.volcano_warning_started.is_connected(_on_volcano_warning_started):
+		WeatherManager.volcano_warning_started.disconnect(_on_volcano_warning_started)
+	if WeatherManager.volcano_started.is_connected(_on_volcano_started):
+		WeatherManager.volcano_started.disconnect(_on_volcano_started)
 	# The sim is a child of the window root (so /root/Main resolves), not of
 	# this shell — free it or scene switches would leak it and leave a stale
 	# sim running under the next scene. Deferred: the root is busy propagating

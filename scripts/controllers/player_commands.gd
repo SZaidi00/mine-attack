@@ -49,6 +49,7 @@ func _issue_command(screen_pos: Vector2, shift_queued: bool = false) -> void:
 		for u in capable:
 			_issue_or_queue(u, {"type": "attack_unit", "target": enemy_unit}, shift_queued)
 		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#B91C1C"), 0.75 if shift_queued else 1.0)
+		_spawn_attack_telegraph(capable, world_pos)
 		return
 
 	# 2. Enemy building clicked -> attack with fighters.
@@ -62,6 +63,7 @@ func _issue_command(screen_pos: Vector2, shift_queued: bool = false) -> void:
 		for u in fighters:
 			_issue_or_queue(u, {"type": "attack_building", "target": enemy_building}, shift_queued)
 		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#B91C1C"), 0.75 if shift_queued else 1.0)
+		_spawn_attack_telegraph(fighters, world_pos)
 		return
 
 	# 2b. Enemy structure clicked (lantern/tower/wall) -> attack with fighters.
@@ -75,6 +77,7 @@ func _issue_command(screen_pos: Vector2, shift_queued: bool = false) -> void:
 		for u in fighters:
 			_issue_or_queue(u, {"type": "attack_building", "target": enemy_structure}, shift_queued)
 		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#B91C1C"), 0.75 if shift_queued else 1.0)
+		_spawn_attack_telegraph(fighters, world_pos)
 		return
 
 	# 2c. Damaged friendly structure clicked with engineers selected -> repair.
@@ -212,9 +215,8 @@ func _formation_destinations(fighters: Array, click: Vector2, mode: String) -> A
 ## Nearest walkable point to a formation destination: the raw point when it is
 ## walkable, otherwise the closest candidate of the two surrounding cell rings,
 ## otherwise the raw point (a blocked slot is still a coherent order). Slots in
-## `claimed` are skipped — on the one-cell-tall surface row a perpendicular
-## "line" cannot stand abreast, so this lets the squad file along the axis it
-## can actually occupy instead of stacking every slot onto the same cell.
+## `claimed` are skipped so the squad spreads across the surface band instead
+## of stacking every slot onto the same cell.
 func _snap_walkable(fighter: Unit, point: Vector2, claimed: Array) -> Vector2:
 	if fighter._is_walkable_point(point) and not claimed.has(point):
 		return point
@@ -250,6 +252,22 @@ func _spawn_order_marker(at: Vector2, color: Color, scale_mult: float = 1.0) -> 
 	marker.global_position = at
 	marker.setup(color, scale_mult)
 	pc.get_tree().current_scene.add_child(marker)
+
+
+## 3D rework Phase 5: on an explicit attack order, flash a red telegraph arc
+## from the attacker group's centroid to the target — 3D mode only (the
+## static spawn no-ops without the shell), presentation-only, sim untouched.
+func _spawn_attack_telegraph(attackers: Array, target: Vector2) -> void:
+	var centroid := Vector2.ZERO
+	var count := 0
+	for u in attackers:
+		if is_instance_valid(u):
+			centroid += u.global_position
+			count += 1
+	if count == 0:
+		return
+	centroid /= count
+	Telegraph3D.spawn_attack(pc.get_tree(), centroid, target)
 
 
 func _reject_command(action: String, reason: String, at: Vector2) -> void:
@@ -333,6 +351,7 @@ func attack_move_order(screen_pos: Vector2) -> void:
 		for u in fighters:
 			u.attack_move_to(world_pos)
 	_spawn_order_marker(world_pos, Color("#B91C1C"))
+	_spawn_attack_telegraph(fighters, world_pos)
 
 
 ## Attack-move armed: left-click issues the order, right-click or Esc cancels.

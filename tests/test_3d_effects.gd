@@ -4,6 +4,12 @@ extends GutTest
 # Effects3D builds quality-aware GPUParticles3D pools under World3D and wires
 # them to grid/weather/view state — underground dust motes, storm snow drift,
 # cave-in dust bursts, volcano embers — reading sim state only.
+#
+# 3D rework Phase 5 (roadmap/3d-rework/phase-5-effects-and-telegraphs--k3.md):
+# EventProxies3D mirrors the sim's meteors/burning patches and event-zone
+# warnings into 3D (reconcile pattern, sim burn state is the only source of
+# truth), the eruption warning drives a sun pulse + ember ramp + rig rumble,
+# and explicit attack orders flash pooled telegraph arcs (Telegraph3D).
 
 var _shell: Node
 var _main: Node
@@ -123,3 +129,216 @@ func test_underground_view_enables_dust_motes() -> void:
 	effects.set_underground_view(false)
 	await _frames(3)
 	assert_false(motes.emitting, "motes stop when back on the surface")
+
+
+# ─── 3D rework Phase 5: event proxies & telegraphs ───
+
+func _event_proxies() -> EventProxies3D:
+	return _shell.get_node("World3D/EventProxies3D") as EventProxies3D
+
+
+func test_event_proxies_node_exists() -> void:
+	assert_not_null(_event_proxies(), "World3D hosts an EventProxies3D node")
+
+
+func test_meteor_gets_falling_proxy_and_impact_ring() -> void:
+	await _frames(10)
+	var ep := _event_proxies()
+	WeatherManager.force_volcano_start()  # _start_volcano spawns a meteor at once
+	var meteor: Meteor = null
+	for i in range(60):
+		await get_tree().process_frame
+		for child in get_tree().current_scene.get_children():
+			if child is Meteor:
+				meteor = child
+				break
+		if meteor != null and ep._meteor_proxies.has(meteor.get_instance_id()):
+			break
+	WeatherManager.force_volcano_end()  # no further meteors; the live one finishes
+	assert_not_null(meteor, "forced eruption spawns a meteor")
+	if meteor == null:
+		return
+	assert_true(ep._meteor_proxies.has(meteor.get_instance_id()), "live meteor gets a 3D proxy")
+	if not ep._meteor_proxies.has(meteor.get_instance_id()):
+		return
+	var proxy: Node3D = ep._meteor_proxies[meteor.get_instance_id()]
+	if not meteor._impacted:
+		assert_true((proxy.get_node("Streak") as MeshInstance3D).visible, "fall phase shows the streak")
+		assert_gt(proxy.position.y, 0.5, "the streak drops out of the sky (starts high)")
+	# The fall is 0.4s, the impact flash 0.45s — the ring phase must appear.
+	var saw_ring := false
+	for i in range(240):
+		await get_tree().process_frame
+		for id in ep._meteor_proxies:
+			if (ep._meteor_proxies[id].get_node("ImpactRing") as MeshInstance3D).visible:
+				saw_ring = true
+		if saw_ring or ep._meteor_proxies.is_empty():
+			break
+	assert_true(saw_ring, "impact phase projects an expanding ring")
+	# After the flash the sim frees the meteor and the proxy recycles.
+	var gone := false
+	for i in range(240):
+		await get_tree().process_frame
+		if ep._meteor_proxies.is_empty():
+			gone = true
+			break
+	assert_true(gone, "proxy returns to the pool once the meteor is freed")
+
+
+func test_burn_patch_decal_tracks_sim_burn_state() -> void:
+	await _frames(10)
+	var ep := _event_proxies()
+	WeatherManager.force_volcano_start()
+	# A meteor impacts within ~1s and (no storm) leaves a burning patch.
+	var patch: BurningGround = null
+	for i in range(300):
+		await get_tree().process_frame
+		if patch != null and not is_instance_valid(patch):
+			patch = null  # an earlier patch expired mid-search
+		if patch == null:
+			for node in get_tree().get_nodes_in_group("burning_grounds"):
+				if node is BurningGround:
+					patch = node
+					break
+		if patch != null and ep._burn_decals.has(patch.get_instance_id()):
+			break
+	assert_not_null(patch, "meteor impact leaves a burning patch")
+	if patch == null:
+		WeatherManager.force_volcano_end()
+		return
+	var patch_id: int = patch.get_instance_id()
+	assert_true(ep._burn_decals.has(patch_id), "burn patch gets a 3D decal")
+	var decal: Node3D = ep._burn_decals[patch_id]
+	var expected: Vector3 = Presentation3D.to_3d(patch.global_position, 0.0)
+	assert_almost_eq(decal.position.x, expected.x, 0.001, "decal sits at the patch's world x")
+	assert_almost_eq(decal.position.z, expected.z, 0.001, "decal sits at the patch's world z")
+	# A snowstorm extinguishes volcano fires in the sim; the decal must follow
+	# the sim state (never tracked separately).
+	WeatherManager.force_snowstorm_start()
+	await _frames(3)
+	assert_false(ep._burn_decals.has(patch_id),
+		"storm-extinguished patch loses its decal on the next reconcile")
+	WeatherManager.force_snowstorm_end()
+	WeatherManager.force_volcano_end()
+	await _frames(3)
+
+
+func test_lava_warning_shimmer_marks_flood_zone() -> void:
+	await _frames(10)
+	var ep := _event_proxies()
+	var grid := _grid()
+	grid.set_reveal_all(GameManager.Team.PLAYER, true)  # fog gates the shimmer cells
+	grid.force_lava_warning(7)  # deepest rise: flood zone spans every column
+	ep.set_underground_view(true)
+	await _frames(3)
+	assert_true(ep._lava_shimmer.visible, "warning shimmer shows in the underground view")
+	assert_gt(ep._lava_shimmer_mesh.instance_count, 0, "shimmer covers the cells that will flood")
+	ep.set_underground_view(false)
+	await _frames(3)
+	assert_false(ep._lava_shimmer.visible, "shimmer is underground-view only")
+	# Fast-forward the warning: the rising tide hands off to the terrain glow.
+	ep.set_underground_view(true)
+	grid._events._lava_warning_left = 0.01
+	await _frames(4)
+	assert_false(ep._lava_shimmer.visible, "shimmer clears once the lava starts rising")
+	grid.force_lava_recede()
+	ep.set_underground_view(false)
+	grid.set_reveal_all(GameManager.Team.PLAYER, false)
+	await _frames(2)
+
+
+func test_cave_in_warning_zone_marks_target_area() -> void:
+	await _frames(10)
+	var ep := _event_proxies()
+	var grid := _grid()
+	grid._events._start_cavein_warning()
+	var center: Vector2i = grid._events._cavein_warning_center
+	ep.set_underground_view(true)
+	await _frames(3)
+	assert_true(ep._cavein_zone.visible, "warning zone shows in the underground view")
+	var quads := 0
+	for child in ep._cavein_zone.get_children():
+		if child is MeshInstance3D:
+			quads += 1
+	assert_eq(quads, 9, "the warning darkens the 3x3 target area")
+	var expected: Vector2 = grid.grid_to_world(center) * EventProxies3D.WORLD_SCALE
+	assert_almost_eq(ep._cavein_zone.position.x, expected.x, 0.001, "zone sits at the warning x")
+	assert_almost_eq(ep._cavein_zone.position.z, expected.y, 0.001, "zone sits at the warning z")
+	# Let the drop land; the zone hands off to the Effects3D dust bursts.
+	grid._events._cavein_warning_left = 0.01
+	await _frames(4)
+	assert_false(ep._cavein_zone.visible, "zone hides when the cave-in drops")
+	grid._events._cavein_restore_left = 0.0  # restore the collapsed rock
+	ep.set_underground_view(false)
+	await _frames(2)
+
+
+func test_attack_telegraph_spawns_under_shell_only() -> void:
+	await _frames(5)
+	# Tests adopt the sim as current_scene, so without flipping back the spawn
+	# must no-op (standalone 2D mode keeps its order markers).
+	assert_false(Telegraph3D.spawn_attack(get_tree(), Vector2(-500, 0), Vector2(-300, 0)),
+		"no telegraph without the 3D shell")
+	get_tree().current_scene = _shell
+	var spawned: bool = Telegraph3D.spawn_attack(get_tree(), Vector2(-500, 0), Vector2(-300, 0))
+	get_tree().current_scene = _main
+	assert_true(spawned, "telegraph spawns when the 3D shell runs the scene")
+	var telegraph: Telegraph3D = null
+	for child in _shell.get_node("World3D/Effects3D").get_children():
+		if child is Telegraph3D:
+			telegraph = child
+			break
+	assert_not_null(telegraph, "telegraph lives under the shell's Effects3D container")
+	if telegraph == null:
+		return
+	assert_eq(telegraph._dashes.size(), Telegraph3D.DASH_COUNT, "the arc is a pooled dashed line")
+	var first: Vector3 = telegraph._dashes[0].position
+	var last: Vector3 = telegraph._dashes[Telegraph3D.DASH_COUNT - 1].position
+	assert_gt(last.x, first.x, "the arc runs from the attacker group toward the target")
+	var recycled := false
+	for i in range(150):
+		await get_tree().process_frame
+		if not telegraph.visible:
+			recycled = true
+			break
+	assert_true(recycled, "the telegraph fades out and returns to the pool")
+
+
+func test_volcano_warning_ramps_embers_and_rumbles() -> void:
+	await _frames(10)
+	var embers: GPUParticles3D = _effects().get_node("VolcanoEmbers")
+	assert_false(embers.emitting, "no embers before the warning")
+	WeatherManager.force_volcano_warning()
+	await _frames(3)
+	assert_true(embers.emitting, "embers trickle in during the eruption warning")
+	assert_lt(embers.amount, int(Effects3D.EMBERS_BASE_AMOUNT * ArtStyle3D.particle_mult()),
+		"warning density ramps up from below the full eruption")
+	assert_gt(_shell.get("_shake"), 0.0, "the warning rumbles the camera rig")
+	WeatherManager.force_volcano_start()
+	await _frames(3)
+	assert_eq(embers.amount, int(Effects3D.EMBERS_BASE_AMOUNT * ArtStyle3D.particle_mult()),
+		"the eruption runs embers at full density")
+	WeatherManager.force_volcano_end()
+	await _frames(3)
+	assert_false(embers.emitting, "embers stop when the eruption ends")
+
+
+func test_volcano_warning_pulses_the_sun() -> void:
+	await _frames(10)
+	var lighting: Lighting3D = _shell.get_node("World3D/Lighting3D")
+	var base: Dictionary = Lighting3D._MOODS["volcano"]
+	# The pulse modulates the tween TARGET; drive the beat to its peak
+	# directly so the check is independent of headless frame pacing.
+	WeatherManager.force_volcano_warning()
+	lighting._warning_pulse_time = Lighting3D.WARNING_PULSE_PERIOD * 0.25
+	var pulsed: Dictionary = lighting._apply_warning_pulse(base, 0.0)
+	assert_gt(float(pulsed["sun_energy"]), float(base["sun_energy"]) * 1.3,
+		"a beat peak overdrives the sun above the plain volcano mood")
+	assert_gt((pulsed["sun_color"] as Color).r / maxf((pulsed["sun_color"] as Color).b, 0.001),
+		(base["sun_color"] as Color).r / maxf((base["sun_color"] as Color).b, 0.001),
+		"a beat peak reddens the sun toward the eruption cast")
+	WeatherManager.force_volcano_start()  # warning over -> pulse gates off
+	var unpulsed: Dictionary = lighting._apply_warning_pulse(base, 0.0)
+	assert_eq(float(unpulsed["sun_energy"]), float(base["sun_energy"]),
+		"the pulse only runs during the warning window")
+	WeatherManager.force_volcano_end()

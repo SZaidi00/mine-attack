@@ -32,14 +32,15 @@ func test_minimap_exists_under_hud_with_expected_size() -> void:
 
 
 func test_grid_to_map_maps_known_cells() -> void:
-	var origin: Vector2 = _minimap.grid_to_map(Vector2i(Constants.GRID_X_MIN, Constants.GRID_Y_MIN))
+	var y_top: int = Constants.GRID_Y_MIN - Constants.SURFACE_ROWS + 1
+	var origin: Vector2 = _minimap.grid_to_map(Vector2i(Constants.GRID_X_MIN, y_top))
 	assert_almost_eq(origin.x, 0.0, 0.01)
 	assert_almost_eq(origin.y, 0.0, 0.01)
 	var cols: int = Constants.GRID_X_MAX - Constants.GRID_X_MIN + 1
-	var rows: int = Constants.GRID_Y_MAX - Constants.GRID_Y_MIN + 1
+	var rows: int = Constants.GRID_Y_MAX - y_top + 1
 	var cell_zero: Vector2 = _minimap.grid_to_map(Vector2i(0, 1))
 	assert_almost_eq(cell_zero.x, -Constants.GRID_X_MIN * _minimap.size.x / cols, 0.5)
-	assert_almost_eq(cell_zero.y, (1 - Constants.GRID_Y_MIN) * _minimap.size.y / rows, 0.01)
+	assert_almost_eq(cell_zero.y, (1 - y_top) * _minimap.size.y / rows, 0.01)
 	# The last cell's top-left corner sits one cell-size short of the edge.
 	var far: Vector2 = _minimap.grid_to_map(Vector2i(Constants.GRID_X_MAX, Constants.GRID_Y_MAX))
 	assert_almost_eq(far.x, (cols - 1) * _minimap.size.x / cols, 0.5)
@@ -59,11 +60,11 @@ func test_map_to_world_jumps_camera_inside_grid() -> void:
 	# Click the top-left corner of the minimap.
 	camera.global_position = _minimap.map_to_world(Vector2(1.0, 1.0))
 	var cam_cell: Vector2i = _main.get_node("World/GridWorld").world_to_grid(camera.global_position)
-	assert_eq(cam_cell, Vector2i(Constants.GRID_X_MIN, Constants.GRID_Y_MIN))
+	assert_eq(cam_cell, Vector2i(Constants.GRID_X_MIN, Constants.GRID_Y_MIN - Constants.SURFACE_ROWS + 1))
 	# Clicking far outside the control still clamps into the grid.
 	camera.global_position = _minimap.map_to_world(Vector2(99999.0, 99999.0))
 	var clamped: Vector2 = camera.global_position
 	assert_true(clamped.x <= (Constants.GRID_X_MAX + 1) * Constants.TILE_SIZE)
 	assert_true(clamped.y <= (Constants.GRID_Y_MAX + 1) * Constants.TILE_SIZE)
 	assert_true(clamped.x >= Constants.GRID_X_MIN * Constants.TILE_SIZE)
-	assert_true(clamped.y >= 0.0)
+	assert_true(clamped.y >= (Constants.GRID_Y_MIN - Constants.SURFACE_ROWS + 1) * Constants.TILE_SIZE)

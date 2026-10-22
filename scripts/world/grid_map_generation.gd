@@ -30,9 +30,10 @@ func _roll_profile() -> void:
 func _generate_map() -> void:
 	rng.seed = grid.map_seed
 	_roll_profile()
-	# Surface ground.
-	for x in range(grid.X_MIN, grid.X_MAX + 1):
-		_set_cell(Vector2i(x, 0), GridWorld.Cell.new(GridWorld.CellType.SURFACE_GROUND, 0, 99, 9999, 0))
+	# Surface battlefield: a band of open-ground rows stacked above row 0.
+	for y in range(grid.SURFACE_TOP, 1):
+		for x in range(grid.X_MIN, grid.X_MAX + 1):
+			_set_cell(Vector2i(x, y), GridWorld.Cell.new(GridWorld.CellType.SURFACE_GROUND, 0, 99, 9999, 0))
 
 	# Underground layers: 3 rows per layer => 7 layers total.
 	for y in range(1, grid.Y_MAX + 1):
@@ -65,7 +66,7 @@ func _generate_map() -> void:
 	carve_shaft(15)
 
 	# Border walls.
-	for y in range(grid.Y_MIN, grid.Y_MAX + 1):
+	for y in range(grid.SURFACE_TOP, grid.Y_MAX + 1):
 		_set_cell(Vector2i(grid.X_MIN - 1, y), GridWorld.Cell.new(GridWorld.CellType.WALL, 0, 99, 9999, 0, true))
 		_set_cell(Vector2i(grid.X_MAX + 1, y), GridWorld.Cell.new(GridWorld.CellType.WALL, 0, 99, 9999, 0, true))
 	for x in range(grid.X_MIN - 1, grid.X_MAX + 2):
@@ -81,7 +82,7 @@ func _layer_miner_level(layer: int) -> int:
 
 
 func _init_astar() -> void:
-	grid._astar.region = Rect2i(grid.X_MIN - 1, grid.Y_MIN, (grid.X_MAX - grid.X_MIN) + 3, grid.Y_MAX + 2)
+	grid._astar.region = Rect2i(grid.X_MIN - 1, grid.SURFACE_TOP, (grid.X_MAX - grid.X_MIN) + 3, (grid.Y_MAX + 2) - grid.SURFACE_TOP)
 	grid._astar.cell_size = Vector2(grid.CELL_SIZE, grid.CELL_SIZE)
 	grid._astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_MANHATTAN
 	grid._astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_MANHATTAN

@@ -75,6 +75,11 @@ const X_MAX: int = _Constants.GRID_X_MAX
 const Y_MIN: int = _Constants.GRID_Y_MIN
 const Y_MAX: int = _Constants.GRID_Y_MAX
 
+# Walkable surface battlefield: SURFACE_ROWS rows stacked above row 0
+# (y in [SURFACE_TOP, Y_MIN]). Underground stays at y >= 1.
+const SURFACE_ROWS: int = _Constants.SURFACE_ROWS
+const SURFACE_TOP: int = Y_MIN - SURFACE_ROWS + 1
+
 # Central wall is a single objective with shared HP. The pool is per-instance
 # (not a const) because the per-seed map profile scales it: map generation
 # sets _wall_max_hp from WALL_HP * profile wall multiplier.
@@ -97,7 +102,7 @@ var _astar: AStarGrid2D = AStarGrid2D.new()
 var _wall_sealed_cells: Dictionary = {}
 
 # ─── Fog of War (Revamp Phase 1) ───
-# Per-team vision: _vision_maps[team][x - X_MIN][y - Y_MIN] is true while the
+# Per-team vision: _vision_maps[team][x - X_MIN][y - SURFACE_TOP] is true while the
 # cell is inside any friendly vision source's radius; _memory_maps holds the
 # GameManager.match_time when the cell was last visible (-1 = never seen).
 # A remembered cell stays dimly visible for FOG_MEMORY_DURATION seconds, then
@@ -264,6 +269,12 @@ func is_solid(grid_pos: Vector2i) -> bool:
 
 func has_cell(grid_pos: Vector2i) -> bool:
 	return _cells.has(grid_pos)
+
+
+## True for grid rows in the walkable surface battlefield band
+## ([SURFACE_TOP, Y_MIN]). Underground is y >= 1.
+func is_surface_row(y: int) -> bool:
+	return y >= SURFACE_TOP and y <= Y_MIN
 
 
 func is_walkable(grid_pos: Vector2i) -> bool:

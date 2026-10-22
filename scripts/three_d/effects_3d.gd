@@ -8,7 +8,8 @@
 ##                     snowstorm rages (surface view); weather-significant, so
 ##                     it shows on every preset at particle_mult() counts.
 ##   - VolcanoEmbers — embers drifting up around the camera during eruptions
-##                     (surface view); particles only — the red glow is the
+##                     (surface view), ramping up in density over the warning
+##                     window (phase 5); particles only — the red glow is the
 ##                     lighting pass.
 ##   - CaveInBurst0… — one-shot grey-brown dust puffs on grid.cave_in_occurred,
 ##                     a small reusable pool (freed/restarted, never re-alloc'd).
@@ -133,7 +134,23 @@ func _refresh_emitters() -> void:
 	_motes.emitting = _underground_view and ArtStyle3D.detail_enabled()
 	var surface_view := not _underground_view
 	_storm.emitting = surface_view and WeatherManager.is_snowstorm_active()
-	_embers.emitting = surface_view and WeatherManager.is_volcano_active()
+	# Phase 5: embers ramp up during the eruption warning (density in
+	# _apply_quality_amounts) and run at full density during the eruption.
+	_embers.emitting = surface_view and (WeatherManager.is_volcano_active() or WeatherManager.is_volcano_warning())
+
+
+## Ember density relative to the full eruption: ramps from a sparse trickle
+## to near-full over the warning window. Quantized to steps — changing
+## .amount restarts the emitter, so a smoothly varying amount would restart
+## it every frame.
+func _ember_intensity() -> float:
+	if WeatherManager.is_volcano_active():
+		return 1.0
+	if WeatherManager.is_volcano_warning():
+		var total: float = maxf(Constants.VOLCANO_WARNING_TIME, 0.01)
+		var progress: float = 1.0 - clampf(WeatherManager.get_volcano_warning_remaining() / total, 0.0, 1.0)
+		return lerpf(0.3, 0.9, floor(progress * 6.0) / 6.0)
+	return 0.0
 
 
 ## particle_mult() can change at runtime (quality presets) — adjust amounts
@@ -142,12 +159,13 @@ func _apply_quality_amounts() -> void:
 	var mult := ArtStyle3D.particle_mult()
 	_set_amount(_motes, int(MOTES_BASE_AMOUNT * mult))
 	_set_amount(_storm, int(STORM_SNOW_BASE_AMOUNT * mult))
-	_set_amount(_embers, int(EMBERS_BASE_AMOUNT * mult))
+	_set_amount(_embers, int(EMBERS_BASE_AMOUNT * mult * _ember_intensity()))
 	for b in _bursts:
 		_set_amount(b, int(BURST_BASE_AMOUNT * mult))
 
 
 func _set_amount(p: GPUParticles3D, n: int) -> void:
+	n = maxi(n, 1)  # GPUParticles3D rejects amount < 1 (idle emitters sit at 1).
 	if p.amount != n:
 		p.amount = n
 

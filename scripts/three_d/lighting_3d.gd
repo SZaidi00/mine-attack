@@ -8,7 +8,9 @@
 ## dark, faintly warm mine; snowstorms flatten to white gloom; volcano events
 ## cast a menacing red-orange from above (with the warning acting as a subtle
 ## pre-tension); an underground lava flood tints the ambient toward the lava
-## palette. Presentation only — never touches the sim.
+## palette. 3D rework phase 5: during the volcano warning the sun pulses on a
+## ~0.9s beat toward the eruption cast — the pre-eruption "light sweep" the
+## 2D HUD banner can't show in 3D. Presentation only — never touches the sim.
 ##
 ## WeatherManager signals are wired in setup() (the autoload always exists);
 ## PlayerController (view authority) and GridWorld (lava state) mount deferred
@@ -19,6 +21,13 @@ class_name Lighting3D
 
 ## Exponential tween rate (1/s) toward the active mood target.
 const TWEEN_RATE: float = 2.0
+
+## 3D rework phase 5: warning-pulse period (seconds per beat) and the relative
+## overdrive a beat adds above the volcano mood targets (applied to the tween
+## TARGET, so the pulse stays bounded instead of accumulating per frame).
+const WARNING_PULSE_PERIOD: float = 0.9
+const WARNING_PULSE_ENERGY: float = 0.45
+const WARNING_PULSE_TINT := Color(1.0, 0.28, 0.12)
 
 ## Per-mood light targets: sun color/energy + ambient color/energy.
 ## 3D rework phase 3 retune: the terrain albedo pass is lit now, and ACES
@@ -63,6 +72,9 @@ var _underground_view: bool = false
 var _storm: bool = false
 var _volcano: bool = false
 var _lava_event: bool = false
+
+## 3D rework phase 5: phase accumulator for the pre-eruption warning pulse.
+var _warning_pulse_time: float = 0.0
 
 var _pc_connected: bool = false
 
@@ -128,7 +140,24 @@ func _process(delta: float) -> void:
 	var lava_glow: bool = _lava_event
 	if not lava_glow and _underground_view and _grid != null:
 		lava_glow = _grid.is_lava_active() or _grid.is_lava_warning()
-	_tween_toward(_MOODS[get_mood_name()], lava_glow, delta)
+	_tween_toward(_apply_warning_pulse(_MOODS[get_mood_name()], delta), lava_glow, delta)
+
+
+## 3D rework phase 5: while the eruption warning counts down (meteors not yet
+## falling), the mood target itself throbs hotter on a ~0.9s beat. Modulating
+## the target keeps the pulse bounded — the light chases a moving target with
+## the same exponential tween, so the beat can never accumulate.
+func _apply_warning_pulse(target: Dictionary, delta: float) -> Dictionary:
+	if not WeatherManager.is_volcano_warning():
+		_warning_pulse_time = 0.0
+		return target
+	_warning_pulse_time += delta
+	var beat: float = 0.5 + 0.5 * sin(_warning_pulse_time * TAU / WARNING_PULSE_PERIOD)
+	var pulsed: Dictionary = target.duplicate()
+	pulsed["sun_energy"] = float(target["sun_energy"]) * (1.0 + WARNING_PULSE_ENERGY * beat)
+	pulsed["sun_color"] = (target["sun_color"] as Color).lerp(WARNING_PULSE_TINT, 0.35 * beat)
+	pulsed["ambient_energy"] = float(target["ambient_energy"]) * (1.0 + 0.25 * beat)
+	return pulsed
 
 
 func _exit_tree() -> void:

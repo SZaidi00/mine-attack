@@ -199,14 +199,11 @@ func _destroy() -> void:
 
 
 ## Interaction rect used by unit.attack_building(): a zero-height strip at the
-## lantern's "ground line", so the stand point lands on a walkable cell —
-## the surface row for surface lanterns, the lantern's own (dug-out) cell
-## underground.
+## lantern's own cell row, so the stand point lands on a walkable cell —
+## the lantern's band row on the surface, its dug-out cell underground.
 func get_bounds_rect() -> Rect2:
-	if is_underground_lantern:
-		var top: float = floorf(global_position.y / GridWorld.CELL_SIZE) * GridWorld.CELL_SIZE
-		return Rect2(global_position.x - 16.0, top, 32.0, 0.0)
-	return Rect2(global_position.x - 16.0, 0.0, 32.0, 0.0)
+	var top: float = floorf(global_position.y / GridWorld.CELL_SIZE) * GridWorld.CELL_SIZE
+	return Rect2(global_position.x - 16.0, top, 32.0, 0.0)
 
 
 static func _make_glow_texture() -> Texture2D:

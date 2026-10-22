@@ -164,36 +164,39 @@ func _closest_point_on_rect(rect: Rect2, point: Vector2) -> Vector2:
 	)
 
 
-## Where to stand to attack a building: on the walkable surface row at its
-## base, horizontally clamped to the building's span.
+## Where to stand to attack a building: on the surface band at its base,
+## horizontally clamped to the building's span and vertically clamped so a
+## structure on the bottom row never pushes units into the mine.
 func _building_stand_point(building: Node2D) -> Vector2:
 	var rect: Rect2 = building.call("get_bounds_rect")
 	var x: float = clampf(unit.global_position.x, rect.position.x, rect.end.x)
-	return Vector2(x, rect.end.y + GridWorld.CELL_SIZE * 0.5)
+	var stand_y: float = rect.end.y + GridWorld.CELL_SIZE * 0.5
+	stand_y = clampf(stand_y, (GridWorld.SURFACE_TOP + 0.5) * GridWorld.CELL_SIZE, GridWorld.CELL_SIZE * 0.5)
+	return Vector2(x, stand_y)
 
 
-## Cheap point walkability for kiting (no A*): the surface row is open ground;
+## Cheap point walkability for kiting (no A*): the surface band is open ground;
 ## underground only EMPTY cells can be stood on. Built wall segments block
 ## their cell either way.
 func _is_walkable_point(world_pos: Vector2) -> bool:
 	if _is_wall_at(world_pos):
 		return false
 	if world_pos.y <= GridWorld.CELL_SIZE:
-		return world_pos.y >= 0.0 \
+		return world_pos.y >= GridWorld.SURFACE_TOP * GridWorld.CELL_SIZE \
 			and world_pos.x >= GridWorld.X_MIN * GridWorld.CELL_SIZE \
 			and world_pos.x <= (GridWorld.X_MAX + 1) * GridWorld.CELL_SIZE
 	var cell: GridWorld.Cell = unit._grid.get_cell(unit._grid.world_to_grid(world_pos))
 	return cell != null and cell.type == GridWorld.CellType.EMPTY
 
 
-## True when a built (not under-construction) ENEMY wall segment occupies the
-## cell containing world_pos. Own walls never block their team (Phase 3).
+## True when a built (not under-construction) ENEMY wall seals the cell
+## containing world_pos. Walls seal their whole column through the surface
+## band, so the seal map (not the wall's own cell) is the source of truth.
+## Own walls never block their team (Phase 3).
 func _is_wall_at(world_pos: Vector2) -> bool:
 	var cell: Vector2i = unit._grid.world_to_grid(world_pos)
-	for wall in unit.get_tree().get_nodes_in_group("walls"):
-		if wall.team != unit.team and wall.is_built() and wall.get_cell() == cell:
-			return true
-	return false
+	var sealed_team: int = unit._grid._wall_sealed_cells.get(cell, -1)
+	return sealed_team != -1 and sealed_team != unit.team
 
 
 func _start_flee() -> void:

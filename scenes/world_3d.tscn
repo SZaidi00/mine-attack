@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/three_d/entity_proxies_3d.gd" id="1_proxies"]
 [ext_resource type="Script" path="res://scripts/three_d/terrain_3d.gd" id="2_terrain"]
 [ext_resource type="Script" path="res://scripts/three_d/selection_rings_3d.gd" id="3_selection"]
 [ext_resource type="Script" path="res://scripts/three_d/projectile_proxies_3d.gd" id="4_projectiles"]
+[ext_resource type="Script" path="res://scripts/three_d/event_proxies_3d.gd" id="5_events"]
 
 [sub_resource type="Environment" id="Environment_world3d"]
 background_mode = 1
@@ -56,3 +57,6 @@ script = ExtResource("3_selection")
 
 [node name="ProjectileProxies3D" type="Node3D" parent="."]
 script = ExtResource("4_projectiles")
+
+[node name="EventProxies3D" type="Node3D" parent="."]
+script = ExtResource("5_events")

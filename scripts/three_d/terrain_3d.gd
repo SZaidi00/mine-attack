@@ -3,8 +3,9 @@
 ## The 2D world projected as flat colored quads: chunk MeshInstances (one
 ## ArrayMesh each) rebuilt from GridWorld's cells — a pure sim -> render
 ## projection (the grid is read, never written). Exactly like the 2D view,
-## only the layer matching the current Tab view renders: the surface row
-## (y=0) in surface view, rows y>=1 underground in underground view; layer
+## only the layer matching the current Tab view renders: the surface band
+## (y in [SURFACE_TOP, 0]) in surface view, rows y>=1 underground in
+## underground view; layer
 ## switching marks every chunk dirty and the throttled pass rebuilds them.
 ##
 ## Colors mirror grid_drawing.gd's flat palette (ice surface, per-layer
@@ -78,13 +79,14 @@ func setup(grid: GridWorld) -> void:
 	# One shared emissive material for every glow chunk; _process pulses its
 	# emission_energy_multiplier (ArtStyle3D's cache makes it shared state).
 	_glow_mat = ArtStyle3D.get_material(ArtStyle3D.PALETTE.lava, ArtStyle3D.PALETTE.lava, 1.0)
-	# Chunk starts cover the full cell range (incl. border walls at x=+-41
-	# and the y=22 floor row); posmod keeps them aligned to CHUNK_* sizes.
+	# Chunk starts cover the full cell range (incl. border walls at x=+-41,
+	# the surface band above row 0, and the y=22 floor row); posmod keeps them
+	# aligned to CHUNK_* sizes.
 	var x0: int = GridWorld.X_MIN - 1 - int(posmod(GridWorld.X_MIN - 1, CHUNK_COLS))
 	while x0 <= GridWorld.X_MAX + 1:
 		_chunk_x_starts.append(x0)
 		x0 += CHUNK_COLS
-	var y0: int = GridWorld.Y_MIN
+	var y0: int = GridWorld.SURFACE_TOP - int(posmod(GridWorld.SURFACE_TOP, CHUNK_ROWS))
 	while y0 <= GridWorld.Y_MAX + 1:
 		_chunk_y_starts.append(y0)
 		y0 += CHUNK_ROWS
@@ -250,13 +252,13 @@ func _rebuild_chunk(key: Vector2i) -> void:
 	for dy in range(CHUNK_ROWS):
 		for dx in range(CHUNK_COLS):
 			var pos := Vector2i(x_start + dx, y_start + dy)
-			if pos.y < GridWorld.Y_MIN or pos.y > GridWorld.Y_MAX + 1:
+			if pos.y < GridWorld.SURFACE_TOP or pos.y > GridWorld.Y_MAX + 1:
 				continue
 			if not _grid.has_cell(pos):
 				continue
-			if _underground_view and pos.y == 0:
+			if _underground_view and _grid.is_surface_row(pos.y):
 				continue
-			if not _underground_view and pos.y != 0:
+			if not _underground_view and not _grid.is_surface_row(pos.y):
 				continue
 			var cell: GridWorld.Cell = _grid.get_cell(pos)
 			if cell.type == GridWorld.CellType.EMPTY:

@@ -1,8 +1,16 @@
 # 3D Readability Rework — Overview
 
-**Status:** Phase 1 implemented (2026-10-19); Phase 2 implemented (2026-10-20); Phase 3 implemented (2026-10-20); Phase 4 implemented (2026-10-20); phases 5–6 not started.
+**Status:** Phase 1 implemented (2026-10-19); Phase 2 implemented (2026-10-20); Phase 3 implemented (2026-10-20); Phase 4 implemented (2026-10-20); Phase 5 implemented (2026-10-20); phase 6 not started.
 **Branch:** `feat/3d-conversion` (Phase 1 + 2
 of the original 3D conversion are complete; see `roadmap/3d-conversion/`).
+
+> **Sim-side groundwork (2026-10-21):** the surface is no longer a single
+> row — the sim now generates a 6-row walkable battlefield band
+> (`y ∈ [SURFACE_TOP, 0]`, `Constants.SURFACE_ROWS`), so units move in 2D on
+> the surface and structures place anywhere in the band (walls seal their
+> whole column). The presentation-only hard rule below still applies to
+> phases 1–5; this band work deliberately touched the sim, and the 3D layer
+> inherits it through the linear 2D→3D transform.
 
 ## Problem statement
 

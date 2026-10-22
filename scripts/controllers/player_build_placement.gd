@@ -176,10 +176,10 @@ func _structure_at_cell(cell: Vector2i) -> Node2D:
 	return null
 
 
-## Tower rules (Revamp Phase 3): own half's surface row, not within 2 cells of
+## Tower rules (Revamp Phase 3): own half's surface band, not within 2 cells of
 ## a building or mine entry, max TOWER_MAX_COUNT per team plus research bonuses.
 func _tower_placement_error(cell: Vector2i) -> String:
-	if cell.y != 0:
+	if not pc._grid.is_surface_row(cell.y):
 		return "must be placed on the surface"
 	if cell.x > -2:
 		return "own half of the map only"
@@ -203,10 +203,10 @@ func _tower_placement_error(cell: Vector2i) -> String:
 	return ""
 
 
-## Wall rules (Revamp Phase 3): own half's surface row, unoccupied cell, at
+## Wall rules (Revamp Phase 3): own half's surface band, unoccupied cell, at
 ## most a couple of segments per team (faction-modified) plus research bonuses.
 func _wall_placement_error(cell: Vector2i) -> String:
-	if cell.y != 0:
+	if not pc._grid.is_surface_row(cell.y):
 		return "must be placed on the surface"
 	if cell.x > -2:
 		return "own half of the map only"
@@ -308,7 +308,7 @@ func _lantern_placement_error(kind: String, cell: Vector2i) -> String:
 			if Vector2(pc._grid.world_to_grid(lantern.global_position) - cell).length() < pc._Constants.UNDERGROUND_LANTERN_MIN_DISTANCE:
 				return "too close to another lantern"
 	else:
-		if cell.y != 0:
+		if not pc._grid.is_surface_row(cell.y):
 			return "must be placed on the surface"
 		if cell.x > -2:
 			return "own half of the map only"

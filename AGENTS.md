@@ -78,7 +78,25 @@ mine-attack/
 │   │                  # into pooled glowing tracers), order_marker_3d.gd +
 │   │                  # damage_popup_3d.gd (3D equivalents the sim spawns when the
 │   │                  # shell is current_scene), range_disc_3d.gd (selected-tower
-│   │                  # range disc + build-ghost range/vision disc)
+│   │                  # range disc + build-ghost range/vision disc),
+│   │                  # plus the 3D-rework Phase 5 effects & telegraphs layer:
+│   │                  # event_proxies_3d.gd (per-frame reconcile of the sim's
+│   │                  # meteors into falling streaks + impact rings, burning-ground
+│   │                  # patches into scorch decals with pulsing danger rings —
+│   │                  # decal lifetime/extinguish read from sim burn state, never
+│   │                  # tracked separately — plus the lava-rise warning shimmer
+│   │                  # MultiMesh over the cells the wave profile will flood and
+│   │                  # the cave-in warning's 3x3 shadow zone + dust trickle),
+│   │                  # telegraph_3d.gd (pooled red dashed arcs from the attacker
+│   │                  # group's centroid to the target on explicit attack orders;
+│   │                  # player_commands.gd spawns them via the same
+│   │                  # Presentation3D branch as the order markers), the eruption
+│   │                  # warning presence (lighting_3d.gd pulses the sun toward the
+│   │                  # eruption cast on a beat, effects_3d.gd ramps ember density
+│   │                  # over the warning, main_3d.gd rumbles the rig on the
+│   │                  # WeatherManager warning/start signals), and the emission
+│   │                  # hierarchy retune (telegraphs 3.2 > tracers 2.2-2.6 >
+│   │                  # ambient lava/lanterns 0.7-1.8 > decorative embers 0.9)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~48 test scripts)
@@ -140,7 +158,19 @@ mine-attack/
 > signal), a sky-side rim on unit/structure materials, Brute's accent moved
 > from red to ember `#EE6B1C` (2D `menu_color`/`COLOR_BRUTE` match),
 > darkened/cooled underground dirt and rock, and a full-strength snow-cover
-> lerp so storms visibly whiten the board. On `main`,
+> lerp so storms visibly whiten the board. 3D-rework Phase 5
+> (roadmap/3d-rework/) added the effects & telegraph layer: meteors and
+> burning-ground patches mirrored into 3D (event_proxies_3d.gd — falling
+> emissive streaks, expanding impact rings at the sim's damage radius, and
+> scorch decals whose pulse/fade/extinguish read the sim's burn state), an
+> eruption-warning presence (a sun pulse in lighting_3d.gd, an ember density
+> ramp in effects_3d.gd, and a rig rumble on the WeatherManager warning/start
+> signals), event-zone telegraphs (lava-rise shimmer over exactly the cells
+> the wave profile will flood, cave-in 3x3 shadow zone + dust trickle), red
+> attack-order telegraph arcs (telegraph_3d.gd, spawned from
+> player_commands.gd via the Presentation3D branch like the order markers),
+> and an emission-energy retune so telegraphs are the brightest emissive
+> class. On `main`,
 > Play loads `scenes/main.tscn` directly.
 
 `scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
@@ -195,9 +225,9 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 ### `scripts/world/`
 
-- `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers.
-  - `grid_map_generation.gd` — map generation and A* initialization. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
-  - `grid_pathfinding.gd` — `find_path`, `find_path_underground` (crawler variant: seals the surface row for the query so underground raids can't bypass the central wall over the top), walkability helpers, wall cell sealing.
+- `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers. The surface is a multi-row battlefield band, not a single row: `SURFACE_ROWS` (6) walkable rows span `y ∈ [SURFACE_TOP, Y_MIN]` = `[-5, 0]`; underground stays at `y >= 1`. `GridWorld.is_surface_row(y)` is the shared predicate — use it instead of `y == 0` checks. Base building footprints genuinely seal their band cells (`building.gd._mark_footprint_solid`), leaving row 0 in front of each base walkable.
+  - `grid_map_generation.gd` — map generation and A* initialization. Generates the 6-row surface band above row 0 and the underground layers; the A* region covers both. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
+  - `grid_pathfinding.gd` — `find_path`, `find_path_underground` (crawler variant: seals the whole surface band for the query so underground raids can't bypass the central wall over the top), walkability helpers, wall cell sealing.
   - `grid_fog_of_war.gd` — vision maps, memory, ghost silhouettes, fog rendering.
   - `grid_drawing.gd` — surface/underground terrain drawing, effects, wall HP bar.
   - `grid_mining.gd` — cell damage, mining, ore reveal, ore depletion trickle.
@@ -269,7 +299,7 @@ Trainable units (costs and times in `Constants.COSTS` / `Constants.TRAIN_TIMES`)
 - **Dragon** — flying, anti-air and ground, high cost.
 - **Pigeon** — flying scout trained from towers; provides vision, vulnerable to anti-air.
 - **Engineer** — support unit (75g, 2 pop, no attack); channels repairs on damaged friendly structures (walls/towers/lanterns/building — never units), charging coin per HP restored. A structure damaged within `ENGINEER_REPAIR_LOCKOUT_SEC` cannot be repaired. Idle engineers auto-seek the nearest damaged friendly structure.
-- **Crawler** — underground-only raider (120g, 2 pop, melee); descends into the mine at spawn and can never surface or dig. Its auto-acquire is the one exception to the midfield rule: it engages any visible enemy unit underground on either side of the central wall. Underground pathing seals the surface row (`find_path_underground`), so crossing midfield requires a breached central wall plus dug tunnels. Not a fighter: waves, garrison, rally, Ctrl+F, and fighter upgrades all ignore it (`UnitData.is_crawler`).
+- **Crawler** — underground-only raider (120g, 2 pop, melee); descends into the mine at spawn and can never surface or dig. Its auto-acquire is the one exception to the midfield rule: it engages any visible enemy unit underground on either side of the central wall. Underground pathing seals the surface band (`find_path_underground`), so crossing midfield requires a breached central wall plus dug tunnels. Not a fighter: waves, garrison, rally, Ctrl+F, and fighter upgrades all ignore it (`UnitData.is_crawler`).
 - **Undead** (Necromancy research only, not trainable) — raised by a wizard channeling on a corpse left by a dead surface swordsman/archer/dragon (corpses last `NECRO_CORPSE_DURATION` s, any team's wizard may raise them). An undead copy runs at ~50% HP/damage with no faction abilities, no fighter upgrades, and no kiting, costs no population, and dies when its raising wizard dies. Per-wizard caps: 5 ground undead or 1 undead dragon (needs a dragon corpse). Player wizards get a Raise toggle button in the CommandRow when selected (off/troops/dragon); enemy wizards default to troops. Sickly green sprite tint instead of new art (`UnitData.is_undead`).
 
 Miner upgrades unlock deeper layers (Level 1: layers 1–2, Level 2: layers 3–4, Level 3: layers 5–7). Fighter upgrades are per-type levels 1–3.
@@ -280,7 +310,7 @@ Placeable from the radial build menu:
 
 - **Lanterns** — surface and underground variants provide vision and upgrade T1→T2→T3.
 - **Towers** — static surface defenses; auto-attack and vision.
-- **Walls** — single-cell surface barriers that block movement and projectiles.
+- **Walls** — single-cell surface barriers (placeable on any row of the surface band) that block movement and projectiles by sealing their entire column through the band plus dug cells below.
 - **Traps** — hidden area damage triggered by enemy units (miner-placed with Guerrilla research).
 
 ### Research
@@ -405,7 +435,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself. Map generation does NOT follow the global RNG stream (dedicated map RNG, see `grid_map_generation.gd`) — tests that need a fixed map pin `GameManager.set_map_seed(n)` in setup and `GameManager.clear_map_seed()` in teardown.
-- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare, control groups, attack-move, minimap, tutorial hints, tutorial panel, coaching hints, production toasts, accessibility settings, key remapping, waypoint orders, formations, threat alerts, dynamic music, juice (hit-stop / necro VFX).
+- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare, control groups, attack-move, minimap, tutorial hints, tutorial panel, coaching hints, production toasts, accessibility settings, key remapping, waypoint orders, formations, threat alerts, dynamic music, juice (hit-stop / necro VFX), surface band (multi-row battlefield).
 
 ## Security and deployment considerations
 

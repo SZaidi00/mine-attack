@@ -20,6 +20,12 @@
 ## ember orange) live from SettingsManager. Entity materials carry a
 ## subtle sky-side rim so dark units separate from dark ground even on
 ## Potato (where no shadows/SSAO exist).
+##
+## 3D rework phase 5 emission hierarchy (brightest wins bloom, Standard+):
+## telegraph lines 3.2 > meteors/event-zone warnings 2.4-3.0 > combat
+## tracers 2.2-2.6 > burn rings 2.0 > ambient lava/lanterns/unit accents
+## 0.7-1.8 > decorative embers 0.9. Nothing decorative outshines a
+## telegraph.
 class_name ArtStyle3D
 extends RefCounted
 

@@ -893,6 +893,11 @@ const GRID_X_MAX: int = 40
 const GRID_Y_MIN: int = 0
 const GRID_Y_MAX: int = 21
 
+# Walkable surface battlefield: SURFACE_ROWS rows of open ground stacked above
+# row 0 (y in [GRID_Y_MIN - SURFACE_ROWS + 1, GRID_Y_MIN]). Underground stays
+# at y >= 1.
+const SURFACE_ROWS: int = 6
+
 # Rows per underground layer in GridWorld (3 rows => 7 layers).
 const ROWS_PER_LAYER: int = 3
 
