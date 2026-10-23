@@ -278,6 +278,17 @@ func _reject_command(action: String, reason: String, at: Vector2) -> void:
 
 
 func _screen_to_world(screen_pos: Vector2) -> Vector2:
+	# 3D shell: the 2D canvas transform belongs to the hidden sim camera, which
+	# no longer tracks the 3D rig (edge pan and zoom-to-cursor exist only on the
+	# rig), so map the click through the 3D camera ray against the sculpted
+	# terrain instead. Null hit (ray misses the ground) falls back to the 2D
+	# transform. Standalone main.tscn and the GUT suite have no shell and keep
+	# the 2D path.
+	var shell := Presentation3D.shell(pc.get_tree())
+	if shell != null:
+		var hit: Variant = shell._terrain_point_at(screen_pos)
+		if hit != null:
+			return Vector2(hit.x, hit.z) / Presentation3D.WORLD_SCALE
 	# Camera2D has no project_position() (that is a Camera3D API); convert via
 	# the viewport's canvas transform, which also handles zoom and stretch.
 	return pc.get_viewport().get_canvas_transform().affine_inverse() * screen_pos

@@ -11,6 +11,9 @@
 ## which this rig follows), while pan/zoom are applied to the 3D camera. The
 ## 2D Camera2D keeps receiving the same input invisibly — harmless, and it
 ## keeps player_camera.gd's bookmarks/logic exercised for the GUT suite.
+## Because the two cameras diverge (edge pan and zoom-to-cursor exist only on
+## this rig), sim-side screen→world mapping routes through this rig's camera
+## ray instead (player_commands._screen_to_world via Presentation3D.shell).
 extends Node3D
 
 const SIM_SCENE: PackedScene = preload("res://scenes/main.tscn")
@@ -45,6 +48,7 @@ var _listener: AudioListener3D
 var _selection_rings: SelectionRings3D
 var _projectile_proxies: ProjectileProxies3D
 var _event_proxies: EventProxies3D
+var _fog: Fog3D
 var _focus: Vector3 = Vector3.ZERO
 var _surface_focus: Vector3
 var _underground_focus: Vector3
@@ -117,6 +121,9 @@ func _ready() -> void:
 	# 3D rework Phase 5: meteors/burning-ground decals/event-zone warnings.
 	_event_proxies = $World3D/EventProxies3D
 	_event_proxies.setup(grid)
+	# Fog-of-war mist overlay (scene-stubbed like the other subsystems).
+	_fog = $World3D/Fog3D
+	_fog.setup(grid)
 
 	# §2.5 juice: world events shake the rig (max-wins, reduced-motion aware).
 	grid.cave_in_occurred.connect(_on_cave_in_occurred)
@@ -331,6 +338,8 @@ func _apply_view(underground: bool, initial: bool) -> void:
 	_selection_rings.set_underground_view(underground)
 	_projectile_proxies.set_underground_view(underground)
 	_event_proxies.set_underground_view(underground)
+	if _fog != null:
+		_fog.set_underground_view(underground)
 	if _lighting != null:
 		_lighting.set_underground_view(underground)
 

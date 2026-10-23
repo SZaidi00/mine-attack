@@ -15,9 +15,10 @@
 ## heights from ArtStyle3D.cell_hash, snow cover lerps the surface toward
 ## the snow palette as storms accumulate and melts after, and visible lava
 ## (plus magma rock touching it) renders as a second emissive "glow" mesh
-## per chunk whose shared material pulses. Player fog of war tints every
-## quad via fog_state_at() (fog / remembered / visible), same scheme as the
-## 2D overlay; per-chunk decorations (ore crystals, snow drifts, embers)
+## per chunk whose shared material pulses. Player fog of war dims every quad
+## toward FOG_GROUND_TINT via fog_state_at() (fog / remembered / visible) —
+## the actual occlusion read is the Fog3D mist overlay on top, so the terrain
+## under fog stays a dim blue-grey instead of the 2D renderer's near-black; per-chunk decorations (ore crystals, snow drifts, embers)
 ## live in the TerrainDetail3D child.
 ##
 ## 3D rework phase 3: the albedo pass is a LIT vertex-color material, so the
@@ -48,6 +49,11 @@ const ORE_TIER_BRIGHT := Color(0.95, 0.7, 0.2)
 ## darken + cool shift for the 3D underground lives here as a multiplier
 ## instead of editing GameManager.COLOR_DIRT_*.
 const DIRT_GRADE := Color(0.82, 0.83, 0.9)
+## Fog dimming target for the albedo pass: hidden/remembered cells lerp toward
+## this cold blue-grey instead of the 2D renderer's near-black FOG_COLOR — the
+## Fog3D mist overlay carries the occlusion read, so the ground underneath
+## only needs to look dimmed, not voided.
+const FOG_GROUND_TINT := Color(0.14, 0.17, 0.23)
 
 var _grid: GridWorld
 var _mat: StandardMaterial3D
@@ -279,9 +285,9 @@ func _rebuild_chunk(key: Vector2i) -> void:
 			var color := _cell_color(cell, pos, max_ore)
 			match fog:
 				0:
-					color = Constants.FOG_COLOR
+					color = color.lerp(FOG_GROUND_TINT, 0.85)
 				1:
-					color = color.lerp(Constants.FOG_COLOR, Constants.FOG_MEMORY_ALPHA)
+					color = color.lerp(FOG_GROUND_TINT, 0.45)
 			_add_quad(st, cx, cz, color, heights[0], heights[1], heights[2], heights[3])
 	if LIT_TERRAIN:
 		# Flat per-face normals off the sculpted corner heights; the glow

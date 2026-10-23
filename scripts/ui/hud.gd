@@ -593,8 +593,8 @@ func _get_enemy_building() -> Node2D:
 
 var _pause_panel: PanelContainer = null
 # Blueprint tray build menu (Revamp Phase 5 / 7): bottom-centered panel of
-# build cards. A selected structure keeps the tray open until placement is
-# confirmed or cancelled.
+# build cards. Picking a structure hides the tray until placement is
+# confirmed or cancelled (a visible tray would eat the placement click).
 var _build_menu: Control = null
 var _build_lantern_button: Button = null
 var _build_mine_lantern_button: Button = null
