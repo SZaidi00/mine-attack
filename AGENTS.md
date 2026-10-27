@@ -406,6 +406,22 @@ Export presets in `export_presets.cfg`:
 
 The script also packages `MineAttack-macOS.zip` (via `ditto`, preserving bundle metadata), `MineAttack-Windows.zip`, and `MineAttack-Linux.zip`. Both `addons/*` and `tests/*` are excluded from exports.
 
+### Capture deterministic screenshots headless
+
+```bash
+tools/capture/run_capture.sh /tmp/shots
+```
+
+Launches `tools/capture/capture_driver.tscn` instead of the main menu, starts a seeded match (difficulty/faction/speed via env vars), and saves PNGs of named camera poses (`start`, `surface`, `zoomout`, `underground`, `storm`, `volcano`, `custom:X:Y:Z`) at fixed sim-seconds. Built for CI and AI-agent sandboxes: an agent can render, look, and iterate without a display or a human screenshot provider. Requires `xvfb-run`; downloads a Godot Linux binary on first run (`GODOT_BIN` to override).
+
+Hard requirements, learned the hard way in headless/CI environments (full notes in `tools/capture/README.md`):
+
+- Use `--rendering-driver opengl3` — software Vulkan (lavapipe) presents **blank frames**. OpenGL also matches the web build's `gl_compatibility` preset.
+- Fresh checkouts must run `--import` once first (the script handles this) or resource loads fail.
+- Frame times under software GL are meaningless — trust only the pixels.
+
+The driver is presentation-only (same autoload setters the menu uses) and inert unless launched as the scene; parsing is covered by `tests/test_capture_driver.gd`.
+
 ### Web export and local serve
 
 ```bash
