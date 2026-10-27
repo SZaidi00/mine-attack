@@ -63,6 +63,15 @@ var _lantern_light: OmniLight3D
 var _lantern_head: MeshInstance3D
 var _lantern_underground := false
 
+## Construction grow: while the sim structure is still building (towers,
+## walls, lanterns), the model rises out of the ground on a per-frame
+## y-scale instead of standing full height at CONSTRUCTION_ALPHA — a static
+## translucent team-colored model read as a finished "hologram", while the
+## 2D sprites at least draw a progress bar. _root_scale remembers the
+## proxy-root scale (ladders stay 1x) so the grow can restore it.
+var _root_scale: float = PROXY_SCALE
+var _growing := false
+
 ## Selected-tower attack-range disc (3D rework Phase 1): the 2D gold disc in
 ## Tower._draw is on the hidden canvas layer, so the proxy shows its own.
 var _range_disc: RangeDisc3D
@@ -120,6 +129,11 @@ static func create(s: Node2D, grid: GridWorld) -> StructureProxy3D:
 	# scale 1 so their rail endpoints stay on the exact world positions.
 	if p._kind != _Kind.LADDER:
 		p.scale = Vector3.ONE * PROXY_SCALE
+	p._root_scale = 1.0 if p._kind == _Kind.LADDER else PROXY_SCALE
+	if s.has_method("is_built") and not bool(s.call("is_built")):
+		p._set_growing(true)
+	else:
+		p.set_process(false)
 
 	if p._kind == _Kind.TOWER or p._kind == _Kind.WALL:
 		p._tilt_sign = -1.0 if p._enemy else 1.0
@@ -489,6 +503,29 @@ func _on_hp_changed(_current: int, _maximum: int) -> void:
 	_tint_bodies(_last_remembered, _last_built)
 
 
+# ─── Construction grow ───
+
+
+func _set_growing(growing: bool) -> void:
+	_growing = growing
+	set_process(growing)
+	scale.y = _root_scale * (0.15 if growing else 1.0)
+
+
+## Per-frame while unbuilt (processing is off otherwise): rise from the
+## ground with the sim's build progress. Reads sim state only.
+func _process(_delta: float) -> void:
+	if entity == null or not is_instance_valid(entity) or not entity.has_method("is_built"):
+		_set_growing(false)
+		return
+	if bool(entity.call("is_built")):
+		_set_growing(false)
+		return
+	var build_time := maxf(float(entity.get("build_time")), 0.01)
+	var t := clampf(float(entity.get("_build_progress")) / build_time, 0.0, 1.0)
+	scale.y = _root_scale * lerpf(0.15, 1.0, t)
+
+
 # ─── Refresh ───
 
 
@@ -531,6 +568,9 @@ func refresh(underground_view: bool) -> void:
 	var built := true
 	if entity.has_method("is_built"):
 		built = bool(entity.call("is_built"))
+		# Lantern upgrades rebuild in place: re-run the construction grow.
+		if not built and not _growing:
+			_set_growing(true)
 	if _kind == _Kind.TOWER or _kind == _Kind.WALL:
 		_read_damage()
 	_tint_bodies(remembered, built)

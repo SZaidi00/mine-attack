@@ -61,7 +61,9 @@ mine-attack/
 │   │                  # wall-footprint-capped proxy-root scale — ladders stay 1x;
 │   │                  # keep/tower/wall damage states, lantern OmniLight tiers,
 │   │                  # counter-scaled range disc, faction-reveal
-│   │                  # accents), lighting_3d.gd (weather-reactive mood + the
+│   │                  # accents, construction grow — unbuilt towers/walls/lanterns
+│   │                  # rise out of the ground on a per-frame y-scale instead of
+│   │                  # standing full height at construction alpha), lighting_3d.gd (weather-reactive mood + the
 │   │                  # phase-3 post stack: ACES tonemap, emissive bloom, depth fog
 │   │                  # at every tier, SSAO on Fancy — Lighting3D.apply_quality_settings()),
 │   │                  # effects_3d.gd
@@ -79,6 +81,11 @@ mine-attack/
 │   │                  # damage_popup_3d.gd (3D equivalents the sim spawns when the
 │   │                  # shell is current_scene), range_disc_3d.gd (selected-tower
 │   │                  # range disc + build-ghost range/vision disc),
+│   │                  # build_ghost_3d.gd (translucent 3D placement preview at
+│   │                  # the snapped cell, centered in the disc, with the green/red
+│   │                  # validity tint — the 2D GhostVisual sprite is skipped while
+│   │                  # the shell runs because it would draw in the sim's stale
+│   │                  # 2D camera space, offset from the cursor's ground point),
 │   │                  # plus the 3D-rework Phase 5 effects & telegraphs layer:
 │   │                  # event_proxies_3d.gd (per-frame reconcile of the sim's
 │   │                  # meteors into falling streaks + impact rings, burning-ground
