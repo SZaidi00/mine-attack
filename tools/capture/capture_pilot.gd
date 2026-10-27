@@ -17,6 +17,7 @@ var _elapsed := 0.0
 var _shot_idx := 0
 var _pending_captures := 0
 var _pc: Node = null
+var _shell: Node = null
 var _weather_active := ""
 
 
@@ -33,6 +34,10 @@ func _process(delta: float) -> void:
 		_pc = get_node_or_null("/root/Main/PlayerController")
 		if _pc == null or _pc.camera == null:
 			return
+		# 3D branch: the camera rig lives on the main_3d shell. PlayerController
+		# set_view() still drives it (view_mode_changed), but dolly/focus are
+		# rig state — reach the shell node once it exists.
+		_shell = get_node_or_null("/root/Main3D")
 	_elapsed += delta
 	var shots: Array = _config.shots
 	if _shot_idx >= shots.size():
@@ -60,20 +65,24 @@ func _apply_pose(shot: Dictionary) -> void:
 		"start":
 			pass  # camera untouched since match start
 		"surface", "storm", "volcano":
-			# Weather shots read best from the surface bookmark.
+			# Weather shots read best from the surface bookmark. The rig
+			# follows PlayerController's view_mode_changed signal.
 			_pc.set_view(false)
-			if shot.pose == "surface":
-				_pc.camera.position = SURFACE_CAM_POS
-				_set_zoom(1.0)
+			if shot.pose == "surface" and _shell != null:
+				_shell._focus = Vector3(0.0, 0.0, -1.5)
+				_shell._dolly = 12.0
 		"zoomout":
 			_pc.set_view(false)
-			_pc.camera.position = SURFACE_CAM_POS
-			_set_zoom(ZOOMOUT_FACTOR)
+			if _shell != null:
+				_shell._focus = Vector3(0.0, 0.0, 0.0)
+				_shell._dolly = 16.0
 		"underground":
 			_pc.set_view(true)
 		"custom":
-			_pc.camera.position = shot.pos
-			_set_zoom(shot.zoom)
+			# 3D branch: custom:X:Y:Z = focus (X, Y world units) + dolly Z.
+			if _shell != null:
+				_shell._focus = Vector3(shot.pos.x * 0.01, 0.0, shot.pos.y * 0.01)
+				_shell._dolly = clampf(shot.zoom, 3.0, 16.0)
 	_capture(shot)
 
 

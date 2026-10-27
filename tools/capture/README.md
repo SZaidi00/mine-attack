@@ -69,6 +69,20 @@ git clone --depth 1 --branch <branch> https://github.com/SZaidi00/mine-attack.gi
 cd mine-attack && tools/capture/run_capture.sh /tmp/shots
 ```
 
-Then open the PNGs and judge. On `feat/3d-conversion` the same driver runs
-(the 3D branch mounts the same sim); pose semantics for the 3D camera rig
-land with the 3D branch's own capture update.
+Then open the PNGs and judge.
+
+## On the 3D branch (`feat/3d-conversion`)
+
+The driver swaps to `res://scenes/main_3d.tscn` (the 3D shell that mounts
+the sim), and the pilot poses the 3D camera rig instead of the 2D camera:
+
+- `start` / `underground` / `storm` / `volcano` — unchanged semantics
+  (`PlayerController.set_view()` drives the rig via `view_mode_changed`).
+- `surface` — surface view, rig focused on midfield at default dolly.
+- `zoomout` — rig focused on map center at max dolly (whole board).
+- `custom:X:Y:Z` — rig focus at world (X, Y) (2D px × 0.01) with dolly Z
+  (3.0–16.0). Example: `60:custom:-800:-100:6`.
+
+The rig is reached at `/root/Main3D`; the pilot sets its `_focus`/`_dolly`
+directly. If the shell gains a public `pose_camera()` API (revamp phase R5),
+switch the pilot to it and drop the private-member access.

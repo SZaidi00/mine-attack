@@ -26,9 +26,11 @@ extends Node
 ##                                      zoom factor Z (e.g. custom:0:-150:0.5)
 ##
 ## The driver configures the autoloads exactly like the main menu's Play
-## flow, swaps in scenes/main.tscn, and hands control to a CapturePilot
+## flow, swaps in the gameplay scene, and hands control to a CapturePilot
 ## node that survives the scene swap (it is parented to the root, not to
-## the freed menu scene).
+## the freed menu scene). On main that's scenes/main.tscn; on the 3D
+## branch (feat/3d-conversion) the menu enters scenes/main_3d.tscn and so
+## does the driver — keep this in sync with main_menu.gd's Play flow.
 ##
 ## Determinism: run with --fixed-fps 60 so sim-seconds == frames / 60.
 ## Headless rendering additionally needs --rendering-driver opengl3 under
@@ -64,7 +66,7 @@ func _ready() -> void:
 	get_tree().root.add_child.call_deferred(pilot)
 	# Also deferred: change_scene_to_file manipulates the root's children and
 	# errors with "busy" when invoked from inside _ready.
-	get_tree().change_scene_to_file.call_deferred("res://scenes/main.tscn")
+	get_tree().change_scene_to_file.call_deferred("res://scenes/main_3d.tscn")
 
 
 func _apply_game_config(config: Dictionary) -> void:
