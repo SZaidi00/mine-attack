@@ -40,6 +40,9 @@ var _hp_mat: StandardMaterial3D
 var _model_height: float = 0.4
 var _underground_unit: bool = false
 var _delta: float = 0.0
+## R3: cached shell terrain for dune ground-snap (null in standalone 2D and
+## in tests that never sync — both stay flat).
+var _terrain: Node = null
 
 
 static func create(u: Node2D) -> UnitProxy3D:
@@ -129,7 +132,15 @@ func sync_from_entity(underground_view: bool, camera_yaw: float) -> void:
 	if dead or unit == null or not is_instance_valid(unit):
 		return
 	var pos: Vector2 = unit.global_position
-	global_position = Vector3(pos.x * WORLD_SCALE, 0.0, pos.y * WORLD_SCALE)
+	# R3: surface units ground-snap to the dune field (underground floor is
+	# flat 0, flyers lift the model from the snapped base).
+	var ground_y := 0.0
+	if not _underground_unit and is_inside_tree():
+		if _terrain == null or not is_instance_valid(_terrain):
+			_terrain = Presentation3D.terrain(get_tree())
+		if _terrain != null:
+			ground_y = float(_terrain.call("world_height_at", pos.x * WORLD_SCALE, pos.y * WORLD_SCALE))
+	global_position = Vector3(pos.x * WORLD_SCALE, ground_y, pos.y * WORLD_SCALE)
 	var altitude: float = float(unit.call("get_flight_altitude")) * WORLD_SCALE
 	# The model's feet sit at local y=0; flying units lift the whole rig.
 	_model.position.y = altitude

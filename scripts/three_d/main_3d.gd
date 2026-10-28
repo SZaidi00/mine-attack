@@ -95,6 +95,12 @@ func _ready() -> void:
 	_sim.get_node("Units").visible = false
 	_sim.get_node("Projectiles").visible = false
 	_sim.get_node("Structures").visible = false
+	# The HUD stays for controls, but its 2D weather renderer clips snow and
+	# eruption effects to a screen band. The 3D weather volume replaces it.
+	var weather_overlay := _sim.get_node_or_null("UI/HUD/WeatherOverlay") as Control
+	if weather_overlay != null:
+		weather_overlay.hide()
+		weather_overlay.set_process(false)
 
 	# View bookmarks mirror the 2D camera defaults: surface start position
 	# and the own mine entry's underground position.
@@ -292,9 +298,9 @@ func _zoom_toward(screen_pos: Variant, factor: float) -> void:
 
 
 ## World-space ground point under a screen position (null = viewport
-## center): the camera ray is iterated a few times against the sculpted
-## terrain heights, which vary gently (+-0.03 open ground, wall ridges to
-## 0.2) so the fixed-point loop converges almost immediately. Null when the
+## center): the camera ray is iterated a few times against the dune-field
+## heights, which vary gently (dunes to ~0.13, wall ridges to 0.2) so the
+## fixed-point loop converges almost immediately. Null when the
 ## ray never meets the ground (looking at the sky) or the rig isn't up yet.
 func _terrain_point_at(screen_pos: Variant) -> Variant:
 	if _camera == null or _terrain == null:

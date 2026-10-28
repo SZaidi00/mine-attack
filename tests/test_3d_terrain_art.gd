@@ -137,3 +137,14 @@ func test_lava_glow_pass_pulses_its_shared_emissive_material() -> void:
 		waited += 1
 	assert_ne(glow_mat.emission_energy_multiplier, first,
 		"the shared lava material's emission energy pulses over time")
+
+
+func test_r2_dirt_layers_use_cooled_rock_palette() -> void:
+	var terrain := _terrain()
+	for layer in [1, 3, 6]:
+		var color: Color = terrain._dirt_color(layer)
+		assert_gt(color.b, color.r, "dirt layer %d is cooled rather than brown" % layer)
+	assert_eq(terrain._dirt_color(3), ArtStyle3D.PALETTE.rock,
+		"mid mine dirt uses the R2 rock token")
+	assert_eq(terrain._dirt_color(6), ArtStyle3D.PALETTE.rock_dark,
+		"deep mine dirt uses the R2 deep-rock token")

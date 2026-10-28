@@ -1,42 +1,37 @@
-## Phase 2 effects (roadmap/3d-conversion/phase-2-art-pass.md §2.5).
-##
-## Art-directed cheap particles for the 3D presentation, all driven by sim
-## state (signals + WeatherManager polls, never writes the sim):
-##   - DustMotes     — slow drifting specks while the underground (Tab) view
-##                     is active; off entirely on the Potato preset.
-##   - StormSnow     — wind-swept snow streaks around the camera while a
-##                     snowstorm rages (surface view); weather-significant, so
-##                     it shows on every preset at particle_mult() counts.
-##   - VolcanoEmbers — embers drifting up around the camera during eruptions
-##                     (surface view), ramping up in density over the warning
-##                     window (phase 5); particles only — the red glow is the
-##                     lighting pass.
-##   - CaveInBurst0… — one-shot grey-brown dust puffs on grid.cave_in_occurred,
-##                     a small reusable pool (freed/restarted, never re-alloc'd).
-##
-## All counts scale with ArtStyle3D.particle_mult(); continuous emitters are
-## positioned on the camera's x/z focus each frame. Materials are unshaded
-## billboards with a soft radial dot — few draw calls, no textures on disk.
-##
-## View mode arrives two ways: lazy-connected from
-## /root/Main/PlayerController.view_mode_changed (the shell mounts the sim
-## deferred, so the connect is retried in _process), or directly via
-## set_underground_view() (shell/tests).
+## Sim-driven 3D atmosphere and event particles. Overlapping camera-local
+## volumes begin behind the camera and carry snow, meteors, cinders, and ash
+## continuously into the distance without a clipped screen-space weather band.
+## Underground motes and cave-in bursts remain world-space effects. All counts
+## scale with ArtStyle3D.particle_mult(); weather never writes sim state.
 extends Node3D
 class_name Effects3D
 
-## 3D units per 2D pixel — mirrors main_3d.gd/terrain_3d.gd.
 const WORLD_SCALE: float = 0.01
 
-const STORM_SNOW_BASE_AMOUNT: int = 240
-const EMBERS_BASE_AMOUNT: int = 110
+const STORM_SNOW_BASE_AMOUNT: int = 960
+const STORM_NEAR_BASE_AMOUNT: int = 1600
+const EMBERS_BASE_AMOUNT: int = 500
+const ASH_BASE_AMOUNT: int = 600
+const ASH_NEAR_BASE_AMOUNT: int = 900
+const METEOR_SHOWER_BASE_AMOUNT: int = 400
 const MOTES_BASE_AMOUNT: int = 130
 const BURST_POOL_SIZE: int = 4
 const BURST_BASE_AMOUNT: int = 26
 
 const MOTES_NAME: StringName = &"DustMotes"
 const STORM_NAME: StringName = &"StormSnow"
+const STORM_NEAR_NAME: StringName = &"StormSnowNear"
 const EMBERS_NAME: StringName = &"VolcanoEmbers"
+const ASH_NAME: StringName = &"VolcanoAsh"
+const ASH_NEAR_NAME: StringName = &"VolcanoAshNear"
+const METEOR_SHOWER_NAME: StringName = &"VolcanoMeteorShower"
+
+const STORM_VOLUME_CENTER := Vector3(0.0, 0.0, -14.0)
+const STORM_VOLUME_EXTENTS := Vector3(20.0, 12.0, 20.0)
+const ERUPTION_VOLUME_CENTER := Vector3(0.0, 0.0, -14.0)
+const ERUPTION_VOLUME_EXTENTS := Vector3(20.0, 12.0, 20.0)
+const NEAR_VOLUME_CENTER := Vector3(0.0, 0.0, -3.0)
+const NEAR_VOLUME_EXTENTS := Vector3(4.5, 3.5, 4.5)
 
 var _grid: GridWorld
 var _camera: Camera3D
@@ -46,7 +41,11 @@ var _underground_view := false
 
 var _motes: GPUParticles3D
 var _storm: GPUParticles3D
+var _storm_near: GPUParticles3D
 var _embers: GPUParticles3D
+var _ash: GPUParticles3D
+var _ash_near: GPUParticles3D
+var _meteor_shower: GPUParticles3D
 var _bursts: Array[GPUParticles3D] = []
 var _burst_index := 0
 
@@ -82,12 +81,18 @@ func _process(_delta: float) -> void:
 	_ensure_pc_connected()
 	_apply_quality_amounts()
 	_refresh_emitters()
-	# Continuous emitters track the camera's ground focus (x/z only; the
-	# emitters' own heights are baked into their process materials).
 	var focus: Vector3 = _camera.global_position
 	_motes.position = Vector3(focus.x, 0.15, focus.z)
-	_storm.position = Vector3(focus.x, 2.2, focus.z)
-	_embers.position = Vector3(focus.x, 0.25, focus.z)
+	_track_camera_volume(_storm, STORM_VOLUME_CENTER)
+	_track_camera_volume(_storm_near, NEAR_VOLUME_CENTER)
+	_track_camera_volume(_embers, ERUPTION_VOLUME_CENTER)
+	_track_camera_volume(_ash, ERUPTION_VOLUME_CENTER)
+	_track_camera_volume(_ash_near, NEAR_VOLUME_CENTER)
+	_track_camera_volume(_meteor_shower, ERUPTION_VOLUME_CENTER)
+
+
+func _track_camera_volume(p: GPUParticles3D, center: Vector3) -> void:
+	p.global_transform = _camera.global_transform * Transform3D(Basis.IDENTITY, center)
 
 
 ## The shell mounts the sim deferred; until /root/Main exists we retry the
@@ -134,9 +139,11 @@ func _refresh_emitters() -> void:
 	_motes.emitting = _underground_view and ArtStyle3D.detail_enabled()
 	var surface_view := not _underground_view
 	_storm.emitting = surface_view and WeatherManager.is_snowstorm_active()
-	# Phase 5: embers ramp up during the eruption warning (density in
-	# _apply_quality_amounts) and run at full density during the eruption.
+	_storm_near.emitting = _storm.emitting
 	_embers.emitting = surface_view and (WeatherManager.is_volcano_active() or WeatherManager.is_volcano_warning())
+	_ash.emitting = surface_view and WeatherManager.is_volcano_active()
+	_ash_near.emitting = _ash.emitting
+	_meteor_shower.emitting = _ash.emitting
 
 
 ## Ember density relative to the full eruption: ramps from a sparse trickle
@@ -159,7 +166,11 @@ func _apply_quality_amounts() -> void:
 	var mult := ArtStyle3D.particle_mult()
 	_set_amount(_motes, int(MOTES_BASE_AMOUNT * mult))
 	_set_amount(_storm, int(STORM_SNOW_BASE_AMOUNT * mult))
+	_set_amount(_storm_near, int(STORM_NEAR_BASE_AMOUNT * mult))
 	_set_amount(_embers, int(EMBERS_BASE_AMOUNT * mult * _ember_intensity()))
+	_set_amount(_ash, int(ASH_BASE_AMOUNT * mult))
+	_set_amount(_ash_near, int(ASH_NEAR_BASE_AMOUNT * mult))
+	_set_amount(_meteor_shower, int(METEOR_SHOWER_BASE_AMOUNT * mult))
 	for b in _bursts:
 		_set_amount(b, int(BURST_BASE_AMOUNT * mult))
 
@@ -184,15 +195,55 @@ func _build_emitters() -> void:
 
 	_storm = _make_continuous(
 		STORM_NAME, STORM_SNOW_BASE_AMOUNT,
-		_particle_material(Color(1, 1, 1), 0.6), _fade_ramp(Color(0.93, 0.96, 0.98, 0.8)),
+		_particle_material(Color(1, 1, 1), 0.9), _fade_ramp(Color(0.97, 0.98, 1.0, 0.96)),
 		_storm_process())
+	_configure_camera_volume(_storm, STORM_VOLUME_EXTENTS)
+	(_storm.draw_pass_1 as QuadMesh).size = Vector2(0.035, 0.32)
 	add_child(_storm)
+
+	_storm_near = _make_continuous(
+		STORM_NEAR_NAME, STORM_NEAR_BASE_AMOUNT,
+		_particle_material(Color(1, 1, 1), 0.95), _fade_ramp(Color(0.98, 0.99, 1.0, 0.98)),
+		_storm_near_process())
+	_storm_near.lifetime = 2.2
+	_configure_camera_volume(_storm_near, NEAR_VOLUME_EXTENTS)
+	(_storm_near.draw_pass_1 as QuadMesh).size = Vector2(0.035, 0.32)
+	add_child(_storm_near)
 
 	_embers = _make_continuous(
 		EMBERS_NAME, EMBERS_BASE_AMOUNT,
-		_particle_material(Color(1, 1, 1), 0.85), _fade_ramp(Color(0.98, 0.42, 0.1, 0.9)),
+		_particle_material(Color(1, 1, 1), 0.9), _fade_ramp(Color(0.98, 0.42, 0.1, 0.95)),
 		_embers_process())
+	_configure_camera_volume(_embers, ERUPTION_VOLUME_EXTENTS)
+	(_embers.draw_pass_1 as QuadMesh).size = Vector2(0.09, 0.09)
 	add_child(_embers)
+
+	_ash = _make_continuous(
+		ASH_NAME, ASH_BASE_AMOUNT,
+		_particle_material(Color(0.62, 0.65, 0.7), 0.58), _fade_ramp(Color(0.58, 0.61, 0.67, 0.68)),
+		_ash_process())
+	_configure_camera_volume(_ash, ERUPTION_VOLUME_EXTENTS)
+	(_ash.draw_pass_1 as QuadMesh).size = Vector2(0.05, 0.05)
+	add_child(_ash)
+
+	_ash_near = _make_continuous(
+		ASH_NEAR_NAME, ASH_NEAR_BASE_AMOUNT,
+		_particle_material(Color(0.68, 0.7, 0.74), 0.62), _fade_ramp(Color(0.62, 0.65, 0.7, 0.72)),
+		_ash_near_process())
+	_ash_near.lifetime = 3.0
+	_configure_camera_volume(_ash_near, NEAR_VOLUME_EXTENTS)
+	(_ash_near.draw_pass_1 as QuadMesh).size = Vector2(0.04, 0.04)
+	add_child(_ash_near)
+
+	var meteor_mat := _particle_material(Color(1.0, 0.72, 0.3), 0.95).duplicate()
+	ArtStyle3D.apply_emission(meteor_mat, Color(1.0, 0.45, 0.08), 2.2)
+	_meteor_shower = _make_continuous(
+		METEOR_SHOWER_NAME, METEOR_SHOWER_BASE_AMOUNT,
+		meteor_mat, _fade_ramp(Color(1.0, 0.72, 0.3, 0.95)),
+		_meteor_shower_process())
+	_configure_camera_volume(_meteor_shower, ERUPTION_VOLUME_EXTENTS)
+	(_meteor_shower.draw_pass_1 as QuadMesh).size = Vector2(0.025, 0.45)
+	add_child(_meteor_shower)
 
 	for i in range(BURST_POOL_SIZE):
 		var burst := _make_burst(i)
@@ -213,6 +264,11 @@ func _make_continuous(name_: StringName, amount: int, mesh_mat: StandardMaterial
 	pm.color_ramp = ramp
 	p.process_material = pm
 	return p
+
+
+func _configure_camera_volume(p: GPUParticles3D, extents: Vector3) -> void:
+	p.local_coords = true
+	p.visibility_aabb = AABB(-extents - Vector3.ONE * 5.0, extents * 2.0 + Vector3.ONE * 10.0)
 
 
 func _make_burst(i: int) -> GPUParticles3D:
@@ -267,30 +323,70 @@ func _motes_process() -> ParticleProcessMaterial:
 func _storm_process() -> ParticleProcessMaterial:
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	pm.emission_box_extents = Vector3(10.0, 4.0, 8.0)
-	pm.direction = Vector3(0.3, -1.0, 0.08)
-	pm.spread = 14.0
-	# Sideways gravity is the wind gust; falling snow stays the dominant drift.
-	pm.gravity = Vector3(2.2, -3.2, 0.5)
-	pm.initial_velocity_min = 2.4
-	pm.initial_velocity_max = 4.8
+	pm.emission_box_extents = STORM_VOLUME_EXTENTS
+	pm.direction = Vector3(0.75, -1.0, 0.15)
+	pm.spread = 10.0
+	pm.gravity = Vector3(2.8, -4.5, 0.4)
+	pm.initial_velocity_min = 4.5
+	pm.initial_velocity_max = 7.5
 	pm.scale_min = 0.25
-	pm.scale_max = 0.6
+	pm.scale_max = 0.7
 	return pm
 
 
 func _embers_process() -> ParticleProcessMaterial:
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	pm.emission_box_extents = Vector3(8.0, 1.4, 6.0)
-	pm.direction = Vector3(0.12, 1.0, 0.05)
-	pm.spread = 28.0
-	# Net upward drift: embers ride the heat column with a lazy sideways lean.
-	pm.gravity = Vector3(0.12, 0.5, 0.0)
-	pm.initial_velocity_min = 0.35
-	pm.initial_velocity_max = 0.9
-	pm.scale_min = 0.2
-	pm.scale_max = 0.5
+	pm.emission_box_extents = ERUPTION_VOLUME_EXTENTS
+	pm.direction = Vector3(0.18, 0.8, 0.25)
+	pm.spread = 35.0
+	pm.gravity = Vector3(0.08, 0.35, 0.08)
+	pm.initial_velocity_min = 0.5
+	pm.initial_velocity_max = 1.2
+	pm.scale_min = 0.15
+	pm.scale_max = 0.55
+	return pm
+
+
+func _ash_process() -> ParticleProcessMaterial:
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = ERUPTION_VOLUME_EXTENTS
+	pm.direction = Vector3(-0.15, -0.65, 0.1)
+	pm.spread = 45.0
+	pm.gravity = Vector3(0.3, -0.45, 0.08)
+	pm.initial_velocity_min = 0.25
+	pm.initial_velocity_max = 0.7
+	pm.scale_min = 0.25
+	pm.scale_max = 0.65
+	return pm
+
+
+func _storm_near_process() -> ParticleProcessMaterial:
+	var pm := _storm_process()
+	pm.emission_box_extents = NEAR_VOLUME_EXTENTS
+	pm.initial_velocity_min = 1.8
+	pm.initial_velocity_max = 3.5
+	return pm
+
+
+func _ash_near_process() -> ParticleProcessMaterial:
+	var pm := _ash_process()
+	pm.emission_box_extents = NEAR_VOLUME_EXTENTS
+	return pm
+
+
+func _meteor_shower_process() -> ParticleProcessMaterial:
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = ERUPTION_VOLUME_EXTENTS
+	pm.direction = Vector3(-0.35, -1.0, 0.1)
+	pm.spread = 8.0
+	pm.gravity = Vector3(-1.2, -4.0, 0.2)
+	pm.initial_velocity_min = 5.0
+	pm.initial_velocity_max = 8.0
+	pm.scale_min = 0.35
+	pm.scale_max = 0.85
 	return pm
 
 
@@ -305,6 +401,7 @@ func _particle_material(color: Color, alpha: float) -> StandardMaterial3D:
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.disable_fog = true
 	mat.vertex_color_use_as_albedo = true
 	mat.albedo_texture = _dot
 	mat.albedo_color = Color(color.r, color.g, color.b, alpha)
@@ -317,9 +414,7 @@ func _particle_material(color: Color, alpha: float) -> StandardMaterial3D:
 ## Warm ore-tinted motes get a whisper of self-illumination underground.
 func _motes_material() -> StandardMaterial3D:
 	var mat := _particle_material(Color(0.85, 0.78, 0.6), 1.0).duplicate()
-	mat.emission_enabled = true
-	mat.emission = Color(0.85, 0.72, 0.45)
-	mat.emission_energy_multiplier = 0.4
+	ArtStyle3D.apply_emission(mat, Color(0.85, 0.72, 0.45), 0.4)
 	return mat
 
 

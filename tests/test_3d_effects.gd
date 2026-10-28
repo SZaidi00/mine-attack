@@ -96,6 +96,32 @@ func test_storm_snow_tracks_weather_state() -> void:
 	assert_false(storm.emitting, "storm snow stops when the snowstorm ends")
 
 
+func test_weather_emitters_cover_camera_local_depth_volumes() -> void:
+	await _frames(10)
+	var effects := _effects()
+	var camera: Camera3D = _shell.get_node("CameraRig/Camera3D")
+	for emitter_name in [Effects3D.STORM_NAME, Effects3D.EMBERS_NAME, Effects3D.ASH_NAME, Effects3D.METEOR_SHOWER_NAME]:
+		var p: GPUParticles3D = effects.get_node(str(emitter_name))
+		assert_true(p.local_coords, "%s moves with the camera" % emitter_name)
+		var mat := (p.draw_pass_1 as QuadMesh).material as StandardMaterial3D
+		assert_true(mat.disable_fog, "%s stays visible inside weather fog" % emitter_name)
+		var pm := p.process_material as ParticleProcessMaterial
+		assert_gt(pm.emission_box_extents.z, 10.0, "%s spans near-to-far depth" % emitter_name)
+		var center := Effects3D.STORM_VOLUME_CENTER if emitter_name == Effects3D.STORM_NAME else Effects3D.ERUPTION_VOLUME_CENTER
+		assert_gt(center.z + pm.emission_box_extents.z, 0.0,
+			"%s starts behind the camera, with no visible near-face band" % emitter_name)
+	for emitter_name in [Effects3D.STORM_NEAR_NAME, Effects3D.ASH_NEAR_NAME]:
+		var p: GPUParticles3D = effects.get_node(str(emitter_name))
+		assert_true(p.local_coords, "%s supplies overlapping foreground weather" % emitter_name)
+		assert_gt(Effects3D.NEAR_VOLUME_CENTER.z + Effects3D.NEAR_VOLUME_EXTENTS.z, 0.0,
+			"foreground volume also starts behind the camera")
+	_shell._focus += Vector3(1.0, 0.0, 0.0)
+	await _frames(2)
+	var expected: Vector3 = camera.to_global(Effects3D.ERUPTION_VOLUME_CENTER)
+	assert_almost_eq(effects._ash.global_position.distance_to(expected), 0.0, 0.001,
+		"eruption volume tracks the live camera transform")
+
+
 func test_cave_in_spawns_dust_burst_at_grid_position() -> void:
 	await _frames(10)
 	var center := Vector2i(-20, 10)
@@ -307,10 +333,13 @@ func test_attack_telegraph_spawns_under_shell_only() -> void:
 func test_volcano_warning_ramps_embers_and_rumbles() -> void:
 	await _frames(10)
 	var embers: GPUParticles3D = _effects().get_node("VolcanoEmbers")
+	var ash: GPUParticles3D = _effects().get_node("VolcanoAsh")
 	assert_false(embers.emitting, "no embers before the warning")
+	assert_false(ash.emitting, "no ash before the eruption")
 	WeatherManager.force_volcano_warning()
 	await _frames(3)
 	assert_true(embers.emitting, "embers trickle in during the eruption warning")
+	assert_false(ash.emitting, "warning keeps full ashfall back until the eruption")
 	assert_lt(embers.amount, int(Effects3D.EMBERS_BASE_AMOUNT * ArtStyle3D.particle_mult()),
 		"warning density ramps up from below the full eruption")
 	assert_gt(_shell.get("_shake"), 0.0, "the warning rumbles the camera rig")
@@ -318,9 +347,13 @@ func test_volcano_warning_ramps_embers_and_rumbles() -> void:
 	await _frames(3)
 	assert_eq(embers.amount, int(Effects3D.EMBERS_BASE_AMOUNT * ArtStyle3D.particle_mult()),
 		"the eruption runs embers at full density")
+	assert_true(ash.emitting, "ash falls through the whole view during the eruption")
+	assert_eq(ash.amount, int(Effects3D.ASH_BASE_AMOUNT * ArtStyle3D.particle_mult()),
+		"ash count scales with the quality preset")
 	WeatherManager.force_volcano_end()
 	await _frames(3)
 	assert_false(embers.emitting, "embers stop when the eruption ends")
+	assert_false(ash.emitting, "ash stops when the eruption ends")
 
 
 func test_volcano_warning_pulses_the_sun() -> void:

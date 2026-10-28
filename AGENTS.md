@@ -48,14 +48,19 @@ mine-attack/
 │   │                  # (sim -> render only): main_3d.gd (shell + 45deg-FOV camera
 │   │                  # rig, dolly 12 within 3-16 with zoom-to-cursor, shake,
 │   │                  # AudioListener3D, quality preset), terrain_3d.gd
-│   │                  # (chunked cell->mesh projection, sculpted heights + a
-│   │                  # read-only world_height_at() ground query, emissive
+│   │                  # (chunked cell->mesh projection, R3 height-field dune
+│   │                  # displacement via height_field_3d.gd — deterministic
+│   │                  # map-seeded value noise + ridged dune bands, structure
+│   │                  # clearances, storm flattening — plus a read-only
+│   │                  # world_height_at() ground query, emissive
 │   │                  # lava pass, storm snow cover; 3D-rework phase 3 relit the
 │   │                  # albedo pass so the ground receives mood light, sun shadows,
 │   │                  # and depth fog), terrain_detail_3d.gd (MultiMesh
-│   │                  # ore crystals / lava embers / snow drifts), entity_proxies_3d.gd
+│   │                  # ore crystals / lava embers / snow drifts riding the
+│   │                  # dune surface), entity_proxies_3d.gd
 │   │                  # (group reconcile), unit_proxy_3d.gd (1.4x proxy-root
-│   │                  # scale-up, counter-scaled HP bars) + unit_model_3d.gd
+│   │                  # scale-up, counter-scaled HP bars, R3 dune ground-snap)
+│   │                  # + unit_model_3d.gd
 │   │                  # (procedural low-poly rigs, state-driven animation, faction
 │   │                  # accents, undead tint), structure_proxy_3d.gd (1.08x
 │   │                  # wall-footprint-capped proxy-root scale — ladders stay 1x;
@@ -63,14 +68,16 @@ mine-attack/
 │   │                  # counter-scaled range disc, faction-reveal
 │   │                  # accents, construction grow — unbuilt towers/walls/lanterns
 │   │                  # rise out of the ground on a per-frame y-scale instead of
-│   │                  # standing full height at construction alpha), lighting_3d.gd (weather-reactive mood + the
-│   │                  # phase-3 post stack: ACES tonemap, emissive bloom, depth fog
-│   │                  # at every tier, SSAO on Fancy — Lighting3D.apply_quality_settings()),
-│   │                  # effects_3d.gd
-│   │                  # (dust motes/storm snow/embers/cave-in bursts), art_style_3d.gd
-│   │                  # (palette, materials, Potato/Standard/Fancy quality switch;
-│   │                  # 3D-rework phase 4: value-lifted team_color() with a live
-│   │                  # colorblind swap, entity rim materials, Brute ember accent),
+│   │                  # standing full height at construction alpha — R3 surface
+│   │                  # ground-snap), lighting_3d.gd
+│   │                  # (R2 cold overcast/storm/underground/volcano moods with
+│   │                  # weather-specific background/fog density + ACES, warm-source
+│   │                  # bloom on Standard+, SSAO/shadows on Fancy), effects_3d.gd
+│   │                  # (camera-local full-depth storm snow and eruption cinders/ash,
+│   │                  # underground dust motes, world-space cave-in bursts), art_style_3d.gd
+│   │                  # (3d-visual-revamp R2 palette/material/bloom tokens, warm-emission
+│   │                  # policy, Potato/Standard/Fancy quality switch; team_color() keeps
+│   │                  # the live colorblind swap and entity rim materials),
 │   │                  # plus the 3D-rework Phase 1 feedback layer:
 │   │                  # presentation_3d.gd (3D-shell detection + 2D->3D conversion
 │   │                  # for sim-side spawn points), flat_geo_3d.gd (shared unshaded
@@ -145,8 +152,9 @@ mine-attack/
 > `current_scene` and
 > frees the root-mounted sim in `_exit_tree`, so Play Again / Quit to Menu
 > work unchanged. The HUD CanvasLayer and all input handling stay on the
-> 2D sim; the 3D camera rig follows `PlayerController.view_mode_changed`
-> for Tab. 3D-rework Phase 1 (roadmap/3d-rework/) added the combat-feedback
+> 2D sim, except its clipped 2D WeatherOverlay, which is disabled because the
+> 3D shell provides full-depth weather; the 3D camera rig follows
+> `PlayerController.view_mode_changed` for Tab. 3D-rework Phase 1 (roadmap/3d-rework/) added the combat-feedback
 > layer: MultiMesh selection/hover ground rings (selection_rings_3d.gd),
 > pooled glowing projectile tracers (projectile_proxies_3d.gd), HP bars that
 > also show on selection (unit_proxy_3d.gd), terrain-projected order markers
@@ -420,7 +428,7 @@ Hard requirements, learned the hard way in headless/CI environments (full notes 
 - Fresh checkouts must run `--import` once first (the script handles this) or resource loads fail.
 - Frame times under software GL are meaningless — trust only the pixels.
 
-The driver is presentation-only (same autoload setters the menu uses) and inert unless launched as the scene; parsing is covered by `tests/test_capture_driver.gd`.
+The driver is presentation-only and inert unless launched as the scene. It disables random weather scheduling so forced storm/volcano poses cannot overlap; parsing is covered by `tests/test_capture_driver.gd`.
 
 ### Web export and local serve
 

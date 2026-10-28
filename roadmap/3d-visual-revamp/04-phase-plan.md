@@ -13,7 +13,7 @@ Acceptance: captures render non-blank under opengl3 + llvmpipe; all five
 poses (start / zoomout / underground / storm / volcano) land; GUT suite
 green.
 
-## R2 — Art tokens in code (palette + materials + mood retune)
+## R2 — Art tokens in code (palette + materials + mood retune) ✅ (accepted; final polish deferred)
 
 **Model:** K3. **Depends:** R1.
 
@@ -29,13 +29,18 @@ Steps:
 Acceptance: harness before/after at identical poses shows the new palette;
 units still pop; storm/volcano moods read; owner sign-off.
 
-## R3 — Height-field surface with rolling snow dunes
+## R3 — Height-field surface with rolling snow dunes ✅ (implemented; captures pending)
 
 **Model:** K2.8. **Depends:** R2.
 
 Per `03-technical-plan.md` §2: deterministic height function, displaced
 chunk meshes, ground-snapped proxies, structure/wall clearances, storm
-flattening.
+flattening. Landed as `scripts/three_d/height_field.gd` — map-seeded value
+noise + ridged dune bands (peaks ≤ 0.4 cells), bilinear structure clearances
+(WALL cells + live structure groups), storm-driven relief flattening via the
+terrain's snow tween; surface quads displace at the same vertex count, and
+units/structures/rings/markers/decals/ghosts ground-snap through
+`Presentation3D.ground_height()`. Tests: `tests/test_3d_height_field.gd`.
 
 Acceptance: harness captures at start/zoomout show dunes; structures sit
 clean; no sim test changes; GUT green; 200-unit scene renders on owner

@@ -138,7 +138,9 @@ func _sync_meteor(proxy: Node3D, meteor: Meteor) -> void:
 		var t: float = clampf(meteor._impact_elapsed / Meteor.IMPACT_FLASH_DURATION, 0.0, 1.0)
 		var radius: float = meteor.impact_radius * WORLD_SCALE * (0.15 + 0.85 * t)
 		ring.scale = Vector3(radius, 1.0, radius)
-		proxy.position = Presentation3D.to_3d(target, 0.0)
+		# R3: the shockwave rides the dune surface at the strike point.
+		proxy.position = Presentation3D.to_3d(target, Presentation3D.ground_height(get_tree(),
+			target.x * WORLD_SCALE, target.y * WORLD_SCALE))
 	else:
 		ring.visible = false
 		streak.visible = true
@@ -206,7 +208,9 @@ func _reconcile_burn_patches() -> void:
 
 
 func _sync_burn_decal(decal: Node3D, patch: BurningGround) -> void:
-	decal.position = Presentation3D.to_3d(patch.global_position, 0.0)
+	# R3: scorch marks sit on the dune surface (0 on the flat floor).
+	decal.position = Presentation3D.to_3d(patch.global_position, Presentation3D.ground_height(get_tree(),
+		patch.global_position.x * WORLD_SCALE, patch.global_position.y * WORLD_SCALE))
 	var radius: float = patch.radius * WORLD_SCALE
 	var life_left: float = clampf(1.0 - patch._elapsed / maxf(patch.duration, 0.01), 0.0, 1.0)
 	var pulse: float = 0.75 + 0.25 * sin(patch._flicker * 9.0)
@@ -260,9 +264,7 @@ func _build_lava_shimmer() -> void:
 	_lava_shimmer_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_lava_shimmer_mat.vertex_color_use_as_albedo = true
 	_lava_shimmer_mat.albedo_color = LAVA_SHIMMER_COLOR
-	_lava_shimmer_mat.emission_enabled = true
-	_lava_shimmer_mat.emission = Color(1.0, 0.45, 0.08)
-	_lava_shimmer_mat.emission_energy_multiplier = LAVA_SHIMMER_MIN_ENERGY
+	ArtStyle3D.apply_emission(_lava_shimmer_mat, Color(1.0, 0.45, 0.08), LAVA_SHIMMER_MIN_ENERGY)
 	_lava_shimmer_mesh = MultiMesh.new()
 	_lava_shimmer_mesh.transform_format = MultiMesh.TRANSFORM_3D
 	_lava_shimmer_mesh.use_colors = true

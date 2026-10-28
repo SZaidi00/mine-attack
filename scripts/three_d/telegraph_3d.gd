@@ -77,9 +77,7 @@ func _build() -> void:
 	_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_mat.albedo_color = TELEGRAPH_COLOR
-	_mat.emission_enabled = true
-	_mat.emission = TELEGRAPH_COLOR
-	_mat.emission_energy_multiplier = TELEGRAPH_ENERGY
+	ArtStyle3D.apply_emission(_mat, TELEGRAPH_COLOR, TELEGRAPH_ENERGY)
 	for i in range(DASH_COUNT):
 		var dash := MeshInstance3D.new()
 		dash.name = "Dash%d" % i
@@ -105,7 +103,9 @@ func _launch(from3d: Vector3, to3d: Vector3) -> void:
 	for i in range(DASH_COUNT):
 		var t: float = (float(i) + 0.75) / (float(DASH_COUNT) + 0.5)
 		var pos: Vector3 = from3d + span * t
-		pos.y = Presentation3D.GROUND_LIFT + sin(t * PI) * ARC_HEIGHT
+		# R3: each dash rides the dune surface it arcs over (flat underground).
+		pos.y = Presentation3D.ground_height(get_tree(), pos.x, pos.z) \
+			+ Presentation3D.GROUND_LIFT + sin(t * PI) * ARC_HEIGHT
 		_dashes[i].position = pos
 		_dashes[i].rotation = Vector3(0.0, yaw, 0.0)
 	if not _active.has(self):

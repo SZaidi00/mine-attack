@@ -24,7 +24,8 @@ static func spawn(tree: SceneTree, at: Vector2, color: Color, scale_mult: float 
 	if parent == null:
 		return false
 	var marker := OrderMarker3D.new()
-	marker.position = Presentation3D.to_3d(at, 0.0)
+	marker.position = Presentation3D.to_3d(at, Presentation3D.ground_height(tree,
+		at.x * Presentation3D.WORLD_SCALE, at.y * Presentation3D.WORLD_SCALE))
 	marker._scale_mult = scale_mult
 	marker._mat = FlatGeo3D.material(color).duplicate()
 	marker._ring = FlatGeo3D.make_ring(RADIUS_START * scale_mult, color)

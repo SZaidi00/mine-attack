@@ -26,8 +26,9 @@ override with a local install).
 3. A `CapturePilot` node (parented to the root window so it survives the
    scene swap) advances the match and, at each requested sim timestamp,
    poses the camera, waits two frames, and saves the viewport as a PNG.
-4. Weather poses force a snowstorm / volcano a few seconds early via
-   `WeatherManager`'s own routines, then end it after the shot.
+4. Random weather scheduling is disabled for determinism. Weather poses force
+   a snowstorm / volcano a few seconds early via `WeatherManager`'s own
+   routines, then end it after the shot so events cannot overlap.
 
 Everything is presentation-only: the driver uses the same setters the menu
 uses and never writes sim state. The harness is inert during normal play

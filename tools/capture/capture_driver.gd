@@ -76,6 +76,8 @@ func _apply_game_config(config: Dictionary) -> void:
 	GameManager.set_game_speed(config.speed)
 	FactionManager.set_player_faction(config.faction)
 	FactionManager.pick_random_enemy_faction()
+	WeatherManager.set_weather_events_enabled(false)
+	WeatherManager.set_volcano_events_enabled(false)
 
 
 ## Parse user args into a config Dictionary, or return {} when the args do

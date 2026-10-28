@@ -1,6 +1,8 @@
 # 3D Visual Revamp — Overview
 
-**Status:** planning complete, implementation not started.
+**Status:** R1–R2 accepted (baseline captures under `baseline/`, R2 captures
+under `r2/`); R3 implemented (height-field dunes; harness captures pending
+owner/CI run). Final art-style polish review follows the later phases.
 **Parent:** `roadmap/3d-rework/README.md` (phases 1–5 implemented there; read it
 for the hard rules that still apply).
 **Branch:** `feat/3d-conversion`.

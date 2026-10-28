@@ -55,6 +55,8 @@ func test_sim_mounted_at_root_main_with_2d_layers_hidden() -> void:
 	assert_false(_main.get_node("World").visible, "2D world drawing hidden")
 	assert_false(_main.get_node("Units").visible, "2D unit sprites hidden")
 	assert_true(_main.get_node("UI").visible, "HUD CanvasLayer stays visible")
+	assert_false(_main.get_node("UI/HUD/WeatherOverlay").visible,
+		"2D clipped weather overlay is replaced by the 3D weather volume")
 
 
 func test_terrain_chunks_build_for_surface_view() -> void:

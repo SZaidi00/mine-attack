@@ -19,8 +19,11 @@ const GROUND_LIFT: float = 0.05
 
 ## The live 3D shell when it runs the show, else null. Detection mirrors how
 ## the shell itself is identified: the current scene is a Node3D hosting the
-## World3D presentation rig (never true for the 2D main.tscn).
+## World3D presentation rig (never true for the 2D main.tscn). A null tree
+## (nodes inspected outside the scene tree, as GUT does) reads as no shell.
 static func shell(tree: SceneTree) -> Node3D:
+	if tree == null:
+		return null
 	var cs: Node = tree.current_scene
 	if cs is Node3D and cs.has_node("World3D"):
 		return cs
@@ -33,6 +36,25 @@ static func effects_parent(tree: SceneTree) -> Node3D:
 	if s == null:
 		return null
 	return s.get_node_or_null("World3D/Effects3D") as Node3D
+
+
+## The shell's terrain node (duck-typed: it answers world_height_at), else
+## null. Ground-projected feedback (rings, markers, decals) rides the R3
+## dune field through this so nothing floats over dips or sinks under crests.
+static func terrain(tree: SceneTree) -> Node:
+	var s: Node3D = shell(tree)
+	if s == null:
+		return null
+	return s.get_node_or_null("World3D/Terrain3D")
+
+
+## Ground height in world units at a world XZ position (0 when the shell or
+## its terrain isn't up — standalone 2D runs and tests stay flat).
+static func ground_height(tree: SceneTree, world_x: float, world_z: float) -> float:
+	var t := terrain(tree)
+	if t == null:
+		return 0.0
+	return float(t.call("world_height_at", world_x, world_z))
 
 
 static func to_3d(pos2d: Vector2, y: float = 0.0) -> Vector3:

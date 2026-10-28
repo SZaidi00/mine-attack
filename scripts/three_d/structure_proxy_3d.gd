@@ -63,6 +63,12 @@ var _lantern_light: OmniLight3D
 var _lantern_head: MeshInstance3D
 var _lantern_underground := false
 
+## R3: surface-only structures ground-snap to the dune field (two-layer
+## fixtures — mine entries, ladders — and underground structures stay on the
+## flat floor; ladder rail endpoints are exact world positions).
+var _ground_snap := false
+var _ground_terrain: Node = null
+
 ## Construction grow: while the sim structure is still building (towers,
 ## walls, lanterns), the model rises out of the ground on a per-frame
 ## y-scale instead of standing full height at CONSTRUCTION_ALPHA — a static
@@ -146,6 +152,7 @@ static func create(s: Node2D, grid: GridWorld) -> StructureProxy3D:
 	if s.has_signal("destroyed"):
 		s.connect("destroyed", p._on_destroyed)
 	s.tree_exiting.connect(p._on_destroyed)
+	p._ground_snap = not p._underground_structure and not p._shows_in_both_layers
 	return p
 
 
@@ -163,7 +170,7 @@ static func _is_underground_cell(s: Node2D, grid: GridWorld) -> bool:
 ## ArtStyle3D rim so structures separate from the darker terrain (phase 4).
 func _add_body(part: MeshInstance3D, base: Color, parent: Node3D = null) -> MeshInstance3D:
 	var mat := StandardMaterial3D.new()
-	mat.roughness = 1.0
+	mat.roughness = ArtStyle3D.MATERIAL_ROUGHNESS
 	mat.rim_enabled = true
 	mat.rim = ArtStyle3D.RIM_STRENGTH
 	mat.rim_tint = ArtStyle3D.RIM_TINT
@@ -184,7 +191,7 @@ func _add_body(part: MeshInstance3D, base: Color, parent: Node3D = null) -> Mesh
 ## identified; neutral "???" grey until then).
 func _add_accent(part: MeshInstance3D, parent: Node3D = null) -> MeshInstance3D:
 	var mat := StandardMaterial3D.new()
-	mat.roughness = 1.0
+	mat.roughness = ArtStyle3D.MATERIAL_ROUGHNESS
 	mat.rim_enabled = true
 	mat.rim = ArtStyle3D.RIM_STRENGTH
 	mat.rim_tint = ArtStyle3D.RIM_TINT
@@ -549,6 +556,15 @@ func _tint_bodies(remembered: bool, built: bool) -> void:
 func refresh(underground_view: bool) -> void:
 	if dead or entity == null or not is_instance_valid(entity):
 		return
+	# R3: surface structures ride the dune field (re-sampled at reconcile
+	# time so a structure placed onto fresh ground follows the re-stamped
+	# clearance); the stamp keeps their footing flat anyway.
+	if _ground_snap and is_inside_tree():
+		if _ground_terrain == null or not is_instance_valid(_ground_terrain):
+			_ground_terrain = Presentation3D.terrain(get_tree())
+		if _ground_terrain != null:
+			var gp: Vector2 = entity.global_position
+			position.y = float(_ground_terrain.call("world_height_at", gp.x * WORLD_SCALE, gp.y * WORLD_SCALE))
 	var layer_ok := true
 	if not _shows_in_both_layers:
 		layer_ok = (_underground_structure == underground_view)

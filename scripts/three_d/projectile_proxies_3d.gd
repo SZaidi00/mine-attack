@@ -164,9 +164,7 @@ static func _tracer_material(kind: int, color: Color, energy: float) -> Standard
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.albedo_color = color
-	mat.emission_enabled = true
-	mat.emission = color
-	mat.emission_energy_multiplier = energy
+	ArtStyle3D.apply_emission(mat, color, energy)
 	_tracer_mats[key] = mat
 	return mat
 

@@ -83,7 +83,11 @@ func _ring_eligible(unit: Variant) -> bool:
 
 func _add_ring(transforms: Array[Transform3D], colors: Array[Color], unit: Unit, radius: float, color: Color) -> void:
 	var pos: Vector2 = unit.global_position
-	var origin := Vector3(pos.x * Presentation3D.WORLD_SCALE, Presentation3D.GROUND_LIFT, pos.y * Presentation3D.WORLD_SCALE)
+	var wx := pos.x * Presentation3D.WORLD_SCALE
+	var wz := pos.y * Presentation3D.WORLD_SCALE
+	# R3: the ring hovers the standard lift above the dune surface under the
+	# unit (flat 0 underground), same clearance the flat floor used.
+	var origin := Vector3(wx, Presentation3D.ground_height(get_tree(), wx, wz) + Presentation3D.GROUND_LIFT, wz)
 	transforms.append(Transform3D(Basis.from_scale(Vector3(radius, 1.0, radius)), origin))
 	colors.append(color)
 
