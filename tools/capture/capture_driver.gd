@@ -19,11 +19,12 @@ extends Node
 ##                        start     - spawn camera, untouched
 ##                        surface   - surface view bookmark, recentered
 ##                        zoomout   - surface, camera centered, 0.5x zoom
-##                        underground - own-mine underground bookmark
+##                        underground - built mine lantern + local-area light pool
+##                        breach    - underground + forced first wall breach
 ##                        storm     - surface + forced snowstorm
 ##                        volcano   - surface + forced volcano eruption
-##                        custom:X:Y:Z - explicit camera position (X, Y) and
-##                                      zoom factor Z (e.g. custom:0:-150:0.5)
+##                        custom:X:Y:Z - explicit camera focus (X, Y) and
+##                                      dolly Z (e.g. custom:0:-150:6)
 ##
 ## The driver configures the autoloads exactly like the main menu's Play
 ## flow, swaps in the gameplay scene, and hands control to a CapturePilot
@@ -36,17 +37,15 @@ extends Node
 ## Headless rendering additionally needs --rendering-driver opengl3 under
 ## Xvfb (software Vulkan renders blank frames); see tools/capture/README.md.
 ##
-## This tool is presentation-only: it never writes to sim state beyond the
-## same setters the menu uses (difficulty / faction / seed / speed), and it
-## is inert unless launched as the scene — nothing here runs during normal
-## play or in the GUT suite.
+## This tool changes only its throwaway capture match and is inert unless
+## launched as the scene — nothing here runs during normal play or GUT.
 
 const CapturePilot := preload("res://tools/capture/capture_pilot.gd")
 
 const DEFAULT_SEED := 12345
 const VALID_FACTIONS: Array[String] = ["arcane", "brute", "industrial"]
 const VALID_POSES: Array[String] = [
-	"start", "surface", "zoomout", "underground", "storm", "volcano",
+	"start", "surface", "zoomout", "underground", "breach", "storm", "volcano",
 ]
 
 

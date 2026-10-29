@@ -46,7 +46,9 @@ mine-attack/
 │   ├── units/         # unit.gd + helper modules, projectile.gd, unit_pigeon.gd
 │   ├── three_d/       # Phase 1 2.5D port + Phase 2 art pass presentation layer
 │   │                  # (sim -> render only): main_3d.gd (shell + 45deg-FOV camera
-│   │                  # rig, dolly 12 within 3-16 with zoom-to-cursor, shake,
+│   │                  # rig, 55deg surface / 82.5deg underground pitches, 0.25s
+│   │                  # Tab tween, dolly 12 within 3-16 (3-10 underground),
+│   │                  # zoom-to-cursor, pose_camera(), minimal shake,
 │   │                  # AudioListener3D, quality preset), terrain_3d.gd
 │   │                  # (chunked cell->mesh projection, R3 height-field dune
 │   │                  # displacement via height_field_3d.gd — deterministic
@@ -84,7 +86,8 @@ mine-attack/
 │   │                  # weather-specific background/fog density + ACES, warm-source
 │   │                  # bloom on Standard+, SSAO/shadows on Fancy), effects_3d.gd
 │   │                  # (camera-local full-depth storm snow and eruption cinders/ash,
-│   │                  # underground dust motes, world-space cave-in bursts), art_style_3d.gd
+│   │                  # underground dust motes, world-space cave-in bursts + R6
+│   │                  # first-breach dust pool and fading ground-crack decal), art_style_3d.gd
 │   │                  # (3d-visual-revamp R2 palette/material/bloom tokens, warm-emission
 │   │                  # policy, Potato/Standard/Fancy quality switch; team_color() keeps
 │   │                  # the live colorblind swap and entity rim materials),
@@ -121,11 +124,13 @@ mine-attack/
 │   │                  # WeatherManager warning/start signals), and the emission
 │   │                  # hierarchy retune (telegraphs 3.2 > tracers 2.2-2.6 >
 │   │                  # ambient lava/lanterns 0.7-1.8 > decorative embers 0.9),
-│   │                  # plus fog_3d.gd (fog-of-war mist overlay replacing the
-│   │                  # black-cell look: corner-averaged vertex-alpha quads
-│   │                  # feather a translucent mist bank over non-visible cells
-│   │                  # with a shader shimmer drift; terrain under fog dims
-│   │                  # toward a blue-grey tint instead of baking FOG_COLOR)
+│   │                  # plus fog_3d.gd (R6 opaque #10141C unexplored void,
+│   │                  # deep-rock remembered shadow, corner-averaged RGBA quads;
+│   │                  # edge-only shader drift never reduces hidden opacity;
+│   │                  # underground lanterns add warm OmniLights + static radial
+│   │                  # ground pools at the sim vision radius, hidden by fog and
+│   │                  # construction state; first central-wall breach triggers
+│   │                  # one-shot dust/crack feedback + minimal camera nudge)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~48 test scripts)
@@ -167,7 +172,10 @@ mine-attack/
 > work unchanged. The HUD CanvasLayer and all input handling stay on the
 > 2D sim, except its clipped 2D WeatherOverlay, which is disabled because the
 > 3D shell provides full-depth weather; the 3D camera rig follows
-> `PlayerController.view_mode_changed` for Tab. 3D-rework Phase 1 (roadmap/3d-rework/) added the combat-feedback
+> `PlayerController.view_mode_changed` for Tab. Visual-revamp R5 tweens the
+> rig in 0.25s between the 55deg surface perspective and 82.5deg underground
+> plane, caps underground dolly at 10 (surface stays 3-16), and exposes
+> `pose_camera()` for deterministic harness shots. 3D-rework Phase 1 (roadmap/3d-rework/) added the combat-feedback
 > layer: MultiMesh selection/hover ground rings (selection_rings_3d.gd),
 > pooled glowing projectile tracers (projectile_proxies_3d.gd), HP bars that
 > also show on selection (unit_proxy_3d.gd), terrain-projected order markers

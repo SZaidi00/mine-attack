@@ -75,6 +75,7 @@ func before_all() -> void:
 		if _main != null:
 			break
 	get_tree().current_scene = _main
+	get_viewport().warp_mouse(get_viewport().get_visible_rect().size * 0.5)
 	await get_tree().process_frame
 	_start_focus = _shell.get("_focus")
 	_start_dolly = float(_shell.get("_dolly"))
@@ -93,10 +94,12 @@ func after_all() -> void:
 
 
 func after_each() -> void:
-	# Tests move the rig focus/dolly; restore the boot framing so later tests
-	# start from a sane camera.
-	_shell.set("_focus", _start_focus)
-	_shell.set("_dolly", _start_dolly)
+	# Tests move the rig and may switch layers; restore the boot framing and
+	# cancel any active transition so later tests start on the surface.
+	_shell.set_process(true)
+	var pc: PlayerController = _main.get_node("PlayerController")
+	pc.set_view(false)
+	_shell.pose_camera(_start_focus, _start_dolly, _shell.SURFACE_PITCH_DEGREES)
 
 
 func _frames(n: int) -> void:
@@ -309,3 +312,72 @@ func test_selection_ring_radius_tracks_the_scaled_footprint() -> void:
 	var radius: float = rings.call("_ring_radius", unit)
 	var expected := 0.24 * UnitProxy3D.PROXY_SCALE * clampf(data.draw_scale, 0.8, 1.4)
 	assert_almost_eq(radius, expected, 0.001, "ring radius tracks the 1.4x proxy footprint")
+
+
+# ─── R5: perspective surface / near-top-down underground ───
+
+
+func test_view_toggle_tweens_between_mode_endpoints() -> void:
+	await _frames(2)
+	_shell.set_process(false)  # Headless edge-pan must not move the bookmark assertions.
+	var pc: PlayerController = _main.get_node("PlayerController")
+	var surface_focus: Vector3 = _shell.get("_focus")
+	assert_lt(_shell.VIEW_TWEEN_DURATION, 0.3, "Tab transition stays below 0.3 seconds")
+	pc.set_view(true)
+	assert_almost_eq(float(_shell.get("_pitch_degrees")), _shell.SURFACE_PITCH_DEGREES, 0.001,
+		"underground transition starts from the surface pitch instead of snapping")
+	var tween: Tween = _shell.get("_view_tween")
+	assert_not_null(tween, "view switch owns a camera tween")
+	if tween == null:
+		return
+	await tween.finished
+	_shell.call("_sync_camera")
+	assert_almost_eq(float(_shell.get("_pitch_degrees")), _shell.UNDERGROUND_PITCH_DEGREES, 0.001,
+		"underground endpoint is near-top-down")
+	assert_almost_eq(float(_shell.get("_dolly")), _shell.UNDERGROUND_DOLLY_MAX, 0.001,
+		"surface dolly clamps to the underground local-area maximum")
+	assert_almost_eq((_shell.get("_focus") as Vector3).distance_to(_shell.get("_underground_focus")), 0.0, 0.001,
+		"transition lands on the underground bookmark")
+	var cam: Camera3D = _shell.get_node("CameraRig/Camera3D")
+	assert_almost_eq(cam.rotation_degrees.x, -_shell.UNDERGROUND_PITCH_DEGREES, 0.001,
+		"Camera3D transform follows the underground pitch")
+	pc.set_view(false)
+	tween = _shell.get("_view_tween")
+	await tween.finished
+	assert_almost_eq(float(_shell.get("_pitch_degrees")), _shell.SURFACE_PITCH_DEGREES, 0.001,
+		"returning to the surface restores its perspective pitch")
+	assert_almost_eq((_shell.get("_focus") as Vector3).distance_to(surface_focus), 0.0, 0.001,
+		"surface bookmark survives the round trip")
+
+
+func test_underground_zoom_uses_the_local_area_dolly_range() -> void:
+	_shell.set_process(false)
+	var pc: PlayerController = _main.get_node("PlayerController")
+	pc.set_view(true)
+	var tween: Tween = _shell.get("_view_tween")
+	await tween.finished
+	for i in range(40):
+		_shell.call("_zoom_toward", null, 1.1)
+	assert_almost_eq(float(_shell.get("_dolly")), _shell.UNDERGROUND_DOLLY_MAX, 0.001,
+		"underground zoom-out clamps at 10")
+	for i in range(60):
+		_shell.call("_zoom_toward", null, 1.0 / 1.1)
+	assert_almost_eq(float(_shell.get("_dolly")), _shell.DOLLY_MIN, 0.001,
+		"underground close-up keeps the shared minimum dolly")
+
+
+func test_pose_camera_is_immediate_and_cancels_view_tween() -> void:
+	_shell.set_process(false)
+	var pc: PlayerController = _main.get_node("PlayerController")
+	pc.set_view(true)
+	var pose := Vector3(1.0, 0.0, 2.0)
+	_shell.pose_camera(pose, 6.0, 70.0)
+	var tween: Tween = _shell.get("_view_tween")
+	assert_false(tween.is_running(), "posing cancels the active Tab transition")
+	var cam: Camera3D = _shell.get_node("CameraRig/Camera3D")
+	assert_almost_eq(cam.rotation_degrees.x, -70.0, 0.001, "posing synchronously updates the Camera3D")
+	await _frames(20)
+	assert_almost_eq((_shell.get("_focus") as Vector3).distance_to(pose), 0.0, 0.001,
+		"posed focus is not overwritten by the old tween")
+	assert_almost_eq(float(_shell.get("_dolly")), 6.0, 0.001, "posed dolly is exact")
+	assert_almost_eq(float(_shell.get("_pitch_degrees")), 70.0, 0.001, "posed pitch is exact")

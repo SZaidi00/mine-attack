@@ -324,7 +324,15 @@ func test_underground_lantern_burns_smaller_and_shadowless() -> void:
 		return
 	assert_almost_eq(light.omni_range, Constants.UNDERGROUND_LANTERN_VISION * GridWorld.CELL_SIZE * StructureProxy3D.WORLD_SCALE,
 		0.001, "underground radius matches underground lantern vision")
+	assert_almost_eq(light.light_energy, 2.4, 0.001, "underground light reads against the near-dark mood")
 	assert_false(light.shadow_enabled, "underground lanterns never cast shadows")
+	var pool := proxy.get_node_or_null("LanternPool") as MeshInstance3D
+	assert_not_null(pool, "a cheap ground glow makes the pool readable over empty tunnels")
+	if pool != null:
+		assert_true(pool.visible, "built lantern shows its ground pool")
+		var diameter: float = Constants.UNDERGROUND_LANTERN_VISION * GridWorld.CELL_SIZE * StructureProxy3D.WORLD_SCALE * 2.0 / StructureProxy3D.PROXY_SCALE
+		assert_almost_eq((pool.mesh as QuadMesh).size.x, diameter, 0.001,
+			"ground pool follows the sim lantern's vision radius")
 	assert_true(proxy.visible, "underground lantern shows in the underground view")
 	proxy.refresh(false)
 	assert_false(proxy.visible, "underground lantern hides on the surface view")

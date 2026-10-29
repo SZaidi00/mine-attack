@@ -29,7 +29,8 @@ const ORE_TIER_BRIGHT := ArtStyle3D.PALETTE.ore_bright
 const DIRT_SHALLOW_COLOR := Color("#4A4850")
 const DIRT_MID_COLOR := ArtStyle3D.PALETTE.rock
 const DIRT_DEEP_COLOR := ArtStyle3D.PALETTE.rock_dark
-const FOG_GROUND_TINT := ArtStyle3D.PALETTE.night
+const FOG_VOID_TINT := ArtStyle3D.PALETTE.fog_void
+const FOG_SHADOW_TINT := ArtStyle3D.PALETTE.rock_dark
 
 var _grid: GridWorld
 var _mat: StandardMaterial3D
@@ -268,9 +269,9 @@ func _rebuild_chunk(key: Vector2i) -> void:
 			var color := _cell_color(cell, pos, max_ore)
 			match fog:
 				0:
-					color = color.lerp(FOG_GROUND_TINT, 0.85)
+					color = FOG_VOID_TINT
 				1:
-					color = color.lerp(FOG_GROUND_TINT, 0.45)
+					color = color.lerp(FOG_SHADOW_TINT, 0.8)
 			_add_quad(st, cx, cz, color, heights[0], heights[1], heights[2], heights[3])
 	if LIT_TERRAIN:
 		# Flat per-face normals off the sculpted corner heights; the glow

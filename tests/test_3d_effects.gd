@@ -10,6 +10,8 @@ extends GutTest
 # warnings into 3D (reconcile pattern, sim burn state is the only source of
 # truth), the eruption warning drives a sun pulse + ember ramp + rig rumble,
 # and explicit attack orders flash pooled telegraph arcs (Telegraph3D).
+# Visual-revamp R6 adds the once-per-match central-wall breach dust/crack
+# moment and its reduced-motion-aware camera nudge.
 
 var _shell: Node
 var _main: Node
@@ -142,6 +144,69 @@ func test_cave_in_spawns_dust_burst_at_grid_position() -> void:
 			"burst sits at the cave-in's world z")
 	# Let the rock restore so nothing downstream sees collapsed terrain.
 	_grid()._events._cavein_restore_left = 0.0
+
+
+func test_first_wall_breach_plays_once_with_dust_crack_and_minimal_shake() -> void:
+	await _frames(10)
+	var grid := _grid()
+	var effects := _effects()
+	var previous_quality := ArtStyle3D.quality
+	var previous_reduced_motion := SettingsManager.get_reduced_motion()
+	SettingsManager.set_reduced_motion(false)
+	_shell._shake = 0.0
+
+	var ordinary := Vector2i(-20, 10)
+	assert_false(grid.get_cell(ordinary).is_wall, "precondition: ordinary dug cell is not the central wall")
+	grid.damage_cell(ordinary, 100000, 3)
+	assert_false(_shell._breach_played, "ordinary cell destruction does not trigger the breach")
+	assert_false(effects._breach_crack.visible)
+
+	var wall_cells: Array = grid.get_wall_cells()
+	var center: Vector2i = wall_cells[int(wall_cells.size() / 2)]
+	grid.damage_cell(center, 100000, 3)
+	assert_eq(grid.get_wall_hp(), 0)
+	assert_true(_shell._breach_played, "terminal central-wall damage triggers the presentation")
+	assert_almost_eq(_shell._shake, 0.225, 0.001, "breach nudge is halved by the ordinary-shake policy")
+	assert_lt(_shell._shake, 0.5, "breach nudge stays below the cave-in impulse")
+
+	var expected := Presentation3D.to_3d(grid.grid_to_world(center))
+	var active: GPUParticles3D = null
+	for burst in effects._bursts:
+		if burst.emitting and is_equal_approx(burst.position.x, expected.x) \
+				and is_equal_approx(burst.position.z, expected.z):
+			active = burst
+			break
+	assert_not_null(active, "breach fires a pooled dust burst at the struck cell")
+	assert_true(effects._breach_crack.visible, "breach shows its ground-crack decal")
+	assert_almost_eq(effects._breach_crack.position.x, expected.x, 0.001)
+	assert_almost_eq(effects._breach_crack.position.z, expected.z, 0.001)
+	assert_almost_eq(effects._breach_crack_left, Effects3D.BREACH_CRACK_LIFETIME, 0.001)
+
+	if active != null:
+		for quality in [ArtStyle3D.Quality.POTATO, ArtStyle3D.Quality.STANDARD, ArtStyle3D.Quality.FANCY]:
+			ArtStyle3D.apply_quality(quality)
+			effects._apply_quality_amounts()
+			assert_eq(active.amount, int(Effects3D.BURST_BASE_AMOUNT * ArtStyle3D.particle_mult()),
+				"breach dust follows every preset's particle budget")
+	ArtStyle3D.apply_quality(previous_quality)
+
+	var crack_left: float = effects._breach_crack_left
+	var next_burst: int = effects._burst_index
+	_shell._on_cell_destroyed(center)
+	assert_eq(effects._breach_crack_left, crack_left, "repeat signals do not restart the decal")
+	assert_eq(effects._burst_index, next_burst, "repeat signals do not restart the dust pool")
+
+	SettingsManager.set_reduced_motion(true)
+	_shell._shake = 0.0
+	_shell._breach_played = false  # explicit test reset to exercise the accessibility branch
+	_shell._on_cell_destroyed(center)
+	assert_eq(_shell._shake, 0.0, "reduced motion suppresses the breach camera nudge")
+	assert_true(effects._breach_crack.visible, "reduced motion keeps the informational dust/decal")
+	SettingsManager.set_reduced_motion(previous_reduced_motion)
+
+	effects._update_breach_crack(Effects3D.BREACH_CRACK_LIFETIME + 0.1)
+	assert_false(effects._breach_crack.visible, "the crack decal expires")
+	assert_almost_eq(effects._breach_crack_material.albedo_color.a, 0.0, 0.001)
 
 
 func test_underground_view_enables_dust_motes() -> void:

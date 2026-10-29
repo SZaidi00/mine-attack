@@ -3,10 +3,11 @@ extends Node
 ## window by capture_driver.gd) and steers the match to a deterministic set
 ## of screenshots. See capture_driver.gd for the argument contract.
 ##
-## Presentation-only: it reads sim state and drives the camera/weather the
-## same way a player could (camera bookmarks, view toggle, weather events).
+## Drives a throwaway match through deterministic camera and event poses.
 ## Forced weather uses WeatherManager's own start/end routines and is ended
-## again after the shot so later shots are unaffected.
+## again after the shot. Underground/breach poses finish real lantern
+## placements for readable light pools; breach uses GridWorld's public damage
+## API and restores its temporary reveal-all override after capture.
 
 const WEATHER_LEAD_SEC := 3.0
 const SURFACE_CAM_POS := Vector2(0.0, -150.0)
@@ -19,6 +20,7 @@ var _pending_captures := 0
 var _pc: Node = null
 var _shell: Node = null
 var _weather_active := ""
+var _breach_revealed := false
 
 
 func setup(config: Dictionary) -> void:
@@ -69,21 +71,61 @@ func _apply_pose(shot: Dictionary) -> void:
 			# follows PlayerController's view_mode_changed signal.
 			_pc.set_view(false)
 			if shot.pose == "surface" and _shell != null:
-				_shell._focus = Vector3(0.0, 0.0, -1.5)
-				_shell._dolly = 12.0
+				_shell.pose_camera(Vector3(0.0, 0.0, -1.5), 12.0, _shell.SURFACE_PITCH_DEGREES)
 		"zoomout":
 			_pc.set_view(false)
 			if _shell != null:
-				_shell._focus = Vector3(0.0, 0.0, 0.0)
-				_shell._dolly = 16.0
+				_shell.pose_camera(Vector3.ZERO, 16.0, _shell.SURFACE_PITCH_DEGREES)
 		"underground":
 			_pc.set_view(true)
+			var lantern_cell := Vector2i(-15, 3)
+			_ensure_underground_lantern(lantern_cell)
+			if _shell != null:
+				var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+				if grid != null:
+					_shell.pose_camera(Presentation3D.to_3d(grid.grid_to_world(lantern_cell)),
+						6.0, _shell.UNDERGROUND_PITCH_DEGREES)
+		"breach":
+			_pc.set_view(true)
+			var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+			if grid != null:
+				var wall_cells: Array = grid.get_wall_cells()
+				if not wall_cells.is_empty():
+					var center: Vector2i = wall_cells[int(wall_cells.size() / 2)]
+					grid.set_reveal_all(GameManager.Team.PLAYER, true)
+					_breach_revealed = true
+					grid.damage_cell(center, 100000, 3)
+					_ensure_underground_lantern(center)
+					if _shell != null:
+						_shell.pose_camera(Presentation3D.to_3d(grid.grid_to_world(center)),
+							4.5, _shell.UNDERGROUND_PITCH_DEGREES)
 		"custom":
 			# 3D branch: custom:X:Y:Z = focus (X, Y world units) + dolly Z.
 			if _shell != null:
-				_shell._focus = Vector3(shot.pos.x * 0.01, 0.0, shot.pos.y * 0.01)
-				_shell._dolly = clampf(shot.zoom, 3.0, 16.0)
+				var pitch: float = _shell.UNDERGROUND_PITCH_DEGREES \
+					if _pc.get_current_view_mode() == PlayerController.ViewMode.UNDERGROUND \
+					else _shell.SURFACE_PITCH_DEGREES
+				_shell.pose_camera(Vector3(shot.pos.x * 0.01, 0.0, shot.pos.y * 0.01), shot.zoom, pitch)
 	_capture(shot)
+
+
+func _ensure_underground_lantern(cell: Vector2i) -> void:
+	var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+	if grid == null:
+		return
+	var world_pos := grid.grid_to_world(cell)
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		if lantern.team == GameManager.Team.PLAYER and lantern.is_underground_lantern \
+				and grid.world_to_grid(lantern.global_position) == cell:
+			return
+	if not _pc.try_place_lantern("underground_lantern", world_pos):
+		return
+	for lantern in get_tree().get_nodes_in_group("lanterns"):
+		if lantern.team == GameManager.Team.PLAYER and lantern.is_underground_lantern \
+				and grid.world_to_grid(lantern.global_position) == cell:
+			lantern._build_progress = 999.0
+			lantern._process(0.1)
+			return
 
 
 ## Wheel-style zoom relative to the resolution-adaptive base zoom the
@@ -118,6 +160,10 @@ func _capture(shot: Dictionary) -> void:
 	# yields, which would otherwise offset every name by one.
 	_pending_captures += 1
 	var name: String = "%03d_%s.png" % [_shot_idx + 1, shot.pose]
+	if _shell != null and ["underground", "breach", "storm", "volcano"].has(shot.pose):
+		await get_tree().create_timer(_shell.VIEW_TWEEN_DURATION).timeout
+	if shot.pose == "underground" or shot.pose == "breach":
+		await get_tree().create_timer(Fog3D.REFRESH_INTERVAL).timeout
 	# Two frames: one for the pose/weather to take effect, one to draw.
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -129,4 +175,9 @@ func _capture(shot: Dictionary) -> void:
 		print("Capture: %s at t=%.2fs" % [name, _elapsed])
 	if shot.pose == "storm" or shot.pose == "volcano":
 		_end_forced_weather()
+	elif shot.pose == "breach" and _breach_revealed:
+		var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+		if grid != null:
+			grid.set_reveal_all(GameManager.Team.PLAYER, false)
+		_breach_revealed = false
 	_pending_captures -= 1

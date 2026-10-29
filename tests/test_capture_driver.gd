@@ -57,3 +57,10 @@ func test_parse_shots_skips_garbage() -> void:
 	var shots := CaptureDriver.parse_shots("bogus;;10:start;custom:1:2")
 	assert_eq(shots.size(), 1)
 	assert_eq(shots[0].pose, "start")
+
+
+func test_parse_shots_accepts_breach_pose() -> void:
+	var shots := CaptureDriver.parse_shots("12:breach")
+	assert_eq(shots.size(), 1)
+	assert_eq(shots[0].pose, "breach")
+	assert_eq(shots[0].t, 12.0)

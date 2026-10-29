@@ -17,6 +17,7 @@ const METEOR_SHOWER_BASE_AMOUNT: int = 400
 const MOTES_BASE_AMOUNT: int = 130
 const BURST_POOL_SIZE: int = 4
 const BURST_BASE_AMOUNT: int = 26
+const BREACH_CRACK_LIFETIME: float = 1.8
 
 const MOTES_NAME: StringName = &"DustMotes"
 const STORM_NAME: StringName = &"StormSnow"
@@ -48,6 +49,9 @@ var _ash_near: GPUParticles3D
 var _meteor_shower: GPUParticles3D
 var _bursts: Array[GPUParticles3D] = []
 var _burst_index := 0
+var _breach_crack: MeshInstance3D
+var _breach_crack_material: StandardMaterial3D
+var _breach_crack_left := 0.0
 
 var _dot: Texture2D
 var _particle_materials: Dictionary = {}
@@ -74,7 +78,8 @@ func set_underground_view(underground: bool) -> void:
 	_refresh_emitters()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_update_breach_crack(delta)
 	if _grid == null or _camera == null or not is_instance_valid(_camera):
 		_try_lazy_setup()
 		return
@@ -121,13 +126,78 @@ func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
 
 
 func _on_cave_in(center: Vector2i) -> void:
+	_spawn_dust_burst(center)
+
+
+func _spawn_dust_burst(center: Vector2i, emphasis: bool = false) -> void:
 	if _bursts.is_empty() or _grid == null:
 		return
 	var burst: GPUParticles3D = _bursts[_burst_index]
 	_burst_index = (_burst_index + 1) % _bursts.size()
 	var ground: Vector2 = _grid.grid_to_world(center) * WORLD_SCALE
 	burst.position = Vector3(ground.x, 0.05, ground.y)
+	burst.scale = Vector3.ONE * (1.35 if emphasis else 1.0)
 	burst.restart()
+
+
+func play_wall_breach(center: Vector2i) -> void:
+	if _grid == null:
+		return
+	_spawn_dust_burst(center, true)
+	if _breach_crack == null:
+		return
+	_breach_crack.position = Presentation3D.to_3d(
+		_grid.grid_to_world(center), Presentation3D.GROUND_LIFT + 0.01)
+	_breach_crack_left = BREACH_CRACK_LIFETIME
+	_breach_crack_material.albedo_color.a = 0.92
+	_breach_crack.visible = true
+
+
+func _update_breach_crack(delta: float) -> void:
+	if _breach_crack == null or _breach_crack_left <= 0.0:
+		return
+	_breach_crack_left = maxf(0.0, _breach_crack_left - delta)
+	_breach_crack_material.albedo_color.a = 0.92 * clampf(_breach_crack_left / 0.45, 0.0, 1.0)
+	if _breach_crack_left <= 0.0:
+		_breach_crack.hide()
+
+
+func _build_breach_crack() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for branch in range(6):
+		var angle := TAU * float(branch) / 6.0 + 0.17
+		var direction := Vector3(cos(angle), 0.0, sin(angle))
+		var perpendicular := Vector3(-direction.z, 0.0, direction.x)
+		var previous := Vector3.ZERO
+		for segment in range(1, 4):
+			var next := direction * (0.16 * float(segment))
+			next += perpendicular * sin(float(branch * 7 + segment * 13)) * 0.035
+			_add_crack_segment(st, previous, next, 0.029 - 0.005 * float(segment))
+			previous = next
+	_breach_crack = MeshInstance3D.new()
+	_breach_crack.name = "WallBreachCrack"
+	_breach_crack.mesh = st.commit()
+	_breach_crack.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_breach_crack_material = StandardMaterial3D.new()
+	_breach_crack_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_breach_crack_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_breach_crack_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_breach_crack_material.albedo_color = Color(0.61, 0.55, 0.48, 0.92)
+	_breach_crack.set_material_override(_breach_crack_material)
+	_breach_crack.visible = false
+	add_child(_breach_crack)
+
+
+func _add_crack_segment(st: SurfaceTool, from: Vector3, to: Vector3, width: float) -> void:
+	var direction := (to - from).normalized()
+	var side := Vector3(-direction.z, 0.0, direction.x) * width
+	st.add_vertex(from - side)
+	st.add_vertex(from + side)
+	st.add_vertex(to + side)
+	st.add_vertex(from - side)
+	st.add_vertex(to + side)
+	st.add_vertex(to - side)
 
 
 ## Emission state per emitter. Weather state is polled (not just signal-
@@ -249,6 +319,7 @@ func _build_emitters() -> void:
 		var burst := _make_burst(i)
 		_bursts.append(burst)
 		add_child(burst)
+	_build_breach_crack()
 
 
 func _make_continuous(name_: StringName, amount: int, mesh_mat: StandardMaterial3D, ramp: GradientTexture1D, pm: ParticleProcessMaterial) -> GPUParticles3D:
@@ -283,12 +354,12 @@ func _make_burst(i: int) -> GPUParticles3D:
 	quad.size = Vector2(0.12, 0.12)
 	quad.material = _particle_material(Color(1, 1, 1), 0.55)
 	p.draw_pass_1 = quad
-	# Grey-brown dust: pop upward then settle.
+	# Pale rock dust stays readable against the near-black underground mood.
 	var ramp := Gradient.new()
-	ramp.set_color(0, Color(0.48, 0.42, 0.36, 0.0))
-	ramp.set_color(1, Color(0.48, 0.42, 0.36, 0.55))
-	ramp.add_point(0.25, Color(0.48, 0.42, 0.36, 0.5))
-	ramp.add_point(0.75, Color(0.42, 0.37, 0.32, 0.35))
+	ramp.set_color(0, Color(0.72, 0.64, 0.54, 0.0))
+	ramp.set_color(1, Color(0.72, 0.64, 0.54, 0.7))
+	ramp.add_point(0.25, Color(0.72, 0.64, 0.54, 0.68))
+	ramp.add_point(0.75, Color(0.62, 0.55, 0.47, 0.5))
 	var ramp_tex := GradientTexture1D.new()
 	ramp_tex.gradient = ramp
 	var pm := ParticleProcessMaterial.new()

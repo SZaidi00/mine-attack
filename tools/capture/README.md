@@ -22,32 +22,35 @@ override with a local install).
 2. Instead of the main menu, it launches `tools/capture/capture_driver.tscn`.
    The driver configures the autoloads exactly like the menu's Play flow
    (difficulty, faction, seed, speed — adaptive off) and swaps in
-   `scenes/main.tscn`.
+   `scenes/main_3d.tscn` on the 3D branch.
 3. A `CapturePilot` node (parented to the root window so it survives the
    scene swap) advances the match and, at each requested sim timestamp,
    poses the camera, waits two frames, and saves the viewport as a PNG.
 4. Random weather scheduling is disabled for determinism. Weather poses force
    a snowstorm / volcano a few seconds early via `WeatherManager`'s own
-   routines, then end it after the shot so events cannot overlap.
+   routines, then end it after the shot so events cannot overlap. The breach
+   pose forces central-wall damage through `GridWorld.damage_cell()` and
+   temporarily reveals the board so the effect is visible.
 
-Everything is presentation-only: the driver uses the same setters the menu
-uses and never writes sim state. The harness is inert during normal play
+The harness changes only its throwaway match and is inert during normal play
 and invisible to the GUT suite (parsing is covered by
 `tests/test_capture_driver.gd`).
 
 ## Flags and shot specs
 
 ```
-SHOTS="10:start;45:zoomout;80:underground;120:storm;150:volcano:custom:0:-150:0.5" \
+SHOTS="10:start;45:zoomout;80:underground;100:breach;120:storm;150:volcano;180:custom:0:-150:6" \
 FACTION=brute DIFFICULTY=2 SEED=777 SPEED=2.0 \
 tools/capture/run_capture.sh /tmp/shots
 ```
 
 Pose names: `start` (spawn camera), `surface` (surface bookmark,
-recentered), `zoomout` (centered, 0.5× zoom), `underground` (own-mine
-bookmark), `storm` / `volcano` (surface + forced weather), and
-`custom:X:Y:Z` (explicit camera position and zoom factor). Times are
-sim-seconds; keep the list ordered.
+recentered), `zoomout` (centered, 0.5× zoom), `underground` (built mine
+lantern framed at local-area dolly), `breach` (forced central-wall breach
+framed underground),
+`storm` / `volcano` (surface + forced weather), and `custom:X:Y:Z`
+(explicit camera position and dolly). Times are sim-seconds; keep the list
+ordered.
 
 ## Verified environment notes (don't relearn these the hard way)
 
@@ -77,13 +80,19 @@ Then open the PNGs and judge.
 The driver swaps to `res://scenes/main_3d.tscn` (the 3D shell that mounts
 the sim), and the pilot poses the 3D camera rig instead of the 2D camera:
 
-- `start` / `underground` / `storm` / `volcano` — unchanged semantics
-  (`PlayerController.set_view()` drives the rig via `view_mode_changed`).
+- `start` / `storm` / `volcano` — unchanged semantics.
+- `underground` — places and finishes a real mine lantern through the player
+  placement API, then frames its light pool at dolly 6.
+- `breach` — reveals the board, forces the central wall's lethal damage,
+  places a lantern at the opened cell, frames it at dolly 4.5, then restores
+  the reveal override.
 - `surface` — surface view, rig focused on midfield at default dolly.
 - `zoomout` — rig focused on map center at max dolly (whole board).
 - `custom:X:Y:Z` — rig focus at world (X, Y) (2D px × 0.01) with dolly Z
-  (3.0–16.0). Example: `60:custom:-800:-100:6`.
+  (3.0–16.0 on the surface, 3.0–10.0 underground). Example:
+  `60:custom:-800:-100:6`.
 
-The rig is reached at `/root/Main3D`; the pilot sets its `_focus`/`_dolly`
-directly. If the shell gains a public `pose_camera()` API (revamp phase R5),
-switch the pilot to it and drop the private-member access.
+The rig is reached at `/root/Main3D`; the pilot uses its public
+`pose_camera(focus, dolly, pitch)` API. Posing cancels any active view tween
+and updates the camera immediately. Underground/breach shots also wait for
+the 0.5-second fog refresh before saving.

@@ -13,6 +13,7 @@ enum Quality { POTATO, STANDARD, FANCY }
 
 const PALETTE := {
 	"night": Color("#232C3A"),
+	"fog_void": Color("#10141C"),
 	"snow": Color("#DDE8F2"),
 	"snow_shadow": Color("#8FA3B8"),
 	"ice": Color("#8FA3B8"),

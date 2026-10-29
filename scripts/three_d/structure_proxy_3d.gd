@@ -39,6 +39,16 @@ enum _Kind { GENERIC, BUILDING, TOWER, LANTERN, WALL, TRAP, MINE_ENTRY, LADDER }
 
 const _DAMAGE_TILTS: Array[float] = [0.0, 0.07, 0.17]
 const _DAMAGE_DARKEN: Array[float] = [0.0, 0.25, 0.45]
+const _LANTERN_POOL_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_add, cull_disabled, depth_draw_never, fog_disabled;
+uniform vec4 pool_color : source_color;
+void fragment() {
+	float falloff = clamp(1.0 - length((UV - vec2(0.5)) * 2.0), 0.0, 1.0);
+	ALBEDO = pool_color.rgb;
+	ALPHA = falloff * 0.55;
+}
+"""
 
 var entity: Node2D
 var dead := false
@@ -79,6 +89,7 @@ var _last_remembered := false
 var _last_built := true
 
 var _lantern_light: OmniLight3D
+var _lantern_pool: MeshInstance3D
 # Node3D (not MeshInstance3D): the procedural head box or, on the imported
 # surface lamp, the whole "Model" wrapper that the tier scaling grows.
 var _lantern_head: Node3D
@@ -477,6 +488,21 @@ func _build_lantern(s: Node2D) -> void:
 	_lantern_light.position = Vector3(0.13 if _procedural_lantern_head else 0.0, light_y, 0.0)
 	add_child(_lantern_light)
 
+	if _lantern_underground:
+		_lantern_pool = MeshInstance3D.new()
+		_lantern_pool.name = "LanternPool"
+		_lantern_pool.mesh = QuadMesh.new()
+		_lantern_pool.rotation_degrees.x = -90.0
+		_lantern_pool.position.y = 0.018
+		_lantern_pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var shader := Shader.new()
+		shader.code = _LANTERN_POOL_SHADER
+		var material := ShaderMaterial.new()
+		material.shader = shader
+		material.set_shader_parameter("pool_color", ArtStyle3D.PALETTE.lamp_warm)
+		_lantern_pool.set_material_override(material)
+		add_child(_lantern_pool)
+
 	_apply_lantern_tier(clampi(int(s.get("tier")), 1, 3))
 
 
@@ -487,7 +513,7 @@ static func _lantern_head_material(built: bool) -> StandardMaterial3D:
 
 
 ## Tier drives light radius/energy: the vision upgrade now looks like an
-## upgrade. Underground lanterns burn smaller, warmer, and never cast shadows.
+## upgrade. Underground lanterns burn tighter, warmer, and never cast shadows.
 func _apply_lantern_tier(tier: int) -> void:
 	if _lantern_light == null:
 		return
@@ -495,7 +521,7 @@ func _apply_lantern_tier(tier: int) -> void:
 	var energy: float
 	if _lantern_underground:
 		cells = Constants.UNDERGROUND_LANTERN_VISION
-		energy = 0.9
+		energy = 2.4
 	else:
 		match tier:
 			1:
@@ -508,9 +534,12 @@ func _apply_lantern_tier(tier: int) -> void:
 				cells = Constants.LANTERN_T3_VISION
 				energy = 1.6
 	_lantern_light.omni_range = cells * GridWorld.CELL_SIZE * WORLD_SCALE
-	_lantern_light.omni_attenuation = 1.4
+	_lantern_light.omni_attenuation = 1.0 if _lantern_underground else 1.4
 	_lantern_light.light_energy = energy
 	_lantern_light.shadow_enabled = ArtStyle3D.shadows_enabled() and not _lantern_underground
+	if _lantern_pool != null:
+		var diameter: float = cells * GridWorld.CELL_SIZE * WORLD_SCALE * 2.0 / PROXY_SCALE
+		(_lantern_pool.mesh as QuadMesh).size = Vector2.ONE * diameter
 	if _lantern_head != null and not _lantern_underground:
 		_lantern_head.scale = Vector3.ONE * (1.0 + 0.18 * float(tier - 1))
 
@@ -724,6 +753,8 @@ func refresh(underground_view: bool) -> void:
 		# _tint_bodies already fades the whole model, so only the procedural
 		# head swaps its override material.
 		_lantern_light.visible = built
+		if _lantern_pool != null:
+			_lantern_pool.visible = built
 		if _procedural_lantern_head and _lantern_head != null:
 			(_lantern_head as MeshInstance3D).set_material_override(_lantern_head_material(built))
 

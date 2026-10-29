@@ -70,22 +70,37 @@ Acceptance: enemy fortress reads as Minas Morgul at default dolly; witch-glow
 windows hidden until reveal; keep fits footprint; Potato fallback = existing
 procedural recipes; budgets verified; GUT green.
 
-## R5 — Two-mode camera (perspective surface / flat underground)
+## R5 — Two-mode camera (perspective surface / flat underground) ✅ (implemented; captures under `r5/`)
 
 **Model:** K3. **Depends:** R2.
 
 Per `03-technical-plan.md` §3: pitch/dolly tween per view mode; local-area
-zoom limits; `pose_camera()` public API + pilot switch.
+zoom limits; `pose_camera()` public API + pilot switch. Landed in
+`scripts/three_d/main_3d.gd`: the surface keeps its 55° pitch and 3–16 dolly,
+underground tweens to 82.5° with a 3–10 local-area dolly, and focus/pitch/
+dolly glide between bookmarks in 0.25 s. `pose_camera()` cancels active
+transitions and synchronously updates the camera; the capture pilot uses it
+instead of private fields. Ordinary shake is halved while cave-ins retain
+their informational impulse. Tests: `tests/test_3d_camera.gd`.
 
 Acceptance: underground reads as a flat X-Y plane with light pools; surface
 unchanged feel; Tab toggle smooth (<0.3 s); harness poses still land.
 
-## R6 — Fog-of-war/darkness treatment + first wall breach
+## R6 — Fog-of-war/darkness treatment + first wall breach ✅ (implemented; captures under `r6/`)
 
 **Model:** K3. **Depends:** R3, R4.
 
-Per `03-technical-plan.md` §4: black-void unexplored surface, lantern-lit
-underground pools, breach moment.
+Per `03-technical-plan.md` §4. `fog_3d.gd` now corner-averages full RGBA:
+unexplored cells are opaque `#10141C`, remembered cells are deep-rock shadow,
+and edge-only shader noise cannot reduce hidden opacity. `terrain_3d.gd` uses
+matching fallback tints. Underground lanterns keep their warm OmniLights and
+add a compatibility-safe radial ground pool at the sim vision radius. The
+first terminal central-wall `cell_destroyed` signal triggers a per-shell
+one-shot dust burst, fading crack decal, and reduced-motion-aware camera
+nudge below cave-in strength. The capture harness gained deterministic
+lantern-backed `underground` and `breach` poses. Tests:
+`tests/test_3d_fog.gd`, `test_3d_effects.gd`, `test_3d_structure_models.gd`,
+and `test_capture_driver.gd`.
 
 Acceptance: unexplored reads as void at both views; breach moment plays
 once, reads clearly, respects minimal-shake; GUT green.

@@ -1,9 +1,7 @@
 extends GutTest
 
-# 3D fog-of-war mist overlay (scripts/three_d/fog_3d.gd): a translucent mist
-# bank over cells the player cannot see, replacing the 2.5D port's black-cell
-# terrain tint. Feathered edges via corner-averaged vertex alpha, reveal-all
-# hides the overlay, and Tab switches the covered layer.
+# R6 fog-of-war: opaque unexplored void, deep-shadow remembered cells,
+# RGBA-feathered edges, preset-independent darkness, reveal-all, and Tab layers.
 
 var _shell: Node
 var _main: Node
@@ -58,24 +56,90 @@ func test_fog_node_exists_and_builds_mesh() -> void:
 		assert_gt(fog.mesh.get_surface_count(), 0, "fog mesh has a surface")
 
 
-func test_hidden_cells_have_higher_alpha_than_visible() -> void:
+func test_hidden_cells_are_opaque_void_and_visible_cells_are_clear() -> void:
 	await _frames(30)
 	var fog := _fog()
 	var grid := _grid()
 	var base: Node2D = _main.get_node("World/PlayerBuilding")
 	var base_cell: Vector2i = grid.world_to_grid(base.global_position)
-	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, base_cell), 2,
-		"precondition: the player base cell is visible")
 	var far_cell := Vector2i(35, 0)
-	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, far_cell), 0,
-		"precondition: enemy-side surface cell is unexplored")
-	# The overlay refreshes on a 0.5s real-time poll; rebuild explicitly so the
-	# alphas reflect the vision state asserted above, not the setup-time state.
+	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, base_cell), 2)
+	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, far_cell), 0)
 	fog._rebuild()
-	assert_lt(fog.alpha_at_cell(base_cell), fog.alpha_at_cell(far_cell),
-		"unexplored cells carry more mist than visible ones")
-	assert_almost_eq(fog.alpha_at_cell(base_cell), 0.0, 0.001, "visible cells are clear")
-	assert_gt(fog.alpha_at_cell(far_cell), 0.9, "unexplored cells are nearly opaque mist")
+	assert_almost_eq(fog.alpha_at_cell(base_cell), Fog3D.ALPHA_VISIBLE, 0.001)
+	assert_almost_eq(fog.alpha_at_cell(far_cell), Fog3D.ALPHA_HIDDEN, 0.001)
+	assert_eq(fog.color_at_cell(far_cell), Color(Fog3D.VOID_COLOR, 1.0),
+		"unexplored surface uses the exact void token")
+
+
+func test_remembered_cells_use_deep_shadow() -> void:
+	var fog := _fog()
+	var grid := _grid()
+	var cell := Vector2i(35, 0)
+	var ix: int = cell.x - GridWorld.X_MIN
+	var iy: int = cell.y - GridWorld.SURFACE_TOP
+	var previous: float = grid._memory_maps[GameManager.Team.PLAYER][ix][iy]
+	grid._memory_maps[GameManager.Team.PLAYER][ix][iy] = GameManager.match_time
+	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, cell), 1)
+	fog._rebuild()
+	assert_eq(fog.color_at_cell(cell), Color(Fog3D.SHADOW_COLOR, Fog3D.ALPHA_REMEMBERED),
+		"explored-but-unlit cells use the deep-rock shadow treatment")
+	grid._memory_maps[GameManager.Team.PLAYER][ix][iy] = previous
+	fog._rebuild()
+
+
+func test_underground_hidden_cells_use_the_same_opaque_void() -> void:
+	var fog := _fog()
+	var grid := _grid()
+	fog.set_underground_view(true)
+	var far_cell := Vector2i(35, 10)
+	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, far_cell), 0)
+	assert_eq(fog.color_at_cell(far_cell), Color(Fog3D.VOID_COLOR, 1.0))
+	assert_not_null(fog.mesh, "underground layer still has a fog mesh")
+	fog.set_underground_view(false)
+	assert_false(fog.is_underground_view())
+
+
+func test_corner_averaging_feathers_rgba() -> void:
+	var fog := _fog()
+	fog._colors.clear()
+	fog._colors[Vector2i(9, 9)] = Color(1.0, 1.0, 1.0, 0.0)
+	fog._colors[Vector2i(10, 9)] = Color(Fog3D.VOID_COLOR, 1.0)
+	fog._colors[Vector2i(9, 10)] = Color(Fog3D.SHADOW_COLOR, Fog3D.ALPHA_REMEMBERED)
+	fog._colors[Vector2i(10, 10)] = Color(Fog3D.VOID_COLOR, 1.0)
+	var expected := (Color(1.0, 1.0, 1.0, 0.0)
+		+ Color(Fog3D.VOID_COLOR, 1.0)
+		+ Color(Fog3D.SHADOW_COLOR, Fog3D.ALPHA_REMEMBERED)
+		+ Color(Fog3D.VOID_COLOR, 1.0)) * 0.25
+	var actual := fog._vertex_color(10, 10)
+	assert_almost_eq(actual.r, expected.r, 0.001)
+	assert_almost_eq(actual.g, expected.g, 0.001)
+	assert_almost_eq(actual.b, expected.b, 0.001)
+	assert_almost_eq(actual.a, expected.a, 0.001)
+	fog._rebuild()
+
+
+func test_shader_noise_vanishes_at_clear_and_opaque_endpoints() -> void:
+	assert_string_contains(Fog3D._SHADER_CODE, "sin(PI * base_alpha)",
+		"edge weight is zero when alpha is zero or one")
+	assert_string_contains(Fog3D._SHADER_CODE, "base_alpha + drift",
+		"noise offsets only the feathered transition, never hidden-cell opacity")
+
+
+func test_void_and_shadow_are_identical_on_every_quality_preset() -> void:
+	var fog := _fog()
+	var grid := _grid()
+	var previous := ArtStyle3D.quality
+	var far_cell := Vector2i(35, 0)
+	for quality in [ArtStyle3D.Quality.POTATO, ArtStyle3D.Quality.STANDARD, ArtStyle3D.Quality.FANCY]:
+		ArtStyle3D.apply_quality(quality)
+		fog.setup(grid)
+		assert_eq(fog.color_at_cell(far_cell), Color(Fog3D.VOID_COLOR, 1.0))
+		var drift: float = fog._mat.get_shader_parameter("drift_enabled")
+		assert_eq(drift, 0.0 if quality == ArtStyle3D.Quality.POTATO else 1.0,
+			"only edge animation changes by preset")
+	ArtStyle3D.apply_quality(previous)
+	fog.setup(grid)
 
 
 func test_reveal_all_hides_the_overlay() -> void:
@@ -84,18 +148,7 @@ func test_reveal_all_hides_the_overlay() -> void:
 	var grid := _grid()
 	grid.set_reveal_all(GameManager.Team.PLAYER, true)
 	fog._rebuild()
-	assert_null(fog.mesh, "reveal-all drops the mist overlay entirely")
+	assert_null(fog.mesh, "reveal-all drops the fog overlay entirely")
 	grid.set_reveal_all(GameManager.Team.PLAYER, false)
 	fog._rebuild()
 	assert_not_null(fog.mesh, "overlay returns when reveal-all is lifted")
-
-
-func test_underground_view_switches_layer() -> void:
-	await _frames(10)
-	var fog := _fog()
-	assert_false(fog.is_underground_view(), "starts on the surface layer")
-	fog.set_underground_view(true)
-	assert_true(fog.is_underground_view(), "Tab switches the mist to the mine layer")
-	assert_not_null(fog.mesh, "underground layer still has a mist mesh")
-	fog.set_underground_view(false)
-	assert_false(fog.is_underground_view())

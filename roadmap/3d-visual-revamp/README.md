@@ -3,8 +3,10 @@
 **Status:** R1–R2 accepted (baseline captures under `baseline/`, R2 captures
 under `r2/`); R3 implemented (height-field dunes; harness captures pending
 owner/CI run); R4 implemented (structure GLB pipeline + Minas Morgul
-fortress; harness captures pending owner/CI run). Final art-style polish
-review follows the later phases.
+fortress; harness captures pending owner/CI run); R5 implemented (two-mode
+camera + capture posing API; captures under `r5/`); R6 implemented (opaque
+fog void + lantern pools + first-wall-breach moment; captures under `r6/`).
+Final art-style polish review follows the later phases.
 **Parent:** `roadmap/3d-rework/README.md` (phases 1–5 implemented there; read it
 for the hard rules that still apply).
 **Branch:** `feat/3d-conversion`.
