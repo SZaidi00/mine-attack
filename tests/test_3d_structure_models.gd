@@ -6,6 +6,13 @@ extends GutTest
 # faction is identified), towers/walls expose damage states driven by the
 # live entity's hp, and lanterns are dynamic-light heroes whose OmniLight3D
 # radius/energy scale with tier.
+#
+# R4 (roadmap/3d-visual-revamp/02-asset-pipeline.md): on Standard/Fancy the
+# bases, towers, surface lanterns, and mine entries build the imported
+# textured GLBs from model_manifest.json instead; Potato keeps exercising
+# the procedural recipes. The starter GLBs ship a single material with the
+# window glow baked into the albedo texture (no emissive slot), so the
+# enemy base's pre-reveal "???" read is asserted as a body-color dim here.
 
 const PLAYER: int = 0
 const ENEMY: int = 1
@@ -65,10 +72,39 @@ func _body_color(proxy: StructureProxy3D) -> Color:
 	return (part.get_material_override() as StandardMaterial3D).albedo_color
 
 
+# R4: imported-model proxies have no "Body"/"Accent" MeshInstance3D children
+# — tint state lives in the proxy's tracked per-proxy material arrays.
+func _first_body_mat(proxy: StructureProxy3D) -> StandardMaterial3D:
+	assert_gt(proxy._body_mats.size(), 0, "proxy tracks body materials")
+	return proxy._body_mats[0]
+
+
+func _combined_aabb(node: Node3D, parent_xform: Transform3D) -> Dictionary:
+	var xform := parent_xform * node.transform
+	var out := {"bounds": AABB(), "has": false}
+	var mi := node as MeshInstance3D
+	if mi != null and mi.mesh != null:
+		out.bounds = xform * mi.mesh.get_aabb()
+		out.has = true
+	for child in node.get_children():
+		if child is Node3D:
+			var sub := _combined_aabb(child, xform)
+			if sub.has:
+				if out.has:
+					out.bounds = out.bounds.merge(sub.bounds)
+				else:
+					out.bounds = sub.bounds
+					out.has = true
+	return out
+
+
 # ─── Building: faction identity ───
 
 
-func test_building_accents_reveal_enemy_faction_on_identification() -> void:
+# Procedural path (Potato): accent trims carry the faction identity.
+func test_procedural_keep_accents_reveal_enemy_faction_on_identification() -> void:
+	var saved := ArtStyle3D.quality
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.POTATO)
 	FactionManager.set_player_faction("arcane")
 	FactionManager.enemy_faction_id = "brute"
 	FactionManager.reset()
@@ -86,6 +122,46 @@ func test_building_accents_reveal_enemy_faction_on_identification() -> void:
 
 	assert_eq(_accent_color(enemy_proxy), ArtStyle3D.FACTION_ACCENTS["brute"],
 		"enemy keep accent re-tints when the faction is identified")
+	ArtStyle3D.apply_quality(saved)
+
+
+# Imported path (Standard/Fancy): the GLB keep/fortress replaces the recipe.
+# The starter GLBs bake the window glow into the albedo texture (single
+# material, no emissive slot), so the unidentified enemy base is read as a
+# whole-body grey damp — and full color returns on identification.
+func test_imported_building_reveal_dimming() -> void:
+	var saved := ArtStyle3D.quality
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.FANCY)
+	FactionManager.set_player_faction("arcane")
+	FactionManager.enemy_faction_id = "brute"
+	FactionManager.reset()
+	var player_proxy := StructureProxy3D.create(_main.get_node("World/PlayerBuilding"), _grid)
+	var enemy_proxy := StructureProxy3D.create(_main.get_node("World/EnemyBuilding"), _grid)
+	autofree(player_proxy)
+	autofree(enemy_proxy)
+	assert_not_null(player_proxy._model_wrapper, "Fancy builds the imported player keep")
+	assert_not_null(enemy_proxy._model_wrapper, "Fancy builds the imported enemy fortress")
+
+	player_proxy.refresh(false)
+	enemy_proxy.refresh(false)
+	var player_mat := _first_body_mat(player_proxy)
+	var enemy_mat := _first_body_mat(enemy_proxy)
+	var enemy_base: Color = enemy_proxy._body_colors[0]
+
+	assert_eq(player_mat.albedo_color, player_proxy._body_colors[0],
+		"player keep shows full color immediately")
+	assert_almost_eq(enemy_mat.albedo_color.r, enemy_base.r * enemy_proxy._reveal_mult.r, 0.001,
+		"unidentified fortress body is damped toward grey (witch-glow baked in albedo)")
+	assert_true(enemy_proxy._glow_mats.is_empty(),
+		"starter GLBs ship no emissive glow material (glow is baked into the albedo)")
+
+	FactionManager.identify_faction(GameManager.Team.ENEMY)
+
+	assert_almost_eq(enemy_mat.albedo_color.r, enemy_base.r, 0.001,
+		"identification restores the fortress body color")
+	assert_eq(player_mat.albedo_color, player_proxy._body_colors[0],
+		"player keep tint is untouched by the enemy reveal")
+	ArtStyle3D.apply_quality(saved)
 
 
 # ─── Tower / wall damage states ───
@@ -106,6 +182,12 @@ func test_tower_damage_states_track_hp() -> void:
 	assert_not_null(rubble)
 	if cap == null or rubble == null:
 		return
+	assert_not_null(proxy._model_wrapper, "Fancy builds the imported watchtower")
+	proxy.refresh(false)
+
+	var shaft := _first_body_mat(proxy)
+	var base: Color = proxy._body_colors[0]
+	assert_eq(shaft.albedo_color, base, "undamaged tower shows its base albedo")
 
 	var max_hp: int = tower.get("max_hp")
 	assert_almost_eq(cap.rotation.z, 0.0, 0.001, "undamaged tower stands straight")
@@ -114,12 +196,37 @@ func test_tower_damage_states_track_hp() -> void:
 	tower.call("take_damage", roundi(max_hp * 0.45))  # 55%: below the 60% threshold.
 	assert_almost_eq(absf(cap.rotation.z), 0.07, 0.001, "cap tilts below 60% HP")
 	assert_false(rubble.visible, "rubble appears only below 30% HP")
-	assert_ne(_body_color(proxy), ArtStyle3D.team_color(GameManager.Team.PLAYER),
-		"shaft darkens once damaged")
+	assert_almost_eq(shaft.albedo_color.r, base.r * 0.75, 0.02,
+		"imported body material darkens once damaged")
 
 	tower.call("take_damage", roundi(max_hp * 0.3))  # 25%: below the 30% threshold.
 	assert_almost_eq(absf(cap.rotation.z), 0.17, 0.001, "cap tilts further below 30% HP")
 	assert_true(rubble.visible, "broken rubble at the base below 30% HP")
+	assert_almost_eq(shaft.albedo_color.r, base.r * 0.55, 0.03,
+		"imported body material darkens further near destruction")
+
+
+func test_potato_falls_back_to_procedural_models() -> void:
+	var saved := ArtStyle3D.quality
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.POTATO)
+	var tower: Node2D = load("res://scenes/tower.tscn").instantiate()
+	tower.set("team", GameManager.Team.PLAYER)
+	tower.position = _grid.grid_to_world(Vector2i(-25, 0))
+	_structures.add_child(tower)
+	tower.set("_is_built", true)
+	var tower_proxy := StructureProxy3D.create(tower, _grid)
+	var building_proxy := StructureProxy3D.create(_main.get_node("World/PlayerBuilding"), _grid)
+	autofree(tower_proxy)
+	autofree(building_proxy)
+
+	assert_null(tower_proxy._model_wrapper, "Potato tower uses the procedural recipe")
+	assert_null(building_proxy._model_wrapper, "Potato keep uses the procedural recipe")
+	assert_true(tower_proxy.get_node_or_null("Model") == null,
+		"no imported-model wrapper child on Potato")
+	assert_not_null(tower_proxy.get_node_or_null("CapPivot"),
+		"procedural damage pivot still exists on Potato")
+	assert_gt(tower_proxy._body_meshes.size(), 0, "procedural tower has body parts")
+	ArtStyle3D.apply_quality(saved)
 
 
 func test_wall_damage_states_track_hp() -> void:
@@ -221,3 +328,86 @@ func test_underground_lantern_burns_smaller_and_shadowless() -> void:
 	assert_true(proxy.visible, "underground lantern shows in the underground view")
 	proxy.refresh(false)
 	assert_false(proxy.visible, "underground lantern hides on the surface view")
+
+
+# ─── R4: imported GLB pipeline ───
+
+
+func test_manifest_has_no_validation_errors() -> void:
+	assert_eq(ModelManifest.validate().size(), 0, "model manifest validates clean")
+
+
+func test_every_manifest_entry_loads_and_normalizes() -> void:
+	for key in ModelManifest.keys():
+		var entry := ModelManifest.entry_for(key)
+		var result := StructureModelLoader.instantiate(key)
+		assert_false(result.is_empty(), "%s loads via StructureModelLoader" % key)
+		if result.is_empty():
+			continue
+		var wrapper: Node3D = result["root"]
+		autofree(wrapper)
+		assert_eq(wrapper.name, "Model", "%s returns the 'Model' wrapper" % key)
+
+		var scan := _combined_aabb(wrapper, Transform3D.IDENTITY)
+		assert_true(scan.has, "%s exposes mesh bounds" % key)
+		if not scan.has:
+			continue
+		var fp: Array = entry["footprint"]
+		var fw := float(fp[0]) * StructureProxy3D.CELL
+		var fh := float(fp[1]) * StructureProxy3D.CELL
+		assert_almost_eq(scan.bounds.position.y, 0.0, 0.001,
+			"%s sits on the ground plane after normalization" % key)
+		assert_lte(scan.bounds.size.x, fw * 1.05, "%s fits its footprint width" % key)
+		assert_lte(scan.bounds.size.z, fh * 1.05, "%s fits its footprint depth" % key)
+		var x_binding := absf(scan.bounds.size.x - fw) <= fw * 0.05
+		var z_binding := absf(scan.bounds.size.z - fh) <= fh * 0.05
+		assert_true(x_binding or z_binding,
+			"%s binding XZ axis matches the footprint" % key)
+		assert_lt(int(result["tri_count"]), int(entry["tri_gate"]),
+			"%s is under its tri gate" % key)
+
+		# GLB instances share imported materials; every instantiate must hand
+		# out its own copies so per-proxy tinting never leaks across proxies.
+		var again := StructureModelLoader.instantiate(key)
+		assert_false(again.is_empty(), "%s second instance loads" % key)
+		if not again.is_empty():
+			assert_ne((again["body_mats"] as Array)[0], (result["body_mats"] as Array)[0],
+				"%s body materials are duplicated per instance" % key)
+			(again["root"] as Node3D).free()
+
+
+func test_surface_lantern_uses_imported_lamp() -> void:
+	var lantern := _build_lantern(false)
+	var proxy := StructureProxy3D.create(lantern, _grid)
+	autofree(proxy)
+	assert_not_null(proxy._model_wrapper, "Fancy builds the imported surface lamp")
+	assert_eq(proxy._lantern_head, proxy._model_wrapper,
+		"tier scaling drives the whole imported lamp (T2/T3 are scale variants)")
+	proxy.refresh(false)
+	var light := proxy.get_node("LanternLight") as OmniLight3D
+	assert_not_null(light)
+	if light == null:
+		return
+	assert_true(light.visible, "built imported lamp shines")
+	lantern.upgraded.emit(3)
+	assert_almost_eq(proxy._model_wrapper.scale.x, 1.0 + 0.18 * 2.0, 0.001,
+		"T3 grows the imported lamp")
+
+	# Underground lanterns keep the procedural bracket (no GLB exists).
+	var u_lantern := _build_lantern(true)
+	var u_proxy := StructureProxy3D.create(u_lantern, _grid)
+	autofree(u_proxy)
+	assert_null(u_proxy._model_wrapper, "underground lantern keeps the procedural recipe")
+	assert_not_null(u_proxy.get_node_or_null("Head"),
+		"procedural head contract preserved underground")
+
+
+func test_mine_entry_imported_headframe_straddles_the_shaft() -> void:
+	var proxy := StructureProxy3D.create(_main.get_node("World/PlayerMineEntry"), _grid)
+	autofree(proxy)
+	assert_not_null(proxy._model_wrapper, "Fancy builds the imported headframe")
+	var half := StructureProxy3D.CELL * 0.5
+	assert_almost_eq(proxy._model_wrapper.position.x, half, 0.001,
+		"corner-origin model shifts half a cell onto the shaft column")
+	assert_almost_eq(proxy._model_wrapper.position.z, half, 0.001,
+		"corner-origin model shifts half a cell onto the shaft column")

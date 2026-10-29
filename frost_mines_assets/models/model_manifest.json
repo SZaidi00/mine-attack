@@ -1,0 +1,57 @@
+[
+	{
+		"key": "building_player",
+		"path": "res://frost_mines_assets/models/structures/keep_player.glb",
+		"footprint": [6, 5],
+		"height": 2.07,
+		"tri_gate": 25000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "building_enemy",
+		"path": "res://frost_mines_assets/models/structures/fortress_enemy.glb",
+		"footprint": [6, 5],
+		"height": 2.26,
+		"tri_gate": 25000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "tower",
+		"path": "res://frost_mines_assets/models/structures/tower_watch.glb",
+		"footprint": [1, 1],
+		"height": 1.19,
+		"tri_gate": 12000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "lantern_surface",
+		"path": "res://frost_mines_assets/models/structures/lantern_post.glb",
+		"footprint": [0.7, 0.7],
+		"height": 0.79,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "mine_entry",
+		"path": "res://frost_mines_assets/models/structures/mine_headframe.glb",
+		"footprint": [2, 2],
+		"height": 0.83,
+		"tri_gate": 12000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "corner",
+		"fallback_on_potato": true
+	}
+]

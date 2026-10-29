@@ -2,7 +2,9 @@
 
 **Status:** R1–R2 accepted (baseline captures under `baseline/`, R2 captures
 under `r2/`); R3 implemented (height-field dunes; harness captures pending
-owner/CI run). Final art-style polish review follows the later phases.
+owner/CI run); R4 implemented (structure GLB pipeline + Minas Morgul
+fortress; harness captures pending owner/CI run). Final art-style polish
+review follows the later phases.
 **Parent:** `roadmap/3d-rework/README.md` (phases 1–5 implemented there; read it
 for the hard rules that still apply).
 **Branch:** `feat/3d-conversion`.
@@ -50,7 +52,7 @@ layer around **textured, imported models** and a **height-field surface**.
 | Layer | Today (3D rework phases 1–5) | After this revamp |
 |---|---|---|
 | Units | Procedural primitive rigs (`unit_model_3d.gd`, ≤60 primitives, flat-shaded) | Blob/sculpted meshes now (`14`), full model workshop later (`12`); team/faction identity via tinted accents + materials |
-| Structures | Procedural boxes/cylinders (`structure_proxy_3d.gd`) | **Imported textured GLBs** (`frost_mines_assets/models/`); Minas Morgul enemy fortress |
+| Structures | Procedural boxes/cylinders (`structure_proxy_3d.gd`) | **Imported textured GLBs** (`frost_mines_assets/models/`); Minas Morgul enemy fortress (R4 landed: manifest + loader + per-proxy material rebind, Potato keeps the procedural recipes) |
 | Terrain | Flat per-cell quads (`terrain_3d.gd`) | **Height-field mesh** with rolling snow dunes; underground keeps readable flat-ish X-Y view |
 | Materials | Flat albedo, roughness 1.0, no textures | Hand-painted-style textured materials; warm emissive accents vs cold ambient |
 | Camera | Single 55° pitch dolly rig, FOV 45 | **Two view modes**: perspective surface dolly + flat/near-top-down underground plane |
@@ -83,7 +85,7 @@ layer around **textured, imported models** and a **height-field surface**.
 | R1 | `04-phase-plan.md` §R1 | K2.8 | Harness 3D adaptation + baseline captures (lands in this PR) | — |
 | R2 | `04-phase-plan.md` §R2 | K3 | Art direction tokens in code: palette reskin, material library, lighting moods retune | R1 |
 | R3 | `04-phase-plan.md` §R3 | K2.8 | Height-field surface terrain with rolling snow dunes | R2 |
-| R4 | `04-phase-plan.md` §R4 | K2.8 | Structure GLB import pipeline + Minas Morgul enemy fortress + player keep | R2 |
+| R4 | `04-phase-plan.md` §R4 | K2.8 | Structure GLB import pipeline + Minas Morgul enemy fortress + player keep | R2 ✅ |
 | R5 | `04-phase-plan.md` §R5 | K3 | Two-mode camera: perspective surface / flat underground plane | R2 |
 | R6 | `04-phase-plan.md` §R6 | K3 | Fog-of-war & lantern darkness treatment for 3D + first-wall-breach moment | R3, R4 |
 | R7 | `04-phase-plan.md` §R7 | K3 | Unit model workshop (blobs → sculpted) + faction variants | R4 |

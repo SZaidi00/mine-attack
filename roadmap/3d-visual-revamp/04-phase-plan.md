@@ -46,13 +46,25 @@ Acceptance: harness captures at start/zoomout show dunes; structures sit
 clean; no sim test changes; GUT green; 200-unit scene renders on owner
 hardware at 60 fps.
 
-## R4 — Structure GLB pipeline + Minas Morgul fortress + player keep
+## R4 — Structure GLB pipeline + Minas Morgul fortress + player keep ✅ (implemented; captures pending)
 
 **Model:** K2.8 (pipeline) + K3 (final look). **Depends:** R2.
 
 Per `03-technical-plan.md` §5 using the starter GLBs from
 `02-asset-pipeline.md`; manifest + budget script + tests; faction reveal
-extends the `:171-179` hook.
+extends the `:171-179` hook. Landed as
+`frost_mines_assets/models/model_manifest.json` (JSON source of truth shared
+with `tools/check_model_budgets.sh`), `scripts/three_d/model_manifest.gd`,
+and `scripts/three_d/structure_model_loader.gd` (scale/origin normalization,
+per-proxy material duplication, accent/glow slot rebind);
+`structure_proxy_3d.gd` builds the imported keep/fortress/tower/surface
+lantern/headframe on Standard/Fancy with the procedural recipes kept as the
+Potato fallback, `CapPivot`/`Rubble`/`LanternLight` contracts intact. The
+starter GLBs ship one material with window glow baked into the albedo (no
+emissive slot), so the pre-reveal "???" read damps the enemy base's body
+color until identification; textures arrived 4096² and are downscaled to the
+2048² import cap by `tools/resize_glb_textures.py` (verified by the budget
+script, 16.7 MB total). Tests: `tests/test_3d_structure_models.gd`.
 
 Acceptance: enemy fortress reads as Minas Morgul at default dolly; witch-glow
 windows hidden until reveal; keep fits footprint; Potato fallback = existing

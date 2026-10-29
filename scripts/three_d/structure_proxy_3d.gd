@@ -1,14 +1,24 @@
-## Phase 2 structure models (roadmap/3d-conversion/phase-2-art-pass.md §2.3).
+## Phase 2 structure models (roadmap/3d-conversion/phase-2-art-pass.md §2.3),
+## with the R4 visual-revamp import layer on top
+## (roadmap/3d-visual-revamp/02-asset-pipeline.md).
 ##
-## Procedural flat-shaded low-poly stand-ins for the 2D structures, composed
-## from ArtStyle3D primitives: the building as a multi-tier faction-trimmed
-## keep (accent colors re-tint when the enemy faction is identified), squat
-## towers and chunky walls with damage states (tilt + darkening + rubble),
-## lanterns as dynamic-light heroes (tier-scaled OmniLight3D), a modeled
-## mine-entry headframe, rail-and-rung ladders, and a low trap plate. The
-## Phase 1 contract is unchanged: fog mirroring via the grid's fog map,
-## construction alpha from is_built(), layer (Tab) visibility, and death via
-## the destroyed signal / tree_exiting. The proxy never writes to the sim.
+## Standard/Fancy quality builds the imported textured GLBs from
+## frost_mines_assets/models/ (manifest: model_manifest.json, loaded via
+## ModelManifest/StructureModelLoader) for bases, towers, surface lanterns,
+## and mine entries; Potato and any broken import fall back to the procedural
+## flat-shaded low-poly stand-ins, composed from ArtStyle3D primitives: the
+## building as a multi-tier faction-trimmed keep (accent colors re-tint when
+## the enemy faction is identified), squat towers and chunky walls with
+## damage states (tilt + darkening + rubble), lanterns as dynamic-light
+## heroes (tier-scaled OmniLight3D), a modeled mine-entry headframe,
+## rail-and-rung ladders, and a low trap plate. The starter GLBs ship a
+## single material with window glow baked into the albedo texture, so the
+## pre-reveal "???" read damps the imported enemy base's body color instead
+## of killing an emissive (glow-slot toggling activates on models that ship
+## named glow materials). The Phase 1 contract is unchanged: fog mirroring
+## via the grid's fog map, construction alpha from is_built(), layer (Tab)
+## visibility, and death via the destroyed signal / tree_exiting. The proxy
+## never writes to the sim.
 extends Node3D
 class_name StructureProxy3D
 
@@ -52,6 +62,15 @@ var _accent_meshes: Array[MeshInstance3D] = []
 var _accent_mats: Array[StandardMaterial3D] = []
 var _faction_connected := false
 
+# R4 imported-model state: the "Model" wrapper from StructureModelLoader plus
+# its per-proxy material copies. The starter GLBs bake their window glow into
+# the albedo texture (no emissive slot), so the pre-reveal "???" read damps
+# the whole body toward grey via _reveal_mult instead of killing an emissive.
+var _model_wrapper: Node3D = null
+var _glow_mats: Array[StandardMaterial3D] = []
+var _reveal_mult := Color.WHITE
+var _procedural_lantern_head := true
+
 var _damage_darken := 0.0
 var _damage_pivot: Node3D
 var _rubble: Node3D
@@ -60,7 +79,9 @@ var _last_remembered := false
 var _last_built := true
 
 var _lantern_light: OmniLight3D
-var _lantern_head: MeshInstance3D
+# Node3D (not MeshInstance3D): the procedural head box or, on the imported
+# surface lamp, the whole "Model" wrapper that the tier scaling grows.
+var _lantern_head: Node3D
 var _lantern_underground := false
 
 ## R3: surface-only structures ground-snap to the dune field (two-layer
@@ -103,7 +124,10 @@ static func create(s: Node2D, grid: GridWorld) -> StructureProxy3D:
 
 	if s.is_in_group("buildings"):
 		p._kind = _Kind.BUILDING
-		p._build_keep()
+		if p._try_build_glb("building_enemy" if p._enemy else "building_player"):
+			p._apply_glb_reveal_state()
+		else:
+			p._build_keep()
 		p._connect_faction_reveal()
 	elif s.is_in_group("towers"):
 		p._kind = _Kind.TOWER
@@ -222,6 +246,56 @@ func _connect_faction_reveal() -> void:
 func _on_faction_identified(team: GameManager.Team) -> void:
 	if team == _team:
 		_tint_accents()
+		# R4 reveal for imported models: restore full body color and flip on
+		# whatever glow materials the model ships.
+		_reveal_mult = Color.WHITE
+		for mat in _glow_mats:
+			mat.emission_enabled = true
+		_tint_bodies(_last_remembered, _last_built)
+
+
+# ─── R4 imported GLB models ───
+
+
+## Build the imported model for a manifest key in place of the procedural
+## recipe. No-op (false) on Potato, missing entries, or a broken import —
+## callers fall back to the procedural build, keeping every preset alive.
+func _try_build_glb(key: String) -> bool:
+	if not ArtStyle3D.detail_enabled():
+		return false
+	if ModelManifest.entry_for(key).is_empty():
+		return false
+	var result := StructureModelLoader.instantiate(key, _team)
+	if result.is_empty():
+		return false
+	_model_wrapper = result["root"]
+	add_child(_model_wrapper)
+	# The imported body materials join the per-proxy tint sets so refresh()
+	# applies construction alpha, fog-memory lerp and damage darkening to the
+	# textured model exactly like the procedural parts.
+	var mats: Array = result["body_mats"]
+	var colors: Array = result["body_colors"]
+	for i in range(mats.size()):
+		_body_mats.append(mats[i])
+		_body_colors.append(colors[i])
+	for mat in result["accent_mats"]:
+		_accent_mats.append(mat)
+	_glow_mats = result["glow_mats"]
+	return true
+
+
+## Pre-reveal look for an imported enemy structure: the starter fortress
+## bakes its witch-glow windows into the albedo texture (single material, no
+## emissive slot), so the unidentified read damps the whole body toward grey
+## until FactionManager fires; models that do ship glow materials start dark.
+func _apply_glb_reveal_state() -> void:
+	if not _enemy or _model_wrapper == null:
+		return
+	if FactionManager.is_faction_identified(GameManager.Team.ENEMY):
+		return
+	_reveal_mult = Color(0.5, 0.56, 0.56)
+	for mat in _glow_mats:
+		mat.emission_enabled = false
 
 
 # ─── Building: multi-tier faction keep ───
@@ -271,22 +345,39 @@ func _build_tower() -> void:
 	var accent := team.lightened(0.15)
 	var r := CELL * 0.8
 
+	# Crenellated cap on a damage pivot (tilts as HP drops). The pivot exists
+	# in both recipes: the procedural cap hangs off it, and the imported GLB
+	# model parents under it whole so the existing tilt logic drives either.
+	_damage_pivot = Node3D.new()
+	_damage_pivot.name = "CapPivot"
+	add_child(_damage_pivot)
+
+	if _try_build_glb("tower"):
+		# Imported watchtower: pivot at the base so the whole tower leans as
+		# it loses HP; rubble and the range disc stay procedural.
+		remove_child(_model_wrapper)
+		_damage_pivot.add_child(_model_wrapper)
+		_build_tower_rubble(r)
+		_build_tower_range_disc()
+		return
+	_damage_pivot.position.y = 0.9
+
 	# Shaft.
 	_add_body(ArtStyle3D.make_cylinder(r, 0.9, team, 8, Vector3(0.0, 0.45, 0.0)), team)
 	# Doorway accent strip at the base.
 	_add_body(ArtStyle3D.make_box(Vector3(r * 0.7, 0.3, 0.05), accent, Vector3(0.0, 0.15, r - 0.01)), accent)
 
-	# Crenellated cap on a damage pivot (tilts as HP drops).
-	_damage_pivot = Node3D.new()
-	_damage_pivot.name = "CapPivot"
-	_damage_pivot.position.y = 0.9
-	add_child(_damage_pivot)
 	_add_body(ArtStyle3D.make_box(Vector3(r * 2.4, 0.12, r * 2.4), accent, Vector3(0.0, 0.06, 0.0)), accent, _damage_pivot)
 	for sx in [-1.0, 1.0]:
 		for sz in [-1.0, 1.0]:
 			_add_body(ArtStyle3D.make_box(Vector3(0.1, 0.14, 0.1), accent,
 				Vector3(sx * r * 0.95, 0.19, sz * r * 0.95)), accent, _damage_pivot)
 
+	_build_tower_rubble(r)
+	_build_tower_range_disc()
+
+
+func _build_tower_rubble(r: float) -> void:
 	# Broken rubble, hidden until the lowest damage state.
 	_rubble = Node3D.new()
 	_rubble.name = "Rubble"
@@ -300,6 +391,8 @@ func _build_tower() -> void:
 		rock.rotation.y = h * PI
 		_rubble.add_child(rock)
 
+
+func _build_tower_range_disc() -> void:
 	# Attack-range disc, shown while the sim tower is selected. The radius is
 	# authored in world units; counter the proxy-root scale so the world
 	# radius still matches Tower.attack_range exactly.
@@ -355,18 +448,33 @@ func _build_lantern(s: Node2D) -> void:
 	_underground_structure = _lantern_underground
 	var wood_dark: Color = ArtStyle3D.PALETTE.wood_dark
 
-	# Thin wood post + small arm holding the head.
-	_add_body(ArtStyle3D.make_cylinder(0.03, 0.6, wood_dark, 5, Vector3(0.0, 0.3, 0.0)), wood_dark)
-	_add_body(ArtStyle3D.make_box(Vector3(0.16, 0.03, 0.03), wood_dark, Vector3(0.07, 0.6, 0.0)), wood_dark)
+	# Surface lanterns use the imported lamp post on Standard/Fancy; the
+	# underground bracket keeps the procedural recipe (no GLB exists for it).
+	# R4 asset table: T2/T3 are scale variants of the imported mesh, so the
+	# tier scaling that used to grow the procedural "Head" now scales the
+	# whole imported model — _lantern_head points at the wrapper.
+	_lantern_head = null
+	if not _lantern_underground and _try_build_glb("lantern_surface"):
+		_procedural_lantern_head = false
+		_lantern_head = _model_wrapper
+	else:
+		_procedural_lantern_head = true
+		# Thin wood post + small arm holding the head.
+		_add_body(ArtStyle3D.make_cylinder(0.03, 0.6, wood_dark, 5, Vector3(0.0, 0.3, 0.0)), wood_dark)
+		_add_body(ArtStyle3D.make_box(Vector3(0.16, 0.03, 0.03), wood_dark, Vector3(0.07, 0.6, 0.0)), wood_dark)
 
-	_lantern_head = ArtStyle3D.make_box(Vector3(0.15, 0.15, 0.15), Color.WHITE, Vector3(0.13, 0.52, 0.0))
-	_lantern_head.name = "Head"
-	add_child(_lantern_head)
+		_lantern_head = ArtStyle3D.make_box(Vector3(0.15, 0.15, 0.15), Color.WHITE, Vector3(0.13, 0.52, 0.0))
+		_lantern_head.name = "Head"
+		add_child(_lantern_head)
 
 	_lantern_light = OmniLight3D.new()
 	_lantern_light.name = "LanternLight"
 	_lantern_light.light_color = ArtStyle3D.PALETTE.lamp_warm
-	_lantern_light.position = Vector3(0.13, 0.52, 0.0)
+	# Imported lamp: hang the light in the cage at the top of the post.
+	var light_y := 0.52
+	if not _procedural_lantern_head:
+		light_y = float(ModelManifest.entry_for("lantern_surface").get("height", 0.8)) * 0.7
+	_lantern_light.position = Vector3(0.13 if _procedural_lantern_head else 0.0, light_y, 0.0)
 	add_child(_lantern_light)
 
 	_apply_lantern_tier(clampi(int(s.get("tier")), 1, 3))
@@ -423,9 +531,18 @@ func _build_mine_entry() -> void:
 	var cx := CELL * 0.5
 	var cz := CELL * 0.5
 
-	# Dark recessed shaft hole, sunk into the ground.
+	# Dark recessed shaft hole, sunk into the ground. Kept procedural in both
+	# recipes — it reads as the pit the headframe stands over.
 	_add_body(ArtStyle3D.make_cylinder(CELL * 0.62, 0.08, ArtStyle3D.PALETTE.coal, 8,
 		Vector3(cx, -0.015, cz)), ArtStyle3D.PALETTE.coal)
+
+	if _try_build_glb("mine_entry"):
+		# The imported headframe is authored origin-at-center; the sim node
+		# origin sits on a cell corner (manifest origin "corner"), so shift
+		# the model half a cell over to straddle the shaft.
+		if str(ModelManifest.entry_for("mine_entry").get("origin", "center")) == "corner":
+			_model_wrapper.position = Vector3(cx, 0.0, cz)
+		return
 	# A-frame legs leaning together over the hole.
 	for side in [-1.0, 1.0]:
 		var leg := ArtStyle3D.make_box(Vector3(0.07, 0.95, 0.07), wood,
@@ -540,11 +657,16 @@ func _tint_bodies(remembered: bool, built: bool) -> void:
 	_last_remembered = remembered
 	_last_built = built
 	var alpha := 1.0 if built else CONSTRUCTION_ALPHA
-	for i in range(_body_meshes.size()):
+	# _body_mats outlives _body_meshes on imported models (GLB surfaces have
+	# no per-part MeshInstance3D entry here), so the material array is the loop
+	# authority. albedo_color multiplies the albedo texture — tinting never
+	# overwrites it.
+	for i in range(_body_mats.size()):
 		var c: Color = _body_colors[i]
 		if remembered:
 			c = c.lerp(REMEMBERED_COLOR, 0.7)
 		c = c.darkened(_damage_darken)
+		c = c * _reveal_mult
 		c.a = alpha
 		var mat := _body_mats[i]
 		mat.albedo_color = c
@@ -597,9 +719,13 @@ func refresh(underground_view: bool) -> void:
 		if _range_disc.visible:
 			_range_disc.set_radius(float(entity.get("attack_range")) * WORLD_SCALE)
 	if _kind == _Kind.LANTERN and _lantern_light != null:
-		# Unbuilt lanterns give no light and wear a dim head.
+		# Unbuilt lanterns give no light and wear a dim head. The imported
+		# lamp has no separate head mesh — construction alpha from
+		# _tint_bodies already fades the whole model, so only the procedural
+		# head swaps its override material.
 		_lantern_light.visible = built
-		_lantern_head.set_material_override(_lantern_head_material(built))
+		if _procedural_lantern_head and _lantern_head != null:
+			(_lantern_head as MeshInstance3D).set_material_override(_lantern_head_material(built))
 
 
 func _on_destroyed(_arg: Variant = null) -> void:

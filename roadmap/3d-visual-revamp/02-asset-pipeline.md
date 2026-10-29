@@ -59,10 +59,11 @@ binary, so if the diff view doesn't render them, check the branch directly).
 | `structures/mine_headframe.glb` | 9,585 | ≤12k ✓ | Mine entry headframe |
 
 Triangle counts measured with trimesh at generation time; per-model
-previews in `frost_mines_assets/models/previews/`. Sizes run 10–15 MB per
-GLB (2048² painted textures) — the R4 import pass must respect the web
-texture budget (§convention 5) via compressed/import-downscale before the
-web export ships.
+previews in `frost_mines_assets/models/previews/`. The GLBs were delivered
+with 4096² textures; the R4 import pass downscales them to the 2048² cap
+(`tools/resize_glb_textures.py`, per §convention 5) — they now run 3.4–4.8 MB
+per GLB, 16.7 MB of embedded textures total (web budget ≤ 64 MB verified by
+`tools/check_model_budgets.sh`).
 
 ## Generation prompt recipes (reusable)
 

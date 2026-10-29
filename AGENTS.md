@@ -69,7 +69,17 @@ mine-attack/
 │   │                  # accents, construction grow — unbuilt towers/walls/lanterns
 │   │                  # rise out of the ground on a per-frame y-scale instead of
 │   │                  # standing full height at construction alpha — R3 surface
-│   │                  # ground-snap), lighting_3d.gd
+│   │                  # ground-snap; R4 (visual revamp): Standard/Fancy build the
+│   │                  # imported textured GLBs from
+│   │                  # frost_mines_assets/models/model_manifest.json via
+│   │                  # model_manifest.gd + structure_model_loader.gd
+│   │                  # (footprint/ground normalization, per-proxy material
+│   │                  # duplication, accent/glow slot rebind; starter GLBs bake
+│   │                  # window glow into the albedo, so the enemy base's
+│   │                  # pre-reveal read is a body-color dim), Potato keeps the
+│   │                  # procedural recipes; tools/check_model_budgets.sh gates
+│   │                  # tris/texture budgets from the same JSON manifest),
+│   │                  # lighting_3d.gd
 │   │                  # (R2 cold overcast/storm/underground/volcano moods with
 │   │                  # weather-specific background/fog density + ACES, warm-source
 │   │                  # bloom on Standard+, SSAO/shadows on Fancy), effects_3d.gd
@@ -120,7 +130,10 @@ mine-attack/
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~48 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
-│                      # gen_crawler_sprites.gd
+│                      # gen_crawler_sprites.gd, check_model_budgets.sh
+│                      # (R4 GLB tri/texture budget gate vs
+│                      # models/model_manifest.json), resize_glb_textures.py
+│                      # (downscales embedded GLB textures to the 2048² cap)
 ├── .githooks/         # pre-push release hook
 └── improvements/      # revamp.md + new sprites
 ```
@@ -392,6 +405,20 @@ godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit
 ```
 
 Replace `godot` with the path to your Godot binary if it is not on `PATH` (e.g. `/Applications/Godot.app/Contents/MacOS/Godot`).
+
+### Check imported-model budgets (R4)
+
+```bash
+tools/check_model_budgets.sh
+```
+
+Verifies every entry in `frost_mines_assets/models/model_manifest.json` (the
+shared source of truth for the Godot loader and this script): triangle count
+vs `tri_gate`, per-image ≤ 2048², and the ≤ 64 MB total embedded-texture web
+budget. Pure-python GLB parser by default (trimesh/pygltflib used when
+installed); exits 0 on pass, 1 on budget violation, 2 on tooling error. New
+or regenerated GLBs with textures over 2048² go through
+`tools/resize_glb_textures.py` first (convention 5 "resize at import").
 
 ### Export all presets
 
