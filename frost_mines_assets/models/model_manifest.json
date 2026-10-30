@@ -149,5 +149,49 @@
 		"glow_slots": ["glow_"],
 		"origin": "center",
 		"fallback_on_potato": true
+	},
+	{
+		"key": "prop_boulder",
+		"path": "res://frost_mines_assets/models/props/prop_boulder.glb",
+		"footprint": [1.06, 0.83],
+		"height": 0.22,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "prop_pine",
+		"path": "res://frost_mines_assets/models/props/prop_pine.glb",
+		"footprint": [0.74, 0.75],
+		"height": 0.44,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "prop_stump",
+		"path": "res://frost_mines_assets/models/props/prop_stump.glb",
+		"footprint": [0.88, 0.88],
+		"height": 0.15,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "prop_crate",
+		"path": "res://frost_mines_assets/models/props/prop_crate.glb",
+		"footprint": [0.48, 0.48],
+		"height": 0.16,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
 	}
 ]

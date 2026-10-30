@@ -1,6 +1,6 @@
 # Plan 06 — Prop GLB import pipeline + first batch
 
-Status: Not started
+Status: Done (2026-10-30, branch kimi-code-plans)
 Size: M
 Depends on: 03 (budget gate must be enforced; this plan adds entries)
 

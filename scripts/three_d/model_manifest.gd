@@ -7,7 +7,9 @@
 ## the exact same file — keep the two consumers in sync.
 ##
 ## Entry fields:
-## - key: structure id used by StructureProxy3D or unit_* id used by UnitModel3D.
+## - key: structure id used by StructureProxy3D, unit_* id used by UnitModel3D,
+##   or prop_* id for neutral surface dressing (plan 06; loaded through the
+##   structure-style path, no gameplay wiring until the scatter plan).
 ## - path: res:// path of the imported .glb.
 ## - footprint: [w, h] target size in cells (CELL = 32 px of sim space); the
 ##   structure loader binds an XZ axis, while the unit loader treats it as a cap.

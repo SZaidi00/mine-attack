@@ -156,7 +156,10 @@ mine-attack/
 ├── tests/             # GUT test suite (~48 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
 │                      # gen_crawler_sprites.gd, gen_unit_glbs.py (R7 deterministic
-│                      # sculpted/textured unit GLBs), check_model_budgets.sh
+│                      # sculpted/textured unit GLBs), gen_prop_glbs.py
+│                      # (plan 06 deterministic prop GLBs — boulder/pine/stump/crate,
+│                      # the surface-scatter dressing for plan 07),
+│                      # check_model_budgets.sh
 │                      # (R4/R7 GLB tri/texture budget gate vs
 │                      # models/model_manifest.json), resize_glb_textures.py
 │                      # (downscales embedded GLB textures to the 2048² cap)
@@ -459,7 +462,11 @@ or regenerated GLBs with textures over 2048² go through
 GLBs' actual textures to 1024² via `--max=1024 --only=/structures/`, cutting
 embedded textures 17.8 → 6.0 MB). R7
 unit GLBs are deterministically regenerated with `python3 tools/gen_unit_glbs.py`
-(Pillow, same as the texture-resize tool); re-run the budget gate afterward.
+(Pillow, same as the texture-resize tool); prop GLBs (plan 06, the surface
+props that plan 07 scatters) with `python3 tools/gen_prop_glbs.py [--validate-only]`
+(same conventions as the unit workshop: embedded 256² painted atlas, base
+min-y 0, metallic 0 / roughness 0.92; self-validates tri/height bands and
+rejects corrupted copies); re-run the budget gate afterward.
 
 ### Run all repo checks
 
