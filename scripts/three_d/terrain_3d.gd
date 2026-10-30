@@ -174,8 +174,13 @@ func _chunk_key_for(pos: Vector2i) -> Vector2i:
 ## EntityProxies3D emits structure_set_changed when a reconcile spawns or
 ## culls a structure proxy; the height field's clearance stamps only need a
 ## re-run at those moments (plus the first rebuild batch after setup).
+## The re-stamp runs inside a rebuild batch, so a structure change must also
+## dirty the chunks — otherwise the dune re-flattening and the plan-07 prop
+## scatter re-filter would wait for the 5s backstop instead of landing with
+## the next batch.
 func notify_structures_changed() -> void:
 	_clearances_dirty = true
+	_mark_all_dirty()
 
 
 ## Public alias for the full-dirty mark (live quality switches, external

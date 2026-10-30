@@ -1,6 +1,6 @@
 # Plan 07 — Seeded surface prop scattering
 
-Status: Not started
+Status: Done (2026-10-30, branch kimi-code-plans)
 Size: M
 Depends on: 06 (prop GLBs + manifest entries must exist)
 
@@ -98,12 +98,54 @@ STRESS_UNITS=100 BENCH=30 SHOTS="" tools/capture/run_capture.sh /tmp/bench
 ```
 
 ## Acceptance criteria
-- [ ] Seeded determinism proven by GUT (same seed identical, diff seed differs)
-- [ ] Clearance: no props under/inside structures, reactive to new construction
-- [ ] Fog predicate matches existing details; hidden cells bare
-- [ ] Capture shots show grounded, non-intersecting props at dunes/base poses
-- [ ] BENCH numbers recorded, overhead small vs terrain section
-- [ ] Full GUT suite green; budget gate green
+- [x] Seeded determinism proven by GUT (same seed identical, diff seed differs)
+- [x] Clearance: no props under/inside structures, reactive to new construction
+- [x] Fog predicate matches existing details; hidden cells bare
+- [x] Capture shots show grounded, non-intersecting props at dunes/base poses
+- [x] BENCH numbers recorded, overhead small vs terrain section
+- [x] Full GUT suite green; budget gate green
+
+## Implementation notes (2026-10-30)
+- The scatter extends `TerrainDetail3D` in place rather than a sibling node:
+  a sibling would also have to be a null-mesh `MeshInstance3D` to survive the
+  Phase 1 port test's child cast, which buys nothing (documented in the class
+  header).
+- Prop meshes come from the plan-06 GLBs via a cached static extractor
+  (`_prop_source`): single identity-transform mesh nodes share the imported
+  mesh resource; multi-mesh props merge into one `ArrayMesh` with baked node
+  transforms and per-surface materials. The StructureModelLoader-style
+  normalization (footprint scale, min-y 0, XZ center) is composed into every
+  instance transform — no mesh mutation, materials stay as authored.
+- `Terrain3D.notify_structures_changed()` now also marks all chunks dirty;
+  the clearance re-stamp only runs inside a rebuild batch, so before this
+  change a fresh structure's dune flattening (and scatter re-filter) waited
+  for the 5s backstop.
+- `HeightField3D.clearance_at_cell()` exposes the existing stamp set to the
+  scatter — no second source of truth.
+- MultiMesh instance transforms have no reliable headless read-back (the
+  dummy and opengl3 servers serve identity for `get_instance_transform`, and
+  the `buffer` getter can hang a `-s` run), so the scatter maintains
+  `TerrainDetail3D.scatter_log` — the same per-kind transform arrays the
+  MultiMeshes are built from. GUT and the F3 probe read that.
+- Per-instance color/tint was dropped: the props' painted atlas is the read,
+  and StandardMaterial3D has no texture × instance-color multiply without a
+  custom shader.
+- Pines render near-black against the snow — that is the authored plan-06
+  atlas (`#485e4c` foliage) under the cold overcast; consistent with the
+  house rule that neutral dressing stays dark and units carry the bright read.
+- BENCH (macOS dev machine, driver run windowed per AGENTS.md; the
+  `scatter_enabled=false` toggle comparison ran in GUT where Probe3D section
+  timing is deterministic, plus a full-load capture-driver run at
+  STRESS_UNITS=100 for the 200-unit budget context):
+  - GUT probe (idle match, seed 7): `terrain_scatter` 0.034 ms avg vs
+    `terrain_rebuild` 15.165 ms avg with scatter, 19.027 ms with scatter
+    disabled — the difference is run-to-run noise; scatter ≈ 0.2%.
+  - Full-load BENCH (STRESS_UNITS=100, BENCH=30, 200 live units):
+    `terrain_rebuild` 2.275 ms avg/batch, `terrain_scatter` 0.129 ms avg per
+    surface chunk (~2 scattered chunks per fog-driven batch ≈ 0.26 ms, ~11%
+    of the batch) — trivially inside the 16.6 ms frame budget. Full report:
+    fog_rebuild 2.614 ms, unit_sync 0.797 ms, sim_fog_recompute 8.017 ms
+    (sim-side, pre-existing), ring_hover_scan 0.091 ms.
 
 ## Out of scope
 - Underground scatter (ore/embers already covered)

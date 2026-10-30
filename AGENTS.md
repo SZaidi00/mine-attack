@@ -59,7 +59,13 @@ mine-attack/
 │   │                  # albedo pass so the ground receives mood light, sun shadows,
 │   │                  # and depth fog), terrain_detail_3d.gd (MultiMesh
 │   │                  # ore crystals / lava embers / snow drifts riding the
-│   │                  # dune surface), entity_proxies_3d.gd
+│   │                  # dune surface; plan 07 adds the seeded surface prop
+│   │                  # scatter — plan-06 prop GLBs instanced per visible
+│   │                  # surface cell, map-seed-mixed cell hashes, fog +
+│   │                  # structure-clearance gated, dune-grounded; the
+│   │                  # scatter_log manifest mirrors the MultiMesh instances
+│   │                  # for tests because headless servers can't read
+│   │                  # multimesh data back), entity_proxies_3d.gd
 │   │                  # (group reconcile), unit_proxy_3d.gd (1.4x proxy-root
 │   │                  # scale-up, counter-scaled HP bars, R3 dune ground-snap)
 │   │                  # + unit_model_3d.gd
