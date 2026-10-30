@@ -455,6 +455,21 @@ embedded textures 17.8 → 6.0 MB). R7
 unit GLBs are deterministically regenerated with `python3 tools/gen_unit_glbs.py`
 (Pillow, same as the texture-resize tool); re-run the budget gate afterward.
 
+### Run all repo checks
+
+```bash
+tools/run_checks.sh
+```
+
+Runs the health checks in order: the budget gate above, then the headless GUT
+suite (`godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests
+-gexit`) using the same Godot lookup as `tools/export_all.sh` (`godot` on
+PATH, then `~/Downloads/Godot.app`, then `/Applications/Godot.app`, then the
+`GODOT` env var). The wrapper only sequences the checks — the gate and the
+test command stay the single source of truth. If no Godot binary is found it
+runs only the budget gate, prints a prominent warning that tests were
+skipped, and still exits 0. This is what the pre-push hook runs.
+
 ### Export all presets
 
 ```bash
@@ -507,9 +522,10 @@ Open `http://localhost:8080/MineAttack.html`. Web builds require cross-origin is
 
 This repository includes a pre-push hook in `.githooks/pre-push`. When enabled, pushes to `main` automatically:
 
-1. Run `tools/export_all.sh` to rebuild macOS, Windows, and Linux zips.
-2. Create a new GitHub release with an auto-incremented patch version (e.g. `v0.1.0` → `v0.1.1`).
-3. Attach `MineAttack-macOS.zip`, `MineAttack-Windows.zip`, and `MineAttack-Linux.zip` to the release.
+1. Run the repo health checks (`tools/run_checks.sh`: GLB budget gate + headless GUT suite). If any check fails, the push is aborted; bypass with `SKIP_CHECKS=1 git push origin main`.
+2. Run `tools/export_all.sh` to rebuild macOS, Windows, and Linux zips.
+3. Create a new GitHub release with an auto-incremented patch version (e.g. `v0.1.0` → `v0.1.1`).
+4. Attach `MineAttack-macOS.zip`, `MineAttack-Windows.zip`, and `MineAttack-Linux.zip` to the release.
 
 Enable the hook after cloning:
 
@@ -517,7 +533,7 @@ Enable the hook after cloning:
 git config core.hooksPath .githooks
 ```
 
-Skip the hook for a single push:
+Skip only the release for a single push:
 
 ```bash
 SKIP_RELEASE=1 git push origin main

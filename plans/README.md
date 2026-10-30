@@ -73,9 +73,10 @@ misreading the architecture — find the sim-side hook instead.
   `set_volcano_events_enabled(false)`, `GridWorld.set_dynamic_events_enabled(false)`).
 
 ### Repo automation reality
-There is **no CI**. `.githooks/pre-push` runs `tools/export_all.sh` and
-publishes macOS/Windows/Linux GitHub releases on pushes to `main` only. All
-test/budget verification today is manual — plan 03 changes that.
+There is **no CI**. `.githooks/pre-push` runs `tools/run_checks.sh`
+(GLB budget gate + headless GUT suite, `SKIP_CHECKS=1` to bypass) and then
+`tools/export_all.sh`, publishing macOS/Windows/Linux GitHub releases on pushes
+to `main` only (plan 03 wired the checks in).
 
 ## Plan index
 

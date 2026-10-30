@@ -1,6 +1,6 @@
 # Plan 03 — Pre-push checks (budget gate + GUT)
 
-Status: Not started
+Status: Done
 Size: S
 Depends on: —
 

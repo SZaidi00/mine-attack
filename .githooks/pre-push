@@ -1,5 +1,6 @@
 #!/bin/bash
-# Pre-push hook: rebuild release zips and publish a GitHub release on pushes to main.
+# Pre-push hook: run repo health checks (budget gate + GUT), then rebuild release
+# zips and publish a GitHub release on pushes to main.
 
 set -euo pipefail
 
@@ -9,6 +10,16 @@ url="$2"
 while read -r local_ref local_sha remote_ref remote_sha; do
 	if [ "$remote_ref" != "refs/heads/main" ]; then
 		continue
+	fi
+
+	if [ "${SKIP_CHECKS:-}" = "1" ]; then
+		echo "SKIP_CHECKS=1 set; skipping repo checks for $remote_ref."
+	else
+		echo "Pre-push hook: running repo checks (budget gate + GUT) for $remote_ref..."
+		if ! ./tools/run_checks.sh; then
+			echo "error: pre-push checks failed; fix them or bypass with: SKIP_CHECKS=1 git push origin main" >&2
+			exit 1
+		fi
 	fi
 
 	if [ "${SKIP_RELEASE:-}" = "1" ]; then
