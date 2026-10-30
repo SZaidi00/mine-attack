@@ -96,6 +96,7 @@ func _detect_player_fog_changes() -> void:
 			states.resize(vision[ix].size())
 			states.fill(-1)
 			_prev_player_states.append(states)
+	var dropped: int = 0
 	for ix in range(width):
 		var states: Array = _prev_player_states[ix]
 		var vcol: Array = vision[ix]
@@ -116,10 +117,20 @@ func _detect_player_fog_changes() -> void:
 				changed = true
 				# Capped accumulation: standalone 2D runs have no Terrain3D
 				# draining this, and a big bounded set still maps to "dirty
-				# everything" for the chunk-granular consumer.
-				if grid._player_fog_changed_cells.size() < 512:
+				# everything" for the chunk-granular consumer. Past the cap
+				# the excess is dropped — but never silently: the overflow
+				# flag + warning make the burst observable, and Fog3D's
+				# full-refresh fallback guarantees the visuals still catch up.
+				if grid._player_fog_changed_cells.size() < grid.PLAYER_FOG_CHANGE_CAP:
 					grid._player_fog_changed_cells[Vector2i(ix + grid.X_MIN, iy + grid.SURFACE_TOP)] = true
+				else:
+					dropped += 1
 				states[iy] = state
+	if dropped > 0:
+		grid.player_fog_overflow = true
+		var detail: String = "%d cells dropped past the %d-cell cap in one diff pass" % [dropped, grid.PLAYER_FOG_CHANGE_CAP]
+		DebugLog.log_reject("GridWorld", "player_fog_change_accumulate", detail)
+		push_warning("Fog diff overflow: " + detail)
 	if changed:
 		grid.player_fog_revision += 1
 
