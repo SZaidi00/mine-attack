@@ -48,6 +48,12 @@ detach from dark ground even on Potato, where no shadows/SSAO exist.
 
 ## Silhouette rules (must read at max zoom-out)
 
+R7 supersedes the original primitive-rig implementation below: Standard/Fancy
+use sculpted, textured GLBs on shared named-pivot rigs with geometric faction
+variants; Potato retains the procedural fallback. See
+`roadmap/3d-visual-revamp/05-r7-unit-workshop.md`. The signature silhouettes
+remain the readability contract.
+
 | Unit | Signature shape |
 |---|---|
 | Miner | rounded body + **pickaxe** + glowing helmet lamp |
@@ -66,9 +72,9 @@ are thin posts with a warm glowing head — the dynamic-light heroes.
 
 ## Texel density / poly budget
 
-- No textures → texel density N/A; color-block fidelity instead.
-- Units: ≤ 60 primitives each, target < 1k tris; decorative detail gated
-  behind `ArtStyle3D.detail_enabled()` (hidden on Potato).
+- R7 units: small painted atlases on sculpted GLBs, ≤8k tris per model
+  including faction attachments; team/accent/glow material slots are rebound
+  per proxy. Potato uses the old <1k-tri primitive recipes.
 - Terrain: chunked mesh, one draw per chunk + one emissive pass for lava;
   ore crystals via `MultiMeshInstance3D`.
 - Budget: 60 fps desktop with 200+ units; LOD = decorative detail off +

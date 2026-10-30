@@ -47,10 +47,22 @@ tools/capture/run_capture.sh /tmp/shots
 Pose names: `start` (spawn camera), `surface` (surface bookmark,
 recentered), `zoomout` (centered, 0.5× zoom), `underground` (built mine
 lantern framed at local-area dolly), `breach` (forced central-wall breach
-framed underground),
-`storm` / `volcano` (surface + forced weather), and `custom:X:Y:Z`
-(explicit camera position and dolly). Times are sim-seconds; keep the list
-ordered.
+framed underground), `units` / `units_underground` (R7 eight-unit silhouette
+lineups on the surface/near-top-down plane), `base` (R8 player keep and an
+active production dial), `dunes` (R8 snow-field composition), `fortress`
+(R8 revealed enemy citadel), `storm` / `volcano` (surface + forced weather),
+and `custom:X:Y:Z` (explicit camera position and dolly). Times are sim-seconds;
+keep the list ordered.
+
+`RESOLUTION=3840x2160` changes the capture size (default `1920x1080`). The R8
+showcase runner captures all six marketing poses at 1080p and 4K:
+
+```bash
+tools/capture/run_showcase.sh roadmap/3d-visual-revamp/r8
+# Override the shot list or limit a quick iteration to one resolution:
+SHOTS="8:base;16:dunes" RESOLUTIONS="1920x1080" \
+  tools/capture/run_showcase.sh /tmp/r8-preview
+```
 
 ## Verified environment notes (don't relearn these the hard way)
 

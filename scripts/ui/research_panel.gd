@@ -144,7 +144,7 @@ var _tech_rects: Dictionary = {}  # tech_id -> Rect2 (map canvas space)
 var _canvas: TreeCanvas
 var _selected_tech_id: String = ""
 var _active_label: Label
-var _progress_bar: ProgressBar
+var _progress_bar: UIProgressDial
 var _completed_label: Label
 var _queue_label: Label
 var _queue_chips: HBoxContainer
@@ -289,23 +289,28 @@ func _build_header(vbox: VBoxContainer) -> void:
 	title.text = "Doctrine Deck"
 	title.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_TITLE)
 	title.add_theme_color_override("font_color", _COL_TEXT)
+	UIThemeTokens.apply_display_font(title)
 	title_vbox.add_child(title)
 
+	var status_row := HBoxContainer.new()
+	status_row.add_theme_constant_override("separation", 12)
+	status_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	header.add_child(status_row)
+	_progress_bar = UIProgressDial.new()
+	_progress_bar.custom_minimum_size = Vector2(56, 56)
+	_progress_bar.visible = false
+	status_row.add_child(_progress_bar)
 	var status_vbox := VBoxContainer.new()
 	status_vbox.add_theme_constant_override("separation", 4)
 	status_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	header.add_child(status_vbox)
+	status_row.add_child(status_vbox)
 	_active_label = Label.new()
 	_active_label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
 	_active_label.add_theme_color_override("font_color", _COL_TEXT)
+	UIThemeTokens.apply_display_font(_active_label)
 	status_vbox.add_child(_active_label)
-	_progress_bar = ProgressBar.new()
-	_progress_bar.custom_minimum_size = Vector2(0, 10)
-	_progress_bar.max_value = 1.0
-	_progress_bar.show_percentage = false
-	UIThemeTokens.apply_progress_bar_theme(_progress_bar, UIThemeTokens.ProgressVariant.GOLD)
-	status_vbox.add_child(_progress_bar)
 	_completed_label = Label.new()
 	_completed_label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
 	_completed_label.add_theme_color_override("font_color", _COL_TEXT_DIM)
@@ -803,10 +808,13 @@ func _update_active_progress() -> void:
 	var active: Dictionary = ResearchManager.get_active(_TEAM)
 	if active.is_empty():
 		_progress_bar.value = 0.0
+		_progress_bar.visible = false
 		_active_label.text = "No active research"
 		return
 	var pct: float = clampf(1.0 - active.remaining / active.total, 0.0, 1.0)
 	_progress_bar.value = pct
+	_progress_bar.icon = _TECH_ICONS.get(active.tech_id)
+	_progress_bar.visible = true
 	var tech_name: String = _Constants.RESEARCH_TECHS[active.tech_id].name
 	_active_label.text = "Researching · %s L%d — %d%%" % [tech_name, active.level, int(pct * 100)]
 

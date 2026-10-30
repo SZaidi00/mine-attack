@@ -105,28 +105,46 @@ and `test_capture_driver.gd`.
 Acceptance: unexplored reads as void at both views; breach moment plays
 once, reads clearly, respects minimal-shake; GUT green.
 
-## R7 — Unit model workshop
+## R7 — Unit model workshop ✅ (implemented; captures under `r7/`; owner/performance review pending)
 
 **Model:** K3, with owner concept review. **Depends:** R4.
 
-Blobs → sculpted GLBs per the R7 silhouette table (written when this phase
-starts, superseding `roadmap/3d-conversion/style-guide.md`'s primitive
-table). Generation prompts per `02-asset-pipeline.md` §Next-generation
-manifest. Faction variants on shared skeletons.
+Landed as eight deterministic, sculpted/textured GLBs from
+`tools/gen_unit_glbs.py` (1,033–2,526 tris each including every faction
+attachment, 256² painted atlases), with the silhouette/pivot/material contract
+and reusable prompts in `05-r7-unit-workshop.md`. `unit_model_loader.gd`
+normalizes/grounds imports, duplicates per-proxy materials, rebinds
+team/accent/glow slots, exposes named pivots to the existing sim-state
+animator, and switches geometric Arcane/Brute/Industrial attachments on the
+shared rig. Enemy attachments/accents stay neutral until faction
+identification; undead retain the green material pass and Potato retains the
+procedural recipes. `tests/test_3d_unit_models.gd` covers imports, budgets,
+material isolation, variants/reveal, animation, and fallback. The capture
+harness gained `units` / `units_underground` gallery poses; review captures
+for all three player factions live under `r7/`.
 
 Acceptance: every unit identifiable by silhouette at max local zoom in both
-views; ≤8k tris/unit; 200-unit scene still 60 fps; owner sign-off.
+views; ≤8k tris/unit; 200-unit scene still 60 fps; owner sign-off. Structural,
+capture, and triangle-budget checks are implemented; owner sign-off and
+real-hardware 200-unit/60-fps validation remain external acceptance checks.
 
-## R8 — UI restyle + screenshot pass
+## R8 — UI restyle + screenshot pass ✅ (implemented; captures under `r8/`; owner review pending)
 
 **Model:** K3 (restyle) + K2.8 (screenshot pipeline). **Depends:** R2–R7.
 
-HUD restyle per `01-art-direction.md` §UI; then the decision-22 pass:
-seeded harness captures at the game's best moments (surface base at dawn-
-overcast, dune field, underground lantern pools, storm, volcano, Minas
-Morgul reveal) exported at 1080p/4K for store pages.
+Landed as cold-glass panels, brass key-lines, amber alerts, and bundled OFL
+Cinzel display type in `ui_theme_tokens.gd`; `ui_progress_dial.gd` provides
+brass-ringed active-training and active-research loaders without changing
+queue/pause behavior. The capture harness adds `base` / `dunes` / `fortress`
+poses, configurable `RESOLUTION`, and `run_showcase.sh` for the six seeded
+showcase moments at 1080p and 4K. Final PNGs live under `r8/1080p/` and
+`r8/4k/`; the local macOS window clamp required normalizing the 4K exports to
+3840×2160, while the Linux harness requests native 4K directly. Tests:
+`tests/test_r8_ui.gd`, `test_capture_driver.gd`; full GUT suite 770/770,
+model-budget gate, and Web/macOS/Windows/Linux exports all green.
 
 Acceptance: a stranger wants to play from screenshots; exports all green.
+Owner visual sign-off remains an external acceptance check.
 
 ## Standing rules per phase
 

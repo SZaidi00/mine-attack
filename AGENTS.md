@@ -63,8 +63,11 @@ mine-attack/
 │   │                  # (group reconcile), unit_proxy_3d.gd (1.4x proxy-root
 │   │                  # scale-up, counter-scaled HP bars, R3 dune ground-snap)
 │   │                  # + unit_model_3d.gd
-│   │                  # (procedural low-poly rigs, state-driven animation, faction
-│   │                  # accents, undead tint), structure_proxy_3d.gd (1.08x
+│   │                  # (R7: Standard/Fancy import sculpted textured GLBs via
+│   │                  # unit_model_loader.gd + the shared model manifest; named-pivot
+│   │                  # state-driven animation, team/accent/glow rebinds, sculpted
+│   │                  # faction variants hidden until enemy identification, undead
+│   │                  # tint; Potato keeps the procedural recipes), structure_proxy_3d.gd (1.08x
 │   │                  # wall-footprint-capped proxy-root scale — ladders stay 1x;
 │   │                  # keep/tower/wall damage states, lantern OmniLight tiers,
 │   │                  # counter-scaled range disc, faction-reveal
@@ -135,8 +138,9 @@ mine-attack/
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~48 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
-│                      # gen_crawler_sprites.gd, check_model_budgets.sh
-│                      # (R4 GLB tri/texture budget gate vs
+│                      # gen_crawler_sprites.gd, gen_unit_glbs.py (R7 deterministic
+│                      # sculpted/textured unit GLBs), check_model_budgets.sh
+│                      # (R4/R7 GLB tri/texture budget gate vs
 │                      # models/model_manifest.json), resize_glb_textures.py
 │                      # (downscales embedded GLB textures to the 2048² cap)
 ├── .githooks/         # pre-push release hook
@@ -298,7 +302,8 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 ### `scripts/ui/`
 
-- `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners. Semantic colors that change under colorblind mode (`COLOR_ENEMY`, `COLOR_SUCCESS`, `COLOR_VICTORY`) are static-var mirrors swapped by `apply_colorblind_palette()`.
+- `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners. R8 uses cold-glass panels, brass key-lines, amber alerts, and the bundled OFL Cinzel display font for titles/numerals. Semantic colors that change under colorblind mode (`COLOR_ENEMY`, `COLOR_SUCCESS`, `COLOR_VICTORY`) are static-var mirrors swapped by `apply_colorblind_palette()`.
+- `ui_progress_dial.gd` — R8 brass-ringed production/research loader with an optional centered icon and clamped 0–1 progress; compatibility-safe custom drawing, mouse-transparent.
 - `hud.gd` — extends `Control` (the root is scaled for UI scale: `pivot_offset` zero, `scale = (s,s)`, fixed-offset virtual rect `window_size / s`, auto-capped so the bars always fit). Node references (bottom-bar buttons are looked up by `%Name` unique name so layout moves can't break paths), signal wiring, game-over flow (summary table + coaching hints from `CoachingHints.generate()` + `MatchGraph` coin/population charts), lava/weather/volcano warning banners (pulse skipped when reduced-flash is on), faction-identified popup, research-completion + production (unit trained / lantern upgraded) toasts; delegates to helpers. The BottomBar is two rows: `TrainRow` (7 train buttons) on top, `CommandRow` (upgrades + stance/kill/research/build) below. The Necromancy Raise toggle is created at runtime and inserted after the Rally button, visible only with the research done and a wizard selected. Threat alerts: `report_threat(world_pos, kind)` (called from `unit_combat.gd` for damaged player miners and from the player-building `hp_changed` handler for base damage) feeds the `threat_alert_layer` screen-edge arrows and a globally throttled `alert_ping` (the HUD is in the `hud` group for lookup without a hard dependency). A brief formation-mode readout label (`show_formation_mode`) appears when `F` cycles formations.
   - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
   - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists). Picking a structure hides the tray while the placement ghost is armed — a visible tray would eat the confirming click — and reopening the menu mid-placement cancels the ghost.
@@ -310,8 +315,8 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 - `tutorial_hints.gd` — first-match contextual hints (~10 trigger conditions polled on a 1s tick, one card at a time, dismiss persists to `SettingsManager.tutorial_seen`).
 - `coaching_hints.gd` — `class_name CoachingHints` pure function generating 2–3 post-game observations from the `MatchStats` summary (fast-loss, base-damage, economy ratio, army trade, max-tier rules).
 - `match_graph.gd` — post-game coin/population charts from the MatchStats timeline.
-- `research_panel.gd` — Doctrine Deck research overlay: spatial branch map with tech cards (icon, state badge, discipline-colored accent, active progress strip) and elbow/OR-dashed connectors, persistent detail rail (cost/time/prereq/exclusion + action button) and footer queue chips with cancel/respec/scan.
-- `training_queue_panel.gd` — Frosted Steel production module: active training with progress, scrollable queued-items list, capacity readout, Pause/Resume and Clear actions.
+- `research_panel.gd` — Doctrine Deck research overlay: spatial branch map with tech cards (icon, state badge, discipline-colored accent, active progress strip) and elbow/OR-dashed connectors, persistent detail rail (cost/time/prereq/exclusion + action button) and footer queue chips with cancel/respec/scan. The header's active research uses an R8 `UIProgressDial`.
+- `training_queue_panel.gd` — Frosted Steel production module: active training with an R8 brass-ringed progress dial, scrollable queued-items list, capacity readout, Pause/Resume and Clear actions.
 - `unit_button.gd` — training buttons; cost/time labels and the affordability gate read the building's `get_train_cost`/`get_train_time` so research discounts (e.g. Broodmother's dragon discount) show immediately, refreshed via `ResearchManager.research_completed`/`research_changed`.
 - `layer_indicator.gd` — underground layer accessibility indicator.
 - `threat_alert_layer.gd` — canvas-drawn threat layer on the HUD root: one fading arrow per active threat (clamped to a screen-edge inset rect, pointing at off-screen threats; on-screen threats get a diamond), aged out over 4s; world→HUD conversion divides by the HUD root's UI scale.
@@ -414,7 +419,7 @@ godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit
 
 Replace `godot` with the path to your Godot binary if it is not on `PATH` (e.g. `/Applications/Godot.app/Contents/MacOS/Godot`).
 
-### Check imported-model budgets (R4)
+### Check imported-model budgets (R4/R7)
 
 ```bash
 tools/check_model_budgets.sh
@@ -426,7 +431,9 @@ vs `tri_gate`, per-image ≤ 2048², and the ≤ 64 MB total embedded-texture we
 budget. Pure-python GLB parser by default (trimesh/pygltflib used when
 installed); exits 0 on pass, 1 on budget violation, 2 on tooling error. New
 or regenerated GLBs with textures over 2048² go through
-`tools/resize_glb_textures.py` first (convention 5 "resize at import").
+`tools/resize_glb_textures.py` first (convention 5 "resize at import"). R7
+unit GLBs are deterministically regenerated with `python3 tools/gen_unit_glbs.py`
+(Pillow, same as the texture-resize tool); re-run the budget gate afterward.
 
 ### Export all presets
 
@@ -455,7 +462,7 @@ The script also packages `MineAttack-macOS.zip` (via `ditto`, preserving bundle 
 tools/capture/run_capture.sh /tmp/shots
 ```
 
-Launches `tools/capture/capture_driver.tscn` instead of the main menu, starts a seeded match (difficulty/faction/speed via env vars), and saves PNGs of named camera poses (`start`, `surface`, `zoomout`, `underground`, `storm`, `volcano`, `custom:X:Y:Z`) at fixed sim-seconds. Built for CI and AI-agent sandboxes: an agent can render, look, and iterate without a display or a human screenshot provider. Requires `xvfb-run`; downloads a Godot Linux binary on first run (`GODOT_BIN` to override).
+Launches `tools/capture/capture_driver.tscn` instead of the main menu, starts a seeded match (difficulty/faction/speed via env vars), and saves PNGs of named camera poses (`start`, `surface`, `zoomout`, `underground`, `breach`, `units`, `units_underground`, `base`, `dunes`, `fortress`, `storm`, `volcano`, `custom:X:Y:Z`) at fixed sim-seconds. Built for CI and AI-agent sandboxes: an agent can render, look, and iterate without a display or a human screenshot provider. Requires `xvfb-run`; downloads a Godot Linux binary on first run (`GODOT_BIN` to override). `RESOLUTION=3840x2160` selects 4K output (default 1920×1080); `tools/capture/run_showcase.sh roadmap/3d-visual-revamp/r8` captures the six R8 marketing poses at both sizes.
 
 Hard requirements, learned the hard way in headless/CI environments (full notes in `tools/capture/README.md`):
 

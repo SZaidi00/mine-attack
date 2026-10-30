@@ -266,6 +266,11 @@ func _style_top_bar() -> void:
 	_selection_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_DIM)
 	_selection_label.add_theme_font_size_override("font_size", 13)
 
+	var display_labels: Array[Label] = [_coin_label, _miner_level_label, _unit_count_label, _player_hp_label, _enemy_hp_label]
+	display_labels.append_array(_unit_count_labels.values())
+	for label: Label in display_labels:
+		UIThemeTokens.apply_display_font(label)
+
 
 func _style_game_over_buttons() -> void:
 	var quit: Button = $GameOverPanel/MarginContainer/VBoxContainer/QuitButton
@@ -1036,6 +1041,8 @@ func _on_game_over(winner: GameManager.Team) -> void:
 	_game_over_panel.modulate.a = 0.0
 	var container: VBoxContainer = $GameOverPanel/MarginContainer/VBoxContainer
 	var label: Label = $GameOverPanel/MarginContainer/VBoxContainer/ResultLabel
+	UIThemeTokens.apply_display_font(label)
+	label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_TITLE)
 	if winner == GameManager.Team.PLAYER:
 		label.text = "VICTORY"
 		label.modulate = UIThemeTokens.COLOR_VICTORY

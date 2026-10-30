@@ -6,8 +6,8 @@
 ## camera-facing bar (counter-scaled, so the Phase 2 proxy-root scale-up
 ## doesn't grow it), and death (unit.died -> proxy dead; the manager frees
 ## it, the proxy never writes to the unit). The Phase 1 billboard Sprite3D
-## is replaced by a procedural UnitModel3D rig; the ground blob shadow and
-## the fog/HP mirroring are unchanged.
+## is replaced by an R7 imported UnitModel3D rig (procedural on Potato); the
+## ground blob shadow and the fog/HP mirroring are unchanged.
 extends Node3D
 class_name UnitProxy3D
 

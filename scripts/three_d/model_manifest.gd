@@ -1,19 +1,21 @@
-## R4 structure-model manifest (roadmap/3d-visual-revamp/02-asset-pipeline.md
+## R4/R7 imported-model manifest (roadmap/3d-visual-revamp/02-asset-pipeline.md
 ## conventions 1-5): the source of truth for which textured GLB replaces which
-## procedural structure recipe, and how the import must be normalized.
+## procedural structure/unit recipe, and how the import must be normalized.
 ##
 ## The manifest lives in frost_mines_assets/models/model_manifest.json (plain
 ## JSON, not a .tres) so the CI budget gate tools/check_model_budgets.sh reads
 ## the exact same file — keep the two consumers in sync.
 ##
 ## Entry fields:
-## - key: structure id used by StructureProxy3D ("building_player", ...).
+## - key: structure id used by StructureProxy3D or unit_* id used by UnitModel3D.
 ## - path: res:// path of the imported .glb.
 ## - footprint: [w, h] target size in cells (CELL = 32 px of sim space); the
-##   loader scales the model uniformly so its XZ bounds match footprint*CELL.
-## - height: expected world-unit height AFTER normalization (recorded at
-##   import time; informational for future LOD/variant work).
+##   structure loader binds an XZ axis, while the unit loader treats it as a cap.
+## - height: expected world-unit height after normalization; the unit loader
+##   scales to this value before applying the footprint cap.
 ## - tri_gate: hard face-budget gate from 02-asset-pipeline.md convention 4.
+## - team_slots: optional lowercase material-name substrings rebound to the
+##   unit's team color ([] for structures and neutral unit body materials).
 ## - accent_slots: lowercase material-name substrings rebound as faction
 ##   accents at load time ([] when the model ships no named accent material).
 ## - glow_slots: lowercase material-name substrings treated as emissive glow
@@ -58,7 +60,7 @@ static func _load() -> void:
 			_by_key[str(e["key"])] = e
 
 
-## Manifest entry for a structure key, {} when missing.
+## Manifest entry for a structure or unit key, {} when missing.
 static func entry_for(key: String) -> Dictionary:
 	_load()
 	return _by_key.get(key, {})
@@ -103,7 +105,7 @@ static func validate() -> PackedStringArray:
 			problems.append("%s: height must be > 0" % key)
 		if not int(e.get("tri_gate", 0)) in TRI_GATES:
 			problems.append("%s: tri_gate %s not one of %s" % [key, e.get("tri_gate"), TRI_GATES])
-		for slot_key in ["accent_slots", "glow_slots"]:
+		for slot_key in ["team_slots", "accent_slots", "glow_slots"]:
 			if not e.get(slot_key, []) is Array:
 				problems.append("%s: %s must be an array" % [key, slot_key])
 	return problems

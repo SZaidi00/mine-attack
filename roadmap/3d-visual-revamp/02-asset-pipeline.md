@@ -11,7 +11,7 @@ prompts). Starter models in this PR were generated with **Tripo API**
 frost_mines_assets/
 ├── models/            # .glb imports live here (this PR adds the starter set)
 │   ├── structures/    # buildings, towers, walls, lanterns, mine entry
-│   └── units/         # unit meshes (R7 workshop; empty until then)
+│   └── units/         # R7 sculpted unit GLBs + faction attachment rigs
 └── …                  # existing 2D sprite dirs unchanged
 ```
 
@@ -108,8 +108,9 @@ blobs until R7 (owner decision 14).
 - Swordsman / Archer / Wizard (faction-variant helmets per style-guide
   silhouette table)
 - Dragon / Pigeon / Engineer / Crawler / Undead
-- These are generated against the R7 silhouette table once R4 proves the
-  pipeline; prompts get their own doc then.
+- The landed silhouette/material/pivot contract and reusable prompts live in
+  `05-r7-unit-workshop.md`; `tools/gen_unit_glbs.py` regenerates the set locally.
+  Undead reuse the living GLBs with the runtime sickly-green material pass.
 
 ## Failure modes & fixes
 

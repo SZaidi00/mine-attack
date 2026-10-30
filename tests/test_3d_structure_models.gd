@@ -347,6 +347,8 @@ func test_manifest_has_no_validation_errors() -> void:
 
 func test_every_manifest_entry_loads_and_normalizes() -> void:
 	for key in ModelManifest.keys():
+		if key.begins_with("unit_"):
+			continue  # R7 units are covered by test_3d_unit_models.gd + UnitModelLoader.
 		var entry := ModelManifest.entry_for(key)
 		var result := StructureModelLoader.instantiate(key)
 		assert_false(result.is_empty(), "%s loads via StructureModelLoader" % key)

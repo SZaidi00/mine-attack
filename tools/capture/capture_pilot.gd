@@ -7,11 +7,16 @@ extends Node
 ## Forced weather uses WeatherManager's own start/end routines and is ended
 ## again after the shot. Underground/breach poses finish real lantern
 ## placements for readable light pools; breach uses GridWorld's public damage
-## API and restores its temporary reveal-all override after capture.
+## API and restores its temporary reveal-all override after capture. R7 unit
+## galleries freeze real Unit scenes after _ready and carve a lantern-lit tunnel
+## through the same public APIs, so every sim-wide unit scan sees a real Unit.
 
 const WEATHER_LEAD_SEC := 3.0
 const SURFACE_CAM_POS := Vector2(0.0, -150.0)
 const ZOOMOUT_FACTOR := 0.5
+const UNIT_IDS: Array[String] = [
+	"miner", "pigeon", "archer", "wizard", "engineer", "dragon", "swordsman", "crawler",
+]
 
 var _config: Dictionary = {}
 var _elapsed := 0.0
@@ -21,6 +26,11 @@ var _pc: Node = null
 var _shell: Node = null
 var _weather_active := ""
 var _breach_revealed := false
+var _dunes_revealed := false
+var _fortress_revealed := false
+var _ui_prepared := false
+var _lineup_units: Array[Node2D] = []
+var _lineup_revealed := false
 
 
 func setup(config: Dictionary) -> void:
@@ -40,6 +50,17 @@ func _process(delta: float) -> void:
 		# set_view() still drives it (view_mode_changed), but dolly/focus are
 		# rig state — reach the shell node once it exists.
 		_shell = get_node_or_null("/root/Main3D")
+	if not _ui_prepared:
+		var hints := get_node_or_null("/root/Main/UI/HUD/TutorialHints")
+		if hints != null:
+			hints.visible = false
+			hints.set_process(false)
+			_ui_prepared = true
+	for unit in _lineup_units:
+		if is_instance_valid(unit):
+			unit.position = unit.get_meta("lineup_position")
+			unit.is_underground = bool(unit.get_meta("lineup_underground"))
+			unit.set("_state", Unit.State.IDLE)
 	_elapsed += delta
 	var shots: Array = _config.shots
 	if _shot_idx >= shots.size():
@@ -70,8 +91,11 @@ func _apply_pose(shot: Dictionary) -> void:
 			# Weather shots read best from the surface bookmark. The rig
 			# follows PlayerController's view_mode_changed signal.
 			_pc.set_view(false)
-			if shot.pose == "surface" and _shell != null:
-				_shell.pose_camera(Vector3(0.0, 0.0, -1.5), 12.0, _shell.SURFACE_PITCH_DEGREES)
+			if _shell != null:
+				if shot.pose == "surface":
+					_shell.pose_camera(Vector3(0.0, 0.0, -1.5), 12.0, _shell.SURFACE_PITCH_DEGREES)
+				else:
+					_shell.pose_camera(Vector3(-10.0, 0.0, -1.5), 10.5, _shell.SURFACE_PITCH_DEGREES)
 		"zoomout":
 			_pc.set_view(false)
 			if _shell != null:
@@ -80,11 +104,10 @@ func _apply_pose(shot: Dictionary) -> void:
 			_pc.set_view(true)
 			var lantern_cell := Vector2i(-15, 3)
 			_ensure_underground_lantern(lantern_cell)
-			if _shell != null:
-				var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
-				if grid != null:
-					_shell.pose_camera(Presentation3D.to_3d(grid.grid_to_world(lantern_cell)),
-						6.0, _shell.UNDERGROUND_PITCH_DEGREES)
+			var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+			if grid != null and _shell != null:
+				_shell.pose_camera(Presentation3D.to_3d(grid.grid_to_world(lantern_cell)),
+					4.0, _shell.UNDERGROUND_PITCH_DEGREES)
 		"breach":
 			_pc.set_view(true)
 			var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
@@ -99,6 +122,42 @@ func _apply_pose(shot: Dictionary) -> void:
 					if _shell != null:
 						_shell.pose_camera(Presentation3D.to_3d(grid.grid_to_world(center)),
 							4.5, _shell.UNDERGROUND_PITCH_DEGREES)
+		"base":
+			_pc.set_view(false)
+			var building := _find_building(GameManager.Team.PLAYER)
+			if building != null:
+				building.call("queue_unit", "dragon")
+				if _shell != null:
+					_shell.pose_camera(Presentation3D.to_3d(building.global_position) + Vector3(2.0, 0.0, 0.0),
+						8.0, _shell.SURFACE_PITCH_DEGREES)
+		"dunes":
+			_pc.set_view(false)
+			var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+			if grid != null:
+				grid.set_reveal_all(GameManager.Team.PLAYER, true)
+				_dunes_revealed = true
+			if _shell != null:
+				_shell.pose_camera(Vector3(0.0, 0.0, -1.5), 10.5, _shell.SURFACE_PITCH_DEGREES)
+		"fortress":
+			_pc.set_view(false)
+			var building := _find_building(GameManager.Team.ENEMY)
+			var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+			if grid != null:
+				grid.set_reveal_all(GameManager.Team.PLAYER, true)
+				_fortress_revealed = true
+			FactionManager.identify_faction(GameManager.Team.ENEMY)
+			var hud := get_node_or_null("/root/Main/UI/HUD")
+			if hud != null and hud.get("_faction_popup") != null:
+				hud.get("_faction_popup").visible = false
+			if building != null and _shell != null:
+				_shell.pose_camera(Presentation3D.to_3d(building.global_position), 7.0, _shell.SURFACE_PITCH_DEGREES)
+		"units", "units_underground":
+			var underground: bool = shot.pose == "units_underground"
+			_pc.set_view(underground)
+			var focus := _spawn_unit_lineup(underground)
+			if _shell != null:
+				var pitch: float = _shell.UNDERGROUND_PITCH_DEGREES if underground else _shell.SURFACE_PITCH_DEGREES
+				_shell.pose_camera(Presentation3D.to_3d(focus), 3.5 if underground else 6.0, pitch)
 		"custom":
 			# 3D branch: custom:X:Y:Z = focus (X, Y world units) + dolly Z.
 			if _shell != null:
@@ -107,6 +166,56 @@ func _apply_pose(shot: Dictionary) -> void:
 					else _shell.SURFACE_PITCH_DEGREES
 				_shell.pose_camera(Vector3(shot.pos.x * 0.01, 0.0, shot.pos.y * 0.01), shot.zoom, pitch)
 	_capture(shot)
+
+
+func _find_building(team: GameManager.Team) -> Node2D:
+	for building in get_tree().get_nodes_in_group("buildings"):
+		if building is Node2D and building.get("team") == team:
+			return building
+	return null
+
+
+func _spawn_unit_lineup(underground: bool) -> Vector2:
+	_clear_unit_lineup()
+	var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+	var container := get_node_or_null("/root/Main/Units")
+	if grid == null or container == null:
+		return Vector2.ZERO
+	grid.set_reveal_all(GameManager.Team.PLAYER, true)
+	_lineup_revealed = true
+	var row := 3 if underground else -2
+	for i in range(UNIT_IDS.size()):
+		var cell := Vector2i(-9 + (i % 4) * 2, row + floori(i / 4.0) * 2) if underground \
+			else Vector2i(-7 + i * 2, row)
+		if underground:
+			grid.damage_cell(cell, 100000, 3)
+		var unit: Unit = load("res://scenes/unit.tscn").instantiate()
+		unit.data = load("res://scripts/resources/units/%s.tres" % UNIT_IDS[i]).duplicate(true)
+		unit.is_underground = underground
+		unit.position = grid.grid_to_world(cell)
+		container.add_child(unit)
+		unit.set_process(false)
+		unit.set("_state", Unit.State.IDLE)
+		unit.set_meta("lineup_position", unit.position)
+		unit.set_meta("lineup_underground", underground)
+		_lineup_units.append(unit)
+	if underground:
+		grid.damage_cell(Vector2i(-6, row + 1), 100000, 3)
+		_ensure_underground_lantern(Vector2i(-6, row + 1))
+		return grid.grid_to_world(Vector2i(-6, row + 1))
+	return grid.grid_to_world(Vector2i(0, row))
+
+
+func _clear_unit_lineup() -> void:
+	for unit in _lineup_units:
+		if is_instance_valid(unit):
+			unit.free()
+	_lineup_units.clear()
+	if _lineup_revealed:
+		var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+		if grid != null:
+			grid.set_reveal_all(GameManager.Team.PLAYER, false)
+		_lineup_revealed = false
 
 
 func _ensure_underground_lantern(cell: Vector2i) -> void:
@@ -160,10 +269,12 @@ func _capture(shot: Dictionary) -> void:
 	# yields, which would otherwise offset every name by one.
 	_pending_captures += 1
 	var name: String = "%03d_%s.png" % [_shot_idx + 1, shot.pose]
-	if _shell != null and ["underground", "breach", "storm", "volcano"].has(shot.pose):
+	if _shell != null and ["underground", "breach", "storm", "volcano", "units_underground"].has(shot.pose):
 		await get_tree().create_timer(_shell.VIEW_TWEEN_DURATION).timeout
-	if shot.pose == "underground" or shot.pose == "breach":
+	if ["underground", "breach", "units_underground", "dunes", "fortress"].has(shot.pose):
 		await get_tree().create_timer(Fog3D.REFRESH_INTERVAL).timeout
+	if shot.pose == "units":
+		await get_tree().create_timer(0.3).timeout
 	# Two frames: one for the pose/weather to take effect, one to draw.
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -175,9 +286,13 @@ func _capture(shot: Dictionary) -> void:
 		print("Capture: %s at t=%.2fs" % [name, _elapsed])
 	if shot.pose == "storm" or shot.pose == "volcano":
 		_end_forced_weather()
-	elif shot.pose == "breach" and _breach_revealed:
+	elif (shot.pose == "breach" and _breach_revealed) or (shot.pose == "dunes" and _dunes_revealed) or (shot.pose == "fortress" and _fortress_revealed):
 		var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
 		if grid != null:
 			grid.set_reveal_all(GameManager.Team.PLAYER, false)
 		_breach_revealed = false
+		_dunes_revealed = false
+		_fortress_revealed = false
+	elif shot.pose == "units" or shot.pose == "units_underground":
+		_clear_unit_lineup()
 	_pending_captures -= 1

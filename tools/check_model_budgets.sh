@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# R4 model budget gate (roadmap/3d-visual-revamp/02-asset-pipeline.md
+# R4/R7 model budget gate (roadmap/3d-visual-revamp/02-asset-pipeline.md
 # conventions 4-5): reads frost_mines_assets/models/model_manifest.json and
 # verifies, per entry, that the GLB's triangle count stays under tri_gate and
 # that no embedded texture exceeds 2048^2, plus the 64 MB total embedded-texture

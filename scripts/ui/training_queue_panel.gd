@@ -33,11 +33,10 @@ var _title_label: Label = null
 var _status_label: Label = null
 var _count_label: Label = null
 var _active_panel: PanelContainer = null
-var _active_icon: TextureRect = null
 var _active_name: Label = null
 var _active_ready: Label = null
 var _active_percent: Label = null
-var _progress_bar: ProgressBar = null
+var _progress_bar: UIProgressDial = null
 var _queued_container: VBoxContainer = null
 var _empty_label: Label = null
 var _pause_button: Button = null
@@ -94,6 +93,7 @@ func _build_ui() -> void:
 	_title_label.text = "Training queue"
 	_title_label.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_HEADER)
 	_title_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+	UIThemeTokens.apply_display_font(_title_label)
 	header_text.add_child(_title_label)
 
 	_status_label = Label.new()
@@ -106,6 +106,7 @@ func _build_ui() -> void:
 	_count_label.text = "0"
 	_count_label.add_theme_font_size_override("font_size", 20)
 	_count_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	UIThemeTokens.apply_display_font(_count_label)
 	header.add_child(_count_label)
 
 	# Active item panel.
@@ -118,19 +119,20 @@ func _build_ui() -> void:
 	active_row.add_theme_constant_override("separation", 8)
 	_active_panel.add_child(active_row)
 
-	_active_icon = TextureRect.new()
-	_active_icon.custom_minimum_size = Vector2(34, 34)
-	_active_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_active_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	active_row.add_child(_active_icon)
+	_progress_bar = UIProgressDial.new()
+	_progress_bar.custom_minimum_size = Vector2(48, 48)
+	_progress_bar.visible = false
+	active_row.add_child(_progress_bar)
 
 	var active_text := VBoxContainer.new()
 	active_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	active_text.alignment = BoxContainer.ALIGNMENT_CENTER
 	active_row.add_child(active_text)
 
 	_active_name = Label.new()
 	_active_name.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
 	_active_name.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+	UIThemeTokens.apply_display_font(_active_name)
 	active_text.add_child(_active_name)
 
 	_active_ready = Label.new()
@@ -141,16 +143,8 @@ func _build_ui() -> void:
 	_active_percent = Label.new()
 	_active_percent.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_BODY)
 	_active_percent.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	UIThemeTokens.apply_display_font(_active_percent)
 	active_row.add_child(_active_percent)
-
-	# Progress bar for active item.
-	_progress_bar = ProgressBar.new()
-	_progress_bar.custom_minimum_size = Vector2(0, 10)
-	_progress_bar.max_value = 1.0
-	_progress_bar.value = 0.0
-	_progress_bar.visible = false
-	UIThemeTokens.apply_progress_bar_theme(_progress_bar, UIThemeTokens.ProgressVariant.BLUE)
-	vbox.add_child(_progress_bar)
 
 	# Queued items list: wrapped in a ScrollContainer so long queues scroll
 	# inside the panel instead of overflowing past its bottom edge.
@@ -269,7 +263,7 @@ func _refresh() -> void:
 	_active_panel.visible = true
 	_progress_bar.visible = true
 	_progress_bar.value = pct
-	_active_icon.texture = _UNIT_ICONS.get(active.id, null)
+	_progress_bar.icon = _UNIT_ICONS.get(active.id, null)
 	_active_name.text = active.id.capitalize()
 
 	if paused:

@@ -1,8 +1,7 @@
-## Phase 2 unit models (roadmap/3d-conversion/phase-2-art-pass.md §2.2).
-##
-## Procedural flat-shaded low-poly rig for one 2D unit, built from
-## ArtStyle3D primitives (≤60 per unit). Team-colored bodies with faction
-## accent trims; every type reads by silhouette per the style guide:
+## R7 sculpted unit models (roadmap/3d-visual-revamp/04-phase-plan.md).
+## Standard/Fancy load textured GLBs with shared rigs and faction attachment
+## variants; Potato and failed imports retain the Phase 2 procedural recipes.
+## Team-colored bodies with faction accent trims; every type reads by silhouette:
 ## miner = pickaxe + glowing helmet lamp + backpack, swordsman = sword +
 ## shield, archer = bow arc + quiver, wizard = wide-brim pointed hat + staff,
 ## dragon = big body + two flapping wing planes + tail, pigeon = tiny body +
@@ -34,6 +33,11 @@ var model_height: float = 0.34
 
 var _kind: StringName = &"swordsman"
 var _flyer: bool = false
+var _team: int = GameManager.Team.PLAYER
+var _undead: bool = false
+var _using_imported: bool = false
+var _imported_instance: Node3D = null
+var _accent_mats: Array[StandardMaterial3D] = []
 
 var _rig: Node3D    # yaw facing
 var _body: Node3D   # death topple pivot + idle bob
@@ -50,7 +54,7 @@ var _wing_r: Node3D = null
 var _tail: Node3D = null
 
 var _meshes: Array[MeshInstance3D] = []
-var _orig_materials: Dictionary = {}  # MeshInstance3D -> Material
+var _orig_materials: Dictionary = {}  # MeshInstance3D -> Array[Material] per surface
 
 var _idle_time: float = 0.0
 var _walk_phase: float = 0.0
@@ -69,34 +73,57 @@ static func create(u: Node2D) -> UnitModel3D:
 	var data: UnitData = u.data
 	m._kind = _resolve_kind(data)
 	m._flyer = data.flight_altitude > 0.0
+	m._undead = data.is_undead
 	var team: int = int(u.get("team"))
+	m._team = team
 	var body: Color = ArtStyle3D.team_color(team)
-	var accent: Color = ArtStyle3D.faction_accent_color(team)
+	var accent: Color = ArtStyle3D.faction_accent_color(team, false)
 	m._target_yaw = -PI * 0.5 if team == GameManager.Team.PLAYER else PI * 0.5
 	m._rig = Node3D.new()
 	m.add_child(m._rig)
 	m._body = Node3D.new()
 	m._body.rotation.y = m._target_yaw
 	m._rig.add_child(m._body)
-	match m._kind:
-		&"miner":
-			m._build_miner(body, accent)
-		&"archer":
-			m._build_archer(body, accent)
-		&"wizard":
-			m._build_wizard(body, accent)
-		&"dragon":
-			m._build_dragon(body, accent)
-		&"pigeon":
-			m._build_pigeon(body, accent)
-		&"engineer":
-			m._build_engineer(body, accent)
-		&"crawler":
-			m._build_crawler(body, accent)
-		_:
-			m._build_swordsman(body, accent)
+
+	var imported: Dictionary = {}
+	if ArtStyle3D.detail_enabled():
+		imported = UnitModelLoader.instantiate("unit_" + String(m._kind), team)
+	if not imported.is_empty():
+		m._using_imported = true
+		m._imported_instance = imported["instance"] as Node3D
+		m._accent_mats = imported["accent_mats"]
+		m.model_height = float(imported["model_height"])
+		m._body.add_child(imported["root"] as Node3D)
+		var pivots: Dictionary = imported["pivots"]
+		m._arm_l = pivots.get(&"ArmL") as Node3D
+		m._arm_r = pivots.get(&"ArmR") as Node3D
+		m._leg_l = pivots.get(&"LegL") as Node3D
+		m._leg_r = pivots.get(&"LegR") as Node3D
+		m._tool = pivots.get(&"Tool") as Node3D
+		m._wing_l = pivots.get(&"WingL") as Node3D
+		m._wing_r = pivots.get(&"WingR") as Node3D
+		m._tail = pivots.get(&"Tail") as Node3D
+		FactionManager.faction_identified.connect(m._on_faction_identified)
+	else:
+		match m._kind:
+			&"miner":
+				m._build_miner(body, accent)
+			&"archer":
+				m._build_archer(body, accent)
+			&"wizard":
+				m._build_wizard(body, accent)
+			&"dragon":
+				m._build_dragon(body, accent)
+			&"pigeon":
+				m._build_pigeon(body, accent)
+			&"engineer":
+				m._build_engineer(body, accent)
+			&"crawler":
+				m._build_crawler(body, accent)
+			_:
+				m._build_swordsman(body, accent)
 	m._collect_meshes()
-	if data.is_undead:
+	if m._undead:
 		m._apply_undead_tint()
 	return m
 
@@ -349,25 +376,30 @@ func _collect_meshes() -> void:
 	for node in _body.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D
 		_meshes.append(mi)
-		_orig_materials[mi] = mi.get_material_override()
+		var originals: Array = []
+		for surface in range(mi.mesh.get_surface_count()):
+			originals.append(mi.get_active_material(surface))
+		_orig_materials[mi] = originals
 
 
-## Necromancy: pull every body material toward the sickly green tint
-## (albedo lerp; emissive accents keep their glow).
+## Necromancy: pull every body material toward the sickly green tint while
+## preserving imported textures and each instance's material isolation.
 func _apply_undead_tint() -> void:
 	for mi in _meshes:
-		var mat := _orig_materials[mi] as StandardMaterial3D
-		if mat == null:
-			continue
-		var tinted: Color = mat.albedo_color.lerp(ArtStyle3D.UNDEAD_TINT, 0.55)
-		var emission := Color(0, 0, 0)
-		var energy := 0.0
-		if mat.emission_enabled:
-			emission = mat.emission.lerp(ArtStyle3D.UNDEAD_TINT, 0.55)
-			energy = mat.emission_energy_multiplier
-		var replacement := ArtStyle3D.get_material(tinted, emission, energy, mat.albedo_color.a)
-		mi.set_material_override(replacement)
-		_orig_materials[mi] = replacement
+		var replacements: Array = []
+		for surface in range(mi.mesh.get_surface_count()):
+			var mat := mi.get_active_material(surface) as StandardMaterial3D
+			if mat == null:
+				replacements.append(null)
+				continue
+			var replacement := mat.duplicate() as StandardMaterial3D
+			replacement.albedo_color = mat.albedo_color.lerp(ArtStyle3D.UNDEAD_TINT, 0.55)
+			if mat.emission_enabled:
+				ArtStyle3D.apply_emission(replacement,
+					mat.emission.lerp(ArtStyle3D.UNDEAD_TINT, 0.55), mat.emission_energy_multiplier)
+			mi.set_surface_override_material(surface, replacement)
+			replacements.append(replacement)
+		_orig_materials[mi] = replacements
 
 
 static func _get_flash_material() -> StandardMaterial3D:
@@ -379,7 +411,28 @@ static func _get_flash_material() -> StandardMaterial3D:
 func _set_flashing(on: bool) -> void:
 	_flashing = on
 	for mi in _meshes:
-		mi.set_material_override(_get_flash_material() if on else _orig_materials[mi])
+		for surface in range(mi.mesh.get_surface_count()):
+			var original: Material = _orig_materials[mi][surface] as Material
+			mi.set_surface_override_material(surface, _get_flash_material() if on else original)
+
+
+func _on_faction_identified(team: GameManager.Team) -> void:
+	if team != _team or not _using_imported or not is_instance_valid(_imported_instance):
+		return
+	UnitModelLoader.apply_faction(_imported_instance, _team, _accent_mats)
+	if not _undead:
+		return
+	var accent := ArtStyle3D.faction_accent_color(_team, false).lerp(ArtStyle3D.UNDEAD_TINT, 0.55)
+	for mi in _meshes:
+		for surface in range(mi.mesh.get_surface_count()):
+			var mat := mi.get_active_material(surface) as StandardMaterial3D
+			if mat != null and mat.resource_name.to_lower().contains("accent"):
+				mat.albedo_color = accent
+
+
+func _exit_tree() -> void:
+	if FactionManager.faction_identified.is_connected(_on_faction_identified):
+		FactionManager.faction_identified.disconnect(_on_faction_identified)
 
 
 # ---------- Animation driver ----------

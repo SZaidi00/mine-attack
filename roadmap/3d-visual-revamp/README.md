@@ -5,8 +5,13 @@ under `r2/`); R3 implemented (height-field dunes; harness captures pending
 owner/CI run); R4 implemented (structure GLB pipeline + Minas Morgul
 fortress; harness captures pending owner/CI run); R5 implemented (two-mode
 camera + capture posing API; captures under `r5/`); R6 implemented (opaque
-fog void + lantern pools + first-wall-breach moment; captures under `r6/`).
-Final art-style polish review follows the later phases.
+fog void + lantern pools + first-wall-breach moment; captures under `r6/`);
+R7 implemented (sculpted textured unit GLBs + shared-rig faction variants;
+surface/underground captures for all three factions under `r7/`); R8
+implemented (cold-glass/brass UI, Cinzel display type, production/research
+progress dials, and six showcase captures at 1080p/4K under `r8/`). Owner
+visual sign-off and real-hardware 200-unit performance validation remain
+pending. Final art-style polish review remains with the owner.
 **Parent:** `roadmap/3d-rework/README.md` (phases 1–5 implemented there; read it
 for the hard rules that still apply).
 **Branch:** `feat/3d-conversion`.
