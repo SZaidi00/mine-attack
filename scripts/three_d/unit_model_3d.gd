@@ -10,8 +10,11 @@
 ## ArtStyle3D.UNDEAD_TINT.
 ##
 ## Pure presentation: `sync_animation` reads the live unit's state/timers
-## and poses the rig; it never writes sim state. The rig faces -Z (Godot
-## forward); yaw is derived from the sim's actual movement (or its attack
+## and poses the rig; it never writes sim state. Miner/swordsman use original
+## UnitAnimationClips on their named pivots at every quality tier, manually
+## advanced here so hidden proxies do no player processing. Mining, other unit
+## kinds, and incomplete rigs keep the procedural fallback. The rig faces -Z
+## (Godot forward); yaw is derived from the sim's actual movement (or its attack
 ## target), falling back to the team march direction.
 
 class_name UnitModel3D
@@ -38,6 +41,10 @@ var _undead: bool = false
 var _using_imported: bool = false
 var _imported_instance: Node3D = null
 var _accent_mats: Array[StandardMaterial3D] = []
+var _animation_player: AnimationPlayer = null
+var _current_clip: StringName = &""
+var _clip_base_rotations: Dictionary = {}  # Node3D -> Quaternion
+var _last_attack_timer: float = -1.0
 
 var _rig: Node3D    # yaw facing
 var _body: Node3D   # death topple pivot + idle bob
@@ -122,6 +129,15 @@ static func create(u: Node2D) -> UnitModel3D:
 				m._build_crawler(body, accent)
 			_:
 				m._build_swordsman(body, accent)
+	var clip_pivots: Dictionary = {
+		&"ArmL": m._arm_l, &"ArmR": m._arm_r,
+		&"LegL": m._leg_l, &"LegR": m._leg_r, &"Tool": m._tool,
+	}
+	m._animation_player = UnitAnimationClips.attach(m, m._kind, clip_pivots)
+	if m._animation_player != null:
+		for pivot_name in UnitAnimationClips.HUMANOID_PIVOTS:
+			var pivot := clip_pivots[pivot_name] as Node3D
+			m._clip_base_rotations[pivot] = pivot.quaternion
 	m._collect_meshes()
 	if m._undead:
 		m._apply_undead_tint()
@@ -452,6 +468,7 @@ func sync_animation(unit: Node2D, delta: float, pos := Vector2(1e18, 1e18)) -> v
 	var state: int = int(unit.get("_state"))
 	if state == Unit.State.DEAD:
 		_dead = true
+		_play_clip(UnitAnimationClips.DEATH)
 		_advance_death(delta)
 		return
 	# Hit flash: shared emissive white override while the sim's flash runs.
@@ -476,15 +493,57 @@ func sync_animation(unit: Node2D, delta: float, pos := Vector2(1e18, 1e18)) -> v
 	# Wings: flap while airborne, glide-still on the ground.
 	if _flyer:
 		_animate_flight(unit, delta, state)
+	var use_clips := _animation_player != null
 	if MOVE_STATES.has(state):
+		_last_attack_timer = -1.0
 		_walk_phase += moved * 0.11
-		_animate_move(state)
+		if use_clips:
+			_play_clip(UnitAnimationClips.WALK)
+		_animate_move(state, not use_clips)
 	elif state == Unit.State.ATTACK:
-		_animate_attack(unit)
+		var attack_timer := float(unit.get("_attack_timer"))
+		if use_clips:
+			var restart := _current_clip != UnitAnimationClips.ATTACK \
+				or (_last_attack_timer >= 0.0 and attack_timer > _last_attack_timer + 0.001)
+			_play_clip(UnitAnimationClips.ATTACK, restart)
+			var cooldown := maxf(float(unit.data.attack_cooldown), 0.05)
+			_animation_player.speed_scale = UnitAnimationClips.ATTACK_DURATION / cooldown
+		_last_attack_timer = attack_timer
+		_animate_attack(unit, not use_clips)
 	elif state == Unit.State.MINE:
+		_last_attack_timer = -1.0
+		_stop_clips()
 		_animate_mine(unit)
 	else:
-		_animate_idle()
+		_last_attack_timer = -1.0
+		if use_clips:
+			_play_clip(UnitAnimationClips.IDLE)
+		_animate_idle(not use_clips)
+	_advance_clip(delta)
+
+
+func _play_clip(clip: StringName, restart := false) -> void:
+	if _animation_player == null or (_current_clip == clip and not restart):
+		return
+	_current_clip = clip
+	_animation_player.speed_scale = 1.0
+	_animation_player.play(clip)
+
+
+func _stop_clips() -> void:
+	if _animation_player == null or _current_clip.is_empty():
+		return
+	_animation_player.stop()
+	_current_clip = &""
+	for pivot in _clip_base_rotations:
+		if is_instance_valid(pivot):
+			var base_rotation: Quaternion = _clip_base_rotations[pivot]
+			pivot.quaternion = base_rotation
+
+
+func _advance_clip(delta: float) -> void:
+	if _animation_player != null and _animation_player.is_playing():
+		_animation_player.advance(delta)
 
 
 func _attack_aim(unit: Node2D, pos: Vector2) -> Vector2:
@@ -525,33 +584,35 @@ func _swing(pivot: Node3D, phase: float, amp: float) -> void:
 		pivot.rotation.x = sin(phase) * amp
 
 
-func _animate_move(_state: int) -> void:
-	_swing(_arm_l, _walk_phase, 0.55)
-	_swing(_arm_r, _walk_phase + PI, 0.55)
-	_swing(_leg_l, _walk_phase + PI, 0.5)
-	_swing(_leg_r, _walk_phase, 0.5)
-	if _tool != null:
-		_tool.rotation.x = sin(_walk_phase) * 0.15
+func _animate_move(_state: int, animate_pivots := true) -> void:
+	if animate_pivots:
+		_swing(_arm_l, _walk_phase, 0.55)
+		_swing(_arm_r, _walk_phase + PI, 0.55)
+		_swing(_leg_l, _walk_phase + PI, 0.5)
+		_swing(_leg_r, _walk_phase, 0.5)
+		if _tool != null:
+			_tool.rotation.x = sin(_walk_phase) * 0.15
 	if _kind == &"crawler":
 		_body.rotation.z = sin(_walk_phase) * 0.07
 	else:
 		_body.position.y = _body_base_y + absf(sin(_walk_phase)) * 0.012
 
 
-func _animate_attack(unit: Node2D) -> void:
+func _animate_attack(unit: Node2D, animate_pivots := true) -> void:
 	var cooldown := maxf(float(unit.data.attack_cooldown), 0.05)
 	# _attack_timer counts down to 0 and resets to cooldown; phase 0 = just
 	# struck, phase 1 = next strike about to land.
 	var phase := 1.0 - clampf(float(unit.get("_attack_timer")) / cooldown, 0.0, 1.0)
 	var strike := sin(phase * PI)
-	if _tool != null:
-		# Chop/thrust forward (-Z is the facing axis).
-		_tool.rotation.x = -strike * (1.2 if _kind == &"wizard" else 0.9)
-	if _arm_r != null:
-		_arm_r.rotation.x = -strike * 0.8
-	if _arm_l != null:
-		# Archer "draw": the bow arm pulls back as the strike lands.
-		_arm_l.rotation.x = strike * 0.4
+	if animate_pivots:
+		if _tool != null:
+			# Chop/thrust forward (-Z is the facing axis).
+			_tool.rotation.x = -strike * (1.2 if _kind == &"wizard" else 0.9)
+		if _arm_r != null:
+			_arm_r.rotation.x = -strike * 0.8
+		if _arm_l != null:
+			# Archer "draw": the bow arm pulls back as the strike lands.
+			_arm_l.rotation.x = strike * 0.4
 	if _kind == &"crawler":
 		_body.position.z = -strike * 0.05
 	else:
@@ -574,17 +635,18 @@ func _animate_mine(unit: Node2D) -> void:
 		_arm_r.rotation.x = -swing * 0.7
 
 
-func _animate_idle() -> void:
+func _animate_idle(animate_pivots := true) -> void:
 	var breathe := sin(_idle_time * 2.2) * 0.008
 	_body.position.y = _body_base_y + breathe
 	_body.position.z = lerpf(_body.position.z, 0.0, 0.2)
 	_body.rotation.z = lerpf(_body.rotation.z, 0.0, 0.2)
-	_swing(_arm_l, _idle_time * 2.2, 0.06)
-	_swing(_arm_r, _idle_time * 2.2 + PI, 0.06)
-	_swing(_leg_l, 0.0, 0.0)
-	_swing(_leg_r, 0.0, 0.0)
-	if _tool != null:
-		_tool.rotation.x = lerpf(_tool.rotation.x, 0.0, 0.1)
+	if animate_pivots:
+		_swing(_arm_l, _idle_time * 2.2, 0.06)
+		_swing(_arm_r, _idle_time * 2.2 + PI, 0.06)
+		_swing(_leg_l, 0.0, 0.0)
+		_swing(_leg_r, 0.0, 0.0)
+		if _tool != null:
+			_tool.rotation.x = lerpf(_tool.rotation.x, 0.0, 0.1)
 
 
 func _advance_death(delta: float) -> void:
@@ -593,3 +655,4 @@ func _advance_death(delta: float) -> void:
 	_body.rotation.x = -PI * 0.5 * k
 	if _dead_t > TOPPLE_TIME:
 		_body.position.y = _body_base_y - 0.06 * minf((_dead_t - TOPPLE_TIME) / SINK_TIME, 1.0)
+	_advance_clip(delta)

@@ -1,6 +1,6 @@
 # Plan 08 — Unit animation clips on R7 pivots
 
-Status: Not started
+Status: Done
 Size: L
 Depends on: 06 (pipeline conventions; clip sources re-use its acquisition notes)
 
@@ -93,13 +93,35 @@ Record BENCH numbers (unit-sync section) with animation on vs off; any
 Standard-tier regression must be justified in the PR.
 
 ## Acceptance criteria
-- [ ] AnimationPlayer with idle/walk/attack/death on miner + swordsman, GUT-verified
-- [ ] State mapping works: move/attack/death trigger the right clips
-- [ ] Procedural fallbacks intact for un-clipped kinds and Potato path (regression test)
-- [ ] Capture shots show visibly posed units; two timestamps differ
-- [ ] BENCH recorded; no unjustified perf regression
-- [ ] Full GUT suite green; budget gate green
-- [ ] PR documents clip provenance (authored vs imported) + licenses
+- [x] AnimationPlayer with idle/walk/attack/death on miner + swordsman, GUT-verified
+- [x] State mapping works: move/attack/death trigger the right clips
+- [x] Procedural fallbacks intact for un-clipped kinds and Potato path (regression test)
+- [x] Capture shots show visibly posed units; two timestamps differ
+- [x] BENCH recorded; no unjustified perf regression
+- [x] Full GUT suite green; budget gate green
+- [x] PR-ready clip provenance and license notes recorded below
+
+## Implementation notes
+- `unit_animation_clips.gd` authors all four clips locally as rigid-pivot
+  rotation tracks. Miner and swordsman use them on imported and Potato rigs;
+  playback advances manually from visible proxy syncs. Mining, other unit
+  kinds, incomplete rigs, body motion, and death topple/sink retain their
+  procedural behavior.
+- Provenance: all clips are original programmatic work in this repository. No
+  external animation library was available or imported, so there are no
+  third-party animation assets or additional animation license requirements.
+  CC0 library retargeting remains follow-up work.
+- Focused GUT: 19/19 tests, 186 assertions. Full GUT: 75 scripts, 804/804
+  tests, 8,073 assertions. `tools/check_model_budgets.sh`: PASS, 6.1 MB / 64
+  MB embedded textures. `git diff --check`: PASS.
+- Visual review used the documented macOS windowed capture equivalent.
+  `/tmp/mine-attack-animation-shots/001_units.png` (5.33 s) and
+  `002_units_underground.png` (8.80 s) were inspected at native crop
+  resolution; posed humanoid rigs are visible in both galleries.
+- Same-seed 200-unit, 30-sim-second macOS OpenGL BENCH (1,800 samples):
+  `unit_sync` was 0.780 ms before clips and 0.839 ms with clips. The 0.059 ms
+  increase is 7.6% of that section and about 0.35% of a 16.67 ms frame budget;
+  playback stays enabled at every quality tier.
 
 ## Out of scope
 - Structure animations

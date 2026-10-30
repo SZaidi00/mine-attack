@@ -317,3 +317,91 @@ func test_r7_imported_pivots_follow_sim_attack_state() -> void:
 	u._attack_timer = 0.3
 	model.sync_animation(u, 0.016)
 	assert_gt(absf(model._tool.rotation.x), 0.01, "attack timer poses the imported tool pivot")
+
+
+func test_humanoid_proxies_have_four_clips_on_every_quality_tier() -> void:
+	for quality in [ArtStyle3D.Quality.POTATO, ArtStyle3D.Quality.STANDARD, ArtStyle3D.Quality.FANCY]:
+		ArtStyle3D.apply_quality(quality)
+		for unit_id in ["miner", "swordsman"]:
+			var proxy := UnitProxy3D.create(_spawn(unit_id))
+			get_tree().root.add_child(proxy)
+			autofree(proxy)
+			var player := proxy._model._animation_player
+			assert_not_null(player, "%s tier %s proxy has an AnimationPlayer" % [quality, unit_id])
+			if player == null:
+				continue
+			assert_eq(player.playback_process_mode, AnimationPlayer.ANIMATION_PROCESS_MANUAL,
+				"proxy sync owns playback advancement")
+			assert_eq(player.get_animation_list().size(), 4, "exactly the four authored clips")
+			for clip in [UnitAnimationClips.IDLE, UnitAnimationClips.WALK,
+					UnitAnimationClips.ATTACK, UnitAnimationClips.DEATH]:
+				assert_true(player.has_animation(clip), "%s has %s" % [unit_id, clip])
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.FANCY)
+
+
+func test_walk_moves_a_pivot_and_idle_loop_restores_its_base_pose() -> void:
+	for unit_id in ["miner", "swordsman"]:
+		var model := UnitModel3D.create(_spawn(unit_id))
+		get_tree().root.add_child(model)
+		autofree(model)
+		var player := model._animation_player
+		var pivot := model._arm_l
+		var base := pivot.transform
+		player.play(UnitAnimationClips.WALK)
+		player.advance(0.25)
+		assert_false(pivot.transform.is_equal_approx(base), "%s walk changes the arm transform" % unit_id)
+		player.play(UnitAnimationClips.IDLE)
+		player.advance(0.0)
+		player.advance(UnitAnimationClips.IDLE_DURATION)
+		assert_true(pivot.transform.is_equal_approx(base), "%s idle loop returns to the base transform" % unit_id)
+
+
+func test_sim_states_select_walk_attack_and_procedural_mining() -> void:
+	var u := _spawn("swordsman")
+	var model := UnitModel3D.create(u)
+	get_tree().root.add_child(model)
+	autofree(model)
+	u._state = Unit.State.MOVE
+	model.sync_animation(u, 0.016)
+	assert_eq(model._animation_player.current_animation, UnitAnimationClips.WALK)
+	u._state = Unit.State.ATTACK
+	u._attack_timer = 0.3
+	model.sync_animation(u, 0.016)
+	assert_eq(model._animation_player.current_animation, UnitAnimationClips.ATTACK)
+	u._state = Unit.State.MINE
+	u._mine_timer = 0.1
+	model.sync_animation(u, 0.016)
+	assert_true(model._current_clip.is_empty(), "mining keeps its dedicated procedural motion")
+	assert_gt(absf(model._tool.rotation.x), 0.01, "procedural mining still poses the tool")
+
+
+func test_death_clip_plays_and_existing_topple_and_sink_complete() -> void:
+	var u := _spawn("swordsman")
+	var model := UnitModel3D.create(u)
+	get_tree().root.add_child(model)
+	autofree(model)
+	u._state = Unit.State.DEAD
+	model.sync_animation(u, 0.016)
+	assert_eq(model._animation_player.current_animation, UnitAnimationClips.DEATH)
+	assert_true(model._animation_player.is_playing(), "death clip starts on the dead state")
+	for i in range(24):
+		model.sync_animation(u, 0.05)
+	assert_false(model._animation_player.is_playing(), "death clip finishes and holds its final pose")
+	assert_almost_eq(model._body.rotation.x, -PI * 0.5, 0.001, "existing topple still completes")
+	assert_almost_eq(model._body.position.y, model._body_base_y - 0.06, 0.001,
+		"existing post-topple sink still completes")
+
+
+func test_unclipped_crawler_keeps_procedural_movement_on_potato() -> void:
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.POTATO)
+	var u := _spawn("crawler")
+	var model := UnitModel3D.create(u)
+	get_tree().root.add_child(model)
+	autofree(model)
+	assert_null(model._animation_player, "unclipped kinds do not allocate an AnimationPlayer")
+	u._state = Unit.State.MOVE
+	model.sync_animation(u, 0.016)
+	u.global_position += Vector2(3.0, 0.0)
+	model.sync_animation(u, 0.016)
+	assert_gt(absf(model._body.rotation.z), 0.001, "crawler body still skitters procedurally")
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.FANCY)

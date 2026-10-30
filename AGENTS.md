@@ -71,9 +71,14 @@ mine-attack/
 │   │                  # + unit_model_3d.gd
 │   │                  # (R7: Standard/Fancy import sculpted textured GLBs via
 │   │                  # unit_model_loader.gd + the shared model manifest; named-pivot
-│   │                  # state-driven animation, team/accent/glow rebinds, sculpted
-│   │                  # faction variants hidden until enemy identification, undead
-│   │                  # tint; Potato keeps the procedural recipes), structure_proxy_3d.gd (1.08x
+│   │                  # state-driven animation, with plan-08 unit_animation_clips.gd
+│   │                  # authoring original idle/walk/attack/death clips for miner +
+│   │                  # swordsman on imported and Potato rigs; visible proxy syncs
+│   │                  # advance them manually, while mining, other kinds, and
+│   │                  # incomplete rigs keep procedural motion; team/accent/glow
+│   │                  # rebinds, sculpted faction variants hidden until enemy
+│   │                  # identification, undead tint; Potato keeps procedural model
+│   │                  # recipes), structure_proxy_3d.gd (1.08x
 │   │                  # wall-footprint-capped proxy-root scale — ladders stay 1x;
 │   │                  # keep/tower/wall damage states, lantern OmniLight tiers,
 │   │                  # counter-scaled range disc, faction-reveal
