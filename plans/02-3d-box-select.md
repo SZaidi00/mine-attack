@@ -1,8 +1,8 @@
 # Plan 02 — 3D box-select via the rig camera
 
-Status: Not started
+Status: Done
 Size: M
-Depends on: —
+Depends on —
 
 ## Mission
 Fix drag-box selection in the 3D shell so a drag rectangle selects the units
@@ -72,10 +72,17 @@ tools/capture/run_capture.sh /tmp/shots   # then compare units/base poses
 ```
 
 ## Acceptance criteria
-- [ ] Shell-mode box select matches visual truth (test asserts exact set)
-- [ ] Rig zoom/dolly no longer affects which units a drag selects wrongly
-- [ ] Standalone 2D box select unchanged; all pre-existing selection tests pass
-- [ ] Full GUT suite green
+- [x] Shell-mode box select matches visual truth (test asserts exact set)
+- [x] Rig zoom/dolly no longer affects which units a drag selects wrongly
+- [x] Standalone 2D box select unchanged; all pre-existing selection tests pass
+- [x] Full GUT suite green
+
+Implemented 2026-10-30: `Presentation3D.screen_position()` (+ cached
+`rig_camera()`) in `scripts/three_d/presentation_3d.gd`, the shell branch in
+`player_selection.gd::_box_select`. Shell-mode tests live in
+`tests/test_3d_box_select.gd` — `tests/test_3d_selection.gd` already existed
+(3D-rework Phase 1 selection rings/HP bars/tracers) and is untouched;
+standalone 2D coverage is `tests/test_selection_box.gd`.
 
 ## Out of scope
 - Selection rings, hover highlighting, shift-modifier semantics (unchanged)
