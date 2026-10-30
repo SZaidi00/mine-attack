@@ -1,16 +1,10 @@
-## Phase 2 lighting & mood (roadmap/3d-conversion/phase-2-art-pass.md §2.4).
-##
-## Weather-reactive mood controller: owns the WorldEnvironment + sun found
-## under its parent's "Lights" node and tweens them toward per-mood targets
-## (rate ~2/s) in _process. Also applies the 3D rework phase 3 post stack:
-## ACES tonemapping, emissive bloom (Standard+), depth fog (all presets) and
-## SSAO (Fancy), all gated by ArtStyle3D.apply_quality_settings(). Base overcast; the underground view drops to a
-## dark, faintly warm mine; snowstorms flatten to white gloom; volcano events
-## cast a menacing red-orange from above (with the warning acting as a subtle
-## pre-tension); an underground lava flood tints the ambient toward the lava
-## palette. 3D rework phase 5: during the volcano warning the sun pulses on a
-## ~0.9s beat toward the eruption cast — the pre-eruption "light sweep" the
-## 2D HUD banner can't show in 3D. Presentation only — never touches the sim.
+## Weather-reactive mood controller for the WorldEnvironment and sun.
+## R2 grades every mood onto the visual revamp's cold palette. Underground is
+## near-dark so amber lanterns own the warmth; storms flatten toward blue-white
+## gloom; eruptions keep a cold key/ambient so meteors and lava are the warm
+## heroes. The existing warning pulse briefly warms the key without accumulating.
+## Post remains ACES everywhere, warm-source bloom on Standard+, depth fog on
+## every tier, and SSAO/shadows on Fancy. Presentation only.
 ##
 ## WeatherManager signals are wired in setup() (the autoload always exists);
 ## PlayerController (view authority) and GridWorld (lava state) mount deferred
@@ -29,34 +23,42 @@ const WARNING_PULSE_PERIOD: float = 0.9
 const WARNING_PULSE_ENERGY: float = 0.45
 const WARNING_PULSE_TINT := Color(1.0, 0.28, 0.12)
 
-## Per-mood light targets: sun color/energy + ambient color/energy.
-## 3D rework phase 3 retune: the terrain albedo pass is lit now, and ACES
-## tonemapping compresses brights — the underground mood needed a lift so the
-## mine reads dark-warm rather than black.
 const _MOODS: Dictionary = {
 	"overcast": {
-		"sun_color": Color(0.82, 0.87, 0.96),
-		"sun_energy": 1.1,
-		"ambient_color": Color(0.32, 0.38, 0.46),
-		"ambient_energy": 0.5,
+		"sun_color": Color("#C4D3E6"),
+		"sun_energy": 1.0,
+		"ambient_color": ArtStyle3D.PALETTE.night,
+		"ambient_energy": 0.65,
+		"background_color": ArtStyle3D.PALETTE.night,
+		"fog_color": ArtStyle3D.PALETTE.night,
+		"fog_density": 0.02,
 	},
 	"underground": {
-		"sun_color": Color(0.9, 0.78, 0.6),
-		"sun_energy": 0.5,
-		"ambient_color": Color(0.16, 0.19, 0.24),
-		"ambient_energy": 0.32,
+		"sun_color": Color("#6C7684"),
+		"sun_energy": 0.18,
+		"ambient_color": ArtStyle3D.PALETTE.rock_dark,
+		"ambient_energy": 0.28,
+		"background_color": ArtStyle3D.PALETTE.rock_dark,
+		"fog_color": ArtStyle3D.PALETTE.rock_dark,
+		"fog_density": 0.035,
 	},
 	"storm": {
-		"sun_color": Color(0.75, 0.8, 0.88),
-		"sun_energy": 0.7,
-		"ambient_color": Color(0.3, 0.35, 0.42),
-		"ambient_energy": 0.3,
+		"sun_color": ArtStyle3D.PALETTE.storm_gloom,
+		"sun_energy": 0.55,
+		"ambient_color": Color("#53677E"),
+		"ambient_energy": 0.35,
+		"background_color": Color("#53677E"),
+		"fog_color": Color("#6E8095"),
+		"fog_density": 0.055,
 	},
 	"volcano": {
-		"sun_color": Color(1.0, 0.45, 0.25),
-		"sun_energy": 1.4,
-		"ambient_color": Color(0.42, 0.3, 0.26),
-		"ambient_energy": 0.55,
+		"sun_color": Color("#91A4BC"),
+		"sun_energy": 0.85,
+		"ambient_color": ArtStyle3D.PALETTE.night,
+		"ambient_energy": 0.4,
+		"background_color": ArtStyle3D.PALETTE.rock_dark,
+		"fog_color": ArtStyle3D.PALETTE.rock,
+		"fog_density": 0.06,
 	},
 }
 
@@ -75,8 +77,14 @@ var _lava_event: bool = false
 
 ## 3D rework phase 5: phase accumulator for the pre-eruption warning pulse.
 var _warning_pulse_time: float = 0.0
+var _storm_gust_time: float = 0.0
 
 var _pc_connected: bool = false
+## Reusable per-frame mood target — the storm-gust layer used to duplicate a
+## mood Dictionary every frame for the whole storm; the resolution now fills
+## this fixed-key dict in place. (_apply_warning_pulse keeps its test-facing
+## pure form; it only allocates during the rare eruption-warning window.)
+var _resolved: Dictionary = {}
 
 
 func setup(camera: Camera3D) -> void:
@@ -98,19 +106,38 @@ func setup(camera: Camera3D) -> void:
 	_fetch_grid()
 
 
-## 3D rework phase 3: the post-processing preset gates live on ArtStyle3D
-## (glow Standard+, SSAO Fancy, fog everywhere, Fancy-only shadows) and land
-## here on the owned rig — call again after a runtime quality flip.
+## Apply shared R2 post tokens and the preset gates after startup or a live
+## quality change. Fog-of-war remains a separate, darker terrain treatment.
+## Also applies the per-tier viewport render scale / MSAA / shadow-split
+## configuration (the perf-side half of the quality presets).
 func apply_quality_settings() -> void:
 	if _sun != null:
 		_sun.shadow_enabled = ArtStyle3D.shadows_enabled()
 		_sun.directional_shadow_max_distance = ArtStyle3D.shadow_distance()
+		# Two blended PSSM splits cover the 40-unit top-down board; the
+		# engine default of four doubles the shadow pass for no visible
+		# gain at this camera angle.
+		_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+		_sun.directional_shadow_blend_splits = true
 	if _env != null:
+		_env.background_color = ArtStyle3D.PALETTE.night
+		_env.fog_light_color = ArtStyle3D.PALETTE.night
 		_env.glow_enabled = ArtStyle3D.glow_enabled()
+		_env.glow_hdr_threshold = ArtStyle3D.BLOOM_HDR_THRESHOLD
+		_env.glow_intensity = ArtStyle3D.BLOOM_INTENSITY
+		_env.glow_strength = ArtStyle3D.BLOOM_STRENGTH
 		_env.ssao_enabled = ArtStyle3D.ssao_enabled()
-		# Atmospheric depth cueing at every tier; the fog color/density are
-		# scene defaults. Fog-of-war stays the much darker vertex-color read.
 		_env.fog_enabled = ArtStyle3D.fog_enabled()
+	var viewport := get_viewport()
+	if viewport != null:
+		# FSR 1.0 upscaling where the renderer supports it (gl_compatibility
+		# falls back to bilinear); the scale itself is the perf lever.
+		if RenderingServer.get_current_rendering_method() == "gl_compatibility":
+			viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+		else:
+			viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
+		viewport.scaling_3d_scale = ArtStyle3D.render_scale()
+		viewport.msaa_3d = Viewport.MSAA_2X if ArtStyle3D.msaa_enabled() else Viewport.MSAA_DISABLED
 
 
 ## Underground-view mood hook. The shell's view switch and (lazily connected)
@@ -140,7 +167,39 @@ func _process(delta: float) -> void:
 	var lava_glow: bool = _lava_event
 	if not lava_glow and _underground_view and _grid != null:
 		lava_glow = _grid.is_lava_active() or _grid.is_lava_warning()
-	_tween_toward(_apply_warning_pulse(_MOODS[get_mood_name()], delta), lava_glow, delta)
+	_tween_toward(_resolve_mood(delta, lava_glow), delta)
+
+
+## Fills the reusable _resolved mood target in place: base mood for the
+## current state, plus the storm gust on fog, plus the eruption-warning beat
+## on sun/ambient, plus the warm lava under-glow.
+func _resolve_mood(delta: float, lava_glow: bool) -> Dictionary:
+	var mood_name := get_mood_name()
+	var base: Dictionary = _MOODS[mood_name]
+	_resolved["sun_color"] = base["sun_color"]
+	_resolved["sun_energy"] = base["sun_energy"]
+	_resolved["ambient_color"] = base["ambient_color"]
+	_resolved["ambient_energy"] = base["ambient_energy"]
+	_resolved["background_color"] = base["background_color"]
+	_resolved["fog_color"] = base["fog_color"]
+	_resolved["fog_density"] = base["fog_density"]
+	if mood_name == "storm":
+		_storm_gust_time += delta
+		var gust := clampf(0.5 + 0.5 * sin(_storm_gust_time * 1.9) + 0.25 * sin(_storm_gust_time * 0.63), 0.0, 1.0)
+		_resolved["fog_density"] = float(base["fog_density"]) * lerpf(0.75, 1.25, gust)
+		_resolved["fog_color"] = (base["fog_color"] as Color).lerp(ArtStyle3D.PALETTE.storm_gloom, 0.08 * gust)
+	else:
+		_storm_gust_time = 0.0
+	if WeatherManager.is_volcano_warning():
+		var pulsed: Dictionary = _apply_warning_pulse(_resolved, delta)
+		_resolved["sun_energy"] = pulsed["sun_energy"]
+		_resolved["sun_color"] = pulsed["sun_color"]
+		_resolved["ambient_energy"] = pulsed["ambient_energy"]
+	if lava_glow:
+		# Warm red under-glow rising from the flood below.
+		_resolved["ambient_color"] = (_resolved["ambient_color"] as Color).lerp(ArtStyle3D.PALETTE["lava"], 0.35)
+		_resolved["ambient_energy"] = float(_resolved["ambient_energy"]) + 0.1
+	return _resolved
 
 
 ## 3D rework phase 5: while the eruption warning counts down (meteors not yet
@@ -179,22 +238,19 @@ func _exit_tree() -> void:
 		_pc_connected = false
 
 
-func _tween_toward(target: Dictionary, lava_glow: bool, delta: float) -> void:
+func _tween_toward(target: Dictionary, delta: float) -> void:
 	if _sun == null and _env == null:
 		return
 	var f: float = 1.0 - exp(-TWEEN_RATE * delta)
-	var ambient_color: Color = target["ambient_color"]
-	var ambient_energy: float = target["ambient_energy"]
-	if lava_glow:
-		# Warm red under-glow rising from the flood below.
-		ambient_color = ambient_color.lerp(ArtStyle3D.PALETTE["lava"], 0.35)
-		ambient_energy += 0.1
 	if _sun != null:
 		_sun.light_color = _sun.light_color.lerp(target["sun_color"], f)
 		_sun.light_energy = lerpf(_sun.light_energy, target["sun_energy"], f)
 	if _env != null:
-		_env.ambient_light_color = _env.ambient_light_color.lerp(ambient_color, f)
-		_env.ambient_light_energy = lerpf(_env.ambient_light_energy, ambient_energy, f)
+		_env.ambient_light_color = _env.ambient_light_color.lerp(target["ambient_color"], f)
+		_env.ambient_light_energy = lerpf(_env.ambient_light_energy, target["ambient_energy"], f)
+		_env.background_color = _env.background_color.lerp(target["background_color"], f)
+		_env.fog_light_color = _env.fog_light_color.lerp(target["fog_color"], f)
+		_env.fog_density = lerpf(_env.fog_density, target["fog_density"], f)
 
 
 func _reconcile_weather() -> void:

@@ -56,15 +56,22 @@ func _update_ghost() -> void:
 		var cell: Vector2i = pc._grid.world_to_grid(world)
 		pc._build_ghost.global_position = pc._grid.grid_to_world(cell)
 		if _range_disc_3d != null:
-			_range_disc_3d.position = Presentation3D.to_3d(pc._build_ghost.global_position)
+			_range_disc_3d.position = Presentation3D.to_3d(pc._build_ghost.global_position, _ground_y(pc._build_ghost.global_position))
 		var err: String = _placement_error(pc._build_mode, cell)
 		var tint := Color(0.4, 1.0, 0.4, 0.55) if err == "" else Color(1.0, 0.35, 0.35, 0.55)
 		var visual: Node2D = pc._build_ghost.get_node_or_null("GhostVisual")
 		if visual != null:
 			visual.modulate = tint
 		if _ghost_3d != null:
-			_ghost_3d.position = Presentation3D.to_3d(pc._build_ghost.global_position)
+			_ghost_3d.position = Presentation3D.to_3d(pc._build_ghost.global_position, _ground_y(pc._build_ghost.global_position))
 			_ghost_3d.set_valid(err == "")
+
+
+## R3: placement previews ride the dune surface (0 on the flat underground
+## floor), so the ghost/disc sit on the ground they preview.
+func _ground_y(pos2d: Vector2) -> float:
+	return Presentation3D.ground_height(pc.get_tree(),
+		pos2d.x * Presentation3D.WORLD_SCALE, pos2d.y * Presentation3D.WORLD_SCALE)
 
 
 func _handle_input(event: InputEvent) -> void:
@@ -100,8 +107,9 @@ func start_build_placement(kind: String) -> void:
 	var parent3d := Presentation3D.effects_parent(pc.get_tree())
 	if parent3d != null:
 		_ghost_3d = BuildGhost3D.create(kind)
-		_ghost_3d.position = Presentation3D.to_3d(pc._grid.grid_to_world(pc._grid.world_to_grid(
-			pc._commands._screen_to_world(pc.get_viewport().get_mouse_position()))))
+		var anchor: Vector2 = pc._grid.grid_to_world(pc._grid.world_to_grid(
+			pc._commands._screen_to_world(pc.get_viewport().get_mouse_position())))
+		_ghost_3d.position = Presentation3D.to_3d(anchor, _ground_y(anchor))
 		parent3d.add_child(_ghost_3d)
 	elif kind == "trap":
 		var marker := _TrapGhostMarker.new()

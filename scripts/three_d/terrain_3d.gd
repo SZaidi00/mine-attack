@@ -1,59 +1,45 @@
-## Phase 1 terrain (roadmap/3d-conversion/phase-1-25d-port.md §1.2).
-##
-## The 2D world projected as flat colored quads: chunk MeshInstances (one
-## ArrayMesh each) rebuilt from GridWorld's cells — a pure sim -> render
-## projection (the grid is read, never written). Exactly like the 2D view,
-## only the layer matching the current Tab view renders: the surface band
-## (y in [SURFACE_TOP, 0]) in surface view, rows y>=1 underground in
-## underground view; layer
-## switching marks every chunk dirty and the throttled pass rebuilds them.
-##
-## Colors mirror grid_drawing.gd's flat palette (ice surface, per-layer
-## dirt, ore tinted by richness tier and depletion, the central wall tinted
-## by its shared HP pool, lava/magma/fresh-ore), plus the Phase 2 art pass
-## (§2.3/§2.7): surface cells are sculpted with deterministic per-cell
-## heights from ArtStyle3D.cell_hash, snow cover lerps the surface toward
-## the snow palette as storms accumulate and melts after, and visible lava
-## (plus magma rock touching it) renders as a second emissive "glow" mesh
-## per chunk whose shared material pulses. Player fog of war dims every quad
-## toward FOG_GROUND_TINT via fog_state_at() (fog / remembered / visible) —
-## the actual occlusion read is the Fog3D mist overlay on top, so the terrain
-## under fog stays a dim blue-grey instead of the 2D renderer's near-black; per-chunk decorations (ore crystals, snow drifts, embers)
-## live in the TerrainDetail3D child.
-##
-## 3D rework phase 3: the albedo pass is a LIT vertex-color material, so the
-## ground receives the mood lighting, sun shadows, and depth fog (flat face
-## normals generated per rebuild). LIT_TERRAIN=false restores the old
-## unshaded matte for A/B.
+## Chunked sim-to-render terrain projection. Surface and underground rows
+## rebuild independently on Tab, with deterministic corner heights, lit vertex
+## colors, weather snow cover, fog dimming, and a separate pulsing lava pass.
+## R2 replaces the inherited 2D browns/ice with the revamp's shadow-snow,
+## indigo rock, cooled dirt, tiered ore, and warm lava tokens. R3 (visual
+## revamp) displaces the surface quads onto the HeightField3D dune field —
+## same chunk path and vertex count, corners sampled from the shared field so
+## seams stay watertight and proxies/camera ground-snap read the same ground.
+## The grid is only read, never written.
 extends Node3D
 
 const WORLD_SCALE: float = 0.01
 const LIT_TERRAIN: bool = true
 const REBUILD_INTERVAL: float = 0.15
+## Player-fog poll cadence: the tick only dirties chunks when the sim's fog
+## diff actually bumped player_fog_revision (was: unconditional full rebuild).
 const FOG_REFRESH_INTERVAL: float = 0.5
+## Slow full-sweep backstop for the signal-less cell mutations (cave-in
+## restore, ore respawn, depletion tint) the fog diff can't see.
+const BACKSTOP_INTERVAL: float = 5.0
 const CHUNK_COLS: int = 21
 const CHUNK_ROWS: int = 8
-const SNOW_RATE: float = 0.1  # snow cover accumulation/melt per second
-const GLOW_LIFT: float = 0.004  # glow quads hover above the albedo pass
+const SNOW_RATE: float = 0.1
+## Snow-dirty quantization: the cover tween marks chunks dirty only when the
+## level crosses a 1/N step, so a storm ramp rebuilds ~N times total instead
+## of every frame for its whole duration.
+const SNOW_DIRTY_STEPS: int = 32
+const GLOW_LIFT: float = 0.004
 
-const LAVA_COLOR := Color(0.7, 0.14, 0.02)
-const MAGMA_ROCK_COLOR := Color(0.16, 0.12, 0.11)
-const FRESH_ORE_COLOR := Color(0.85, 0.42, 0.18)
-const SOLID_ROCK_COLOR := Color(0.18, 0.17, 0.21)
-const DEPLETED_ORE_COLOR := Color(0.45, 0.38, 0.3)
-const WALL_DAMAGED_COLOR := Color(0.6, 0.15, 0.1)
-const BORDER_WALL_COLOR := Color(0.18, 0.2, 0.23)
-const ORE_TIER_BRIGHT := Color(0.95, 0.7, 0.2)
-## 3D rework phase 4 (luminance ladder: terrain darkest, units brightest):
-## the 2D dirt palette is shared with the sim's own renderer, so the ~15%
-## darken + cool shift for the 3D underground lives here as a multiplier
-## instead of editing GameManager.COLOR_DIRT_*.
-const DIRT_GRADE := Color(0.82, 0.83, 0.9)
-## Fog dimming target for the albedo pass: hidden/remembered cells lerp toward
-## this cold blue-grey instead of the 2D renderer's near-black FOG_COLOR — the
-## Fog3D mist overlay carries the occlusion read, so the ground underneath
-## only needs to look dimmed, not voided.
-const FOG_GROUND_TINT := Color(0.14, 0.17, 0.23)
+const LAVA_COLOR := ArtStyle3D.PALETTE.lava
+const MAGMA_ROCK_COLOR := ArtStyle3D.PALETTE.magma
+const FRESH_ORE_COLOR := ArtStyle3D.PALETTE.rust
+const SOLID_ROCK_COLOR := ArtStyle3D.PALETTE.rock_dark
+const DEPLETED_ORE_COLOR := ArtStyle3D.PALETTE.wood_dark
+const WALL_DAMAGED_COLOR := Color("#8E3228")
+const BORDER_WALL_COLOR := ArtStyle3D.PALETTE.night
+const ORE_TIER_BRIGHT := ArtStyle3D.PALETTE.ore_bright
+const DIRT_SHALLOW_COLOR := Color("#4A4850")
+const DIRT_MID_COLOR := ArtStyle3D.PALETTE.rock
+const DIRT_DEEP_COLOR := ArtStyle3D.PALETTE.rock_dark
+const FOG_VOID_TINT := ArtStyle3D.PALETTE.fog_void
+const FOG_SHADOW_TINT := ArtStyle3D.PALETTE.rock_dark
 
 var _grid: GridWorld
 var _mat: StandardMaterial3D
@@ -67,6 +53,13 @@ var _dirty_all := false
 var _underground_view := false
 var _accum := 0.0
 var _fog_accum := 0.0
+var _backstop_accum := 0.0
+var _seen_fog_revision := -1
+var _last_snow_step := -1
+## Structure-clearance re-stamp is gated on the entity proxies actually
+## spawning/culling a structure proxy (signal from main_3d); true at setup so
+## the first rebuild batch stamps the initial board.
+var _clearances_dirty := true
 var _snow_level := 0.0  # 0..1 surface snow accumulation (presentation only)
 var _snow_target := 0.0
 var _pulse_time := 0.0
@@ -74,12 +67,18 @@ var _pulse_time := 0.0
 ## Per-chunk decorative geometry (ore crystals, snow drifts, ember spikes).
 var detail: TerrainDetail3D
 
+## R3 dune field: the surface quads displace onto it, world_height_at()
+## answers from it, and proxies ground-snap against the same function.
+var height_field: HeightField3D
+
 
 func setup(grid: GridWorld) -> void:
 	_grid = grid
+	height_field = HeightField3D.new()
+	height_field.setup(grid)
 	_mat = StandardMaterial3D.new()
 	_mat.vertex_color_use_as_albedo = true
-	_mat.roughness = 1.0
+	_mat.roughness = ArtStyle3D.MATERIAL_ROUGHNESS
 	if not LIT_TERRAIN:
 		_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	# One shared emissive material for every glow chunk; _process pulses its
@@ -123,6 +122,7 @@ func setup(grid: GridWorld) -> void:
 	_grid.lava_receded.connect(_on_world_changed)
 	_grid.cave_in_occurred.connect(_on_cave_in)
 	_mark_all_dirty()
+	_seen_fog_revision = _grid.player_fog_revision
 
 
 func get_snow_level() -> float:
@@ -136,20 +136,20 @@ func uses_lit_terrain() -> bool:
 
 
 ## Read-only ground height in world units at a world XZ position — the same
-## deterministic sculpted corner heights the render pass uses, so a query
-## lands on the visible ground (the underground layer is flat 0). The camera
-## rig's zoom-to-cursor ray marches against this.
+## deterministic height field the render pass samples, so a query lands on
+## the visible ground (the underground layer is flat 0). The camera rig's
+## zoom-to-cursor ray marches against this.
 func world_height_at(world_x: float, world_z: float) -> float:
-	if _grid == null:
+	if height_field == null:
 		return 0.0
-	var cell_pos := _grid.world_to_grid(Vector2(world_x / WORLD_SCALE, world_z / WORLD_SCALE))
-	if not _grid.has_cell(cell_pos):
-		return 0.0
-	var cell: GridWorld.Cell = _grid.get_cell(cell_pos)
-	if _underground_view or cell.type == GridWorld.CellType.EMPTY:
-		return 0.0
-	var heights := _corner_heights(cell_pos, cell)
-	return (heights[0] + heights[1] + heights[2] + heights[3]) * 0.25
+	return height_field.height_at(world_x, world_z)
+
+
+## Changes whenever the field's output changes (storm flattening, structure
+## clearances) without the query position moving — ground-snapped proxies
+## watch this to re-sample standing poses.
+func ground_height_revision() -> int:
+	return height_field.revision if height_field != null else 0
 
 
 func _on_snowstorm_started() -> void:
@@ -171,6 +171,19 @@ func _chunk_key_for(pos: Vector2i) -> Vector2i:
 
 
 ## Layer switching rebuilds the visible world, exactly like the 2D camera
+## EntityProxies3D emits structure_set_changed when a reconcile spawns or
+## culls a structure proxy; the height field's clearance stamps only need a
+## re-run at those moments (plus the first rebuild batch after setup).
+func notify_structures_changed() -> void:
+	_clearances_dirty = true
+
+
+## Public alias for the full-dirty mark (live quality switches, external
+## callers); keeps the _dirty mechanics internal.
+func force_full_rebuild() -> void:
+	_mark_all_dirty()
+
+
 ## bookmark jump.
 func set_underground_view(underground: bool) -> void:
 	if _underground_view == underground:
@@ -209,21 +222,36 @@ func _mark_all_dirty() -> void:
 
 func _process(delta: float) -> void:
 	# Snow cover tweens toward the storm target even when no chunk is dirty;
-	# while the cover is visibly changing, every rebuild pass re-lerps the
-	# surface palette (the chunk throttle below absorbs the churn).
+	# the level only marks chunks dirty when it crosses a 1/SNOW_DIRTY_STEPS
+	# step (the chunk throttle below absorbs the ramp). The same tween
+	# flattens the dune field (§2.4: storms fill the relief) — the height
+	# field applies it on its next sample and bumps its revision.
 	if _snow_level != _snow_target:
 		_snow_level = move_toward(_snow_level, _snow_target, SNOW_RATE * delta)
-		if absf(_snow_level - _snow_target) > 0.01:
+		var snow_step := int(_snow_level * SNOW_DIRTY_STEPS + 0.5)
+		if snow_step != _last_snow_step:
+			_last_snow_step = snow_step
 			_mark_all_dirty()
+	if height_field != null:
+		height_field.set_storm_level(_snow_level)
 	# Slow emissive heartbeat on the shared lava material (~0.6s period).
 	_pulse_time += delta
 	_glow_mat.emission_energy_multiplier = lerpf(0.7, 1.6, 0.5 + 0.5 * sin(_pulse_time * TAU / 0.6))
-	# Fog moves with vision every frame but emits no signals, and a few cell
-	# mutations (cave-in restore, ore respawn, depletion tint) are signal-less
-	# too — a slow full sweep keeps the projection convergent.
+	# Fog moves with vision every frame; GridFogOfWar diffs the player's fog
+	# state each frame and bumps player_fog_revision on real changes, so this
+	# tick only dirties the chunks those changed cells fall in (the old
+	# unconditional full sweep rebuilt all 16 chunks every 0.5s for the whole
+	# match). A slow full backstop covers the signal-less mutations.
 	_fog_accum += delta
 	if _fog_accum >= FOG_REFRESH_INTERVAL:
 		_fog_accum = 0.0
+		if _grid != null and _grid.player_fog_revision != _seen_fog_revision:
+			_seen_fog_revision = _grid.player_fog_revision
+			for cell in _grid.consume_player_fog_changes():
+				_dirty[_chunk_key_for(cell)] = true
+	_backstop_accum += delta
+	if _backstop_accum >= BACKSTOP_INTERVAL:
+		_backstop_accum = 0.0
 		_mark_all_dirty()
 	if _dirty.is_empty() and not _dirty_all:
 		return
@@ -231,6 +259,13 @@ func _process(delta: float) -> void:
 	if _accum < REBUILD_INTERVAL:
 		return
 	_accum = 0.0
+	# Structure placements mid-match re-stamp their clearances before the
+	# batch samples heights — gated on the entity proxies actually
+	# spawning/culling a structure proxy (main_3d wires the signal).
+	if _clearances_dirty and height_field != null:
+		_clearances_dirty = false
+		height_field.refresh_clearances()
+	var probe_start := Time.get_ticks_usec() if Probe3D.enabled else 0
 	if _dirty_all:
 		_dirty_all = false
 		_dirty.clear()
@@ -240,6 +275,8 @@ func _process(delta: float) -> void:
 		for key in _dirty:
 			_rebuild_chunk(key)
 		_dirty.clear()
+	if Probe3D.enabled:
+		Probe3D.add("terrain_rebuild", (Time.get_ticks_usec() - probe_start) / 1000.0)
 
 
 func _rebuild_chunk(key: Vector2i) -> void:
@@ -285,9 +322,9 @@ func _rebuild_chunk(key: Vector2i) -> void:
 			var color := _cell_color(cell, pos, max_ore)
 			match fog:
 				0:
-					color = color.lerp(FOG_GROUND_TINT, 0.85)
+					color = FOG_VOID_TINT
 				1:
-					color = color.lerp(FOG_GROUND_TINT, 0.45)
+					color = color.lerp(FOG_SHADOW_TINT, 0.8)
 			_add_quad(st, cx, cz, color, heights[0], heights[1], heights[2], heights[3])
 	if LIT_TERRAIN:
 		# Flat per-face normals off the sculpted corner heights; the glow
@@ -298,25 +335,22 @@ func _rebuild_chunk(key: Vector2i) -> void:
 		chunk.set_material_override(_mat)
 	# Null (not an empty mesh) keeps invisible glow chunks cost-free.
 	glow_chunk.mesh = gst.commit() if glow_used else null
-	detail.rebuild_chunk(key, x_start, y_start, _underground_view, _snow_level)
+	detail.rebuild_chunk(key, x_start, y_start, _underground_view, _snow_level, height_field)
 
 
-## Deterministic sculpted Y per surface quad corner (§2.3): open ground
-## undulates within ~+-0.03, wall cells rise as a ridge. Underground quads
-## stay flat. Corner order matches _add_quad: (x0,z0), (x1,z0), (x1,z1), (x0,z1).
-func _corner_heights(pos: Vector2i, cell: GridWorld.Cell) -> Array[float]:
+## R3: the four quad corners sample the shared dune field at their cell-space
+## positions (corner order matches _add_quad: (x0,z0), (x1,z0), (x1,z1),
+## (x0,z1)) — adjacent chunks sample the same continuous function, so seams
+## stay watertight. Underground quads stay flat. Wall cells keep their ridge
+## and open ground rolls in dunes, both inside the field.
+func _corner_heights(pos: Vector2i, _cell: GridWorld.Cell) -> Array[float]:
 	if _underground_view:
 		return [0.0, 0.0, 0.0, 0.0]
-	var base: float
-	if cell.type == GridWorld.CellType.WALL:
-		base = lerpf(0.12, 0.2, ArtStyle3D.cell_hash(pos, 2))
-	else:
-		base = lerpf(-0.03, 0.03, ArtStyle3D.cell_hash(pos, 1))
 	return [
-		base + (ArtStyle3D.cell_hash(pos, 11) - 0.5) * 0.02,
-		base + (ArtStyle3D.cell_hash(pos, 12) - 0.5) * 0.02,
-		base + (ArtStyle3D.cell_hash(pos, 13) - 0.5) * 0.02,
-		base + (ArtStyle3D.cell_hash(pos, 14) - 0.5) * 0.02,
+		height_field.height_at_cell(pos.x, pos.y),
+		height_field.height_at_cell(pos.x + 1, pos.y),
+		height_field.height_at_cell(pos.x + 1, pos.y + 1),
+		height_field.height_at_cell(pos.x, pos.y + 1),
 	]
 
 
@@ -381,14 +415,12 @@ func _add_flat_quad(st: SurfaceTool, cx: float, cz: float, y: float) -> void:
 func _cell_color(cell: GridWorld.Cell, pos: Vector2i, max_ore: int) -> Color:
 	match cell.type:
 		GridWorld.CellType.SURFACE_GROUND:
-			# Snow cover (§2.3): storms lerp the ice toward the snow palette,
-			# melting restores it. Phase 4 buffed the swap to the full lerp —
-			# at 0.85 of the old ~0.07-value snow the cover was invisible.
-			return GameManager.COLOR_ICE.lerp(ArtStyle3D.PALETTE.snow, _snow_level)
+			var snow_mix := lerpf(0.45, 1.0, _snow_level)
+			return ArtStyle3D.PALETTE.snow_shadow.lerp(ArtStyle3D.PALETTE.snow, snow_mix)
 		GridWorld.CellType.DIRT:
 			return _dirt_color(cell.layer)
 		GridWorld.CellType.ORE:
-			var tier := GameManager.COLOR_RUST
+			var tier := ArtStyle3D.PALETTE.rust
 			if max_ore > 0:
 				tier = tier.lerp(ORE_TIER_BRIGHT, clampf(float(cell.coin_value) / float(max_ore), 0.0, 1.0) * 0.7)
 			if cell.coin_value > 0:
@@ -397,7 +429,7 @@ func _cell_color(cell: GridWorld.Cell, pos: Vector2i, max_ore: int) -> Color:
 			return tier
 		GridWorld.CellType.WALL:
 			if _grid.is_central_wall(pos):
-				return GameManager.COLOR_STEEL.lerp(WALL_DAMAGED_COLOR, 1.0 - _grid.get_wall_hp_ratio())
+				return ArtStyle3D.PALETTE.steel.lerp(WALL_DAMAGED_COLOR, 1.0 - _grid.get_wall_hp_ratio())
 			return BORDER_WALL_COLOR
 		GridWorld.CellType.LAVA:
 			return LAVA_COLOR
@@ -407,12 +439,12 @@ func _cell_color(cell: GridWorld.Cell, pos: Vector2i, max_ore: int) -> Color:
 			return FRESH_ORE_COLOR
 		GridWorld.CellType.SOLID_ROCK:
 			return SOLID_ROCK_COLOR
-	return GameManager.COLOR_SHADOW
+	return ArtStyle3D.PALETTE.night
 
 
 func _dirt_color(layer: int) -> Color:
 	if layer <= 2:
-		return GameManager.COLOR_DIRT_1 * DIRT_GRADE
+		return DIRT_SHALLOW_COLOR
 	if layer <= 4:
-		return GameManager.COLOR_DIRT_2 * DIRT_GRADE
-	return GameManager.COLOR_DIRT_3 * DIRT_GRADE
+		return DIRT_MID_COLOR
+	return DIRT_DEEP_COLOR

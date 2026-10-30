@@ -1,0 +1,153 @@
+[
+	{
+		"key": "building_player",
+		"path": "res://frost_mines_assets/models/structures/keep_player.glb",
+		"footprint": [6, 5],
+		"height": 2.07,
+		"tri_gate": 25000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "building_enemy",
+		"path": "res://frost_mines_assets/models/structures/fortress_enemy.glb",
+		"footprint": [6, 5],
+		"height": 2.26,
+		"tri_gate": 25000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "tower",
+		"path": "res://frost_mines_assets/models/structures/tower_watch.glb",
+		"footprint": [1, 1],
+		"height": 1.19,
+		"tri_gate": 12000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "lantern_surface",
+		"path": "res://frost_mines_assets/models/structures/lantern_post.glb",
+		"footprint": [0.7, 0.7],
+		"height": 0.79,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "mine_entry",
+		"path": "res://frost_mines_assets/models/structures/mine_headframe.glb",
+		"footprint": [2, 2],
+		"height": 0.83,
+		"tri_gate": 12000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "corner",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "unit_miner",
+		"path": "res://frost_mines_assets/models/units/miner.glb",
+		"footprint": [0.9, 0.9],
+		"height": 0.36,
+		"tri_gate": 8000,
+		"team_slots": ["team"],
+		"accent_slots": ["accent"],
+		"glow_slots": ["glow_"],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "unit_swordsman",
+		"path": "res://frost_mines_assets/models/units/swordsman.glb",
+		"footprint": [0.9, 0.9],
+		"height": 0.38,
+		"tri_gate": 8000,
+		"team_slots": ["team"],
+		"accent_slots": ["accent"],
+		"glow_slots": ["glow_"],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "unit_archer",
+		"path": "res://frost_mines_assets/models/units/archer.glb",
+		"footprint": [0.9, 0.9],
+		"height": 0.37,
+		"tri_gate": 8000,
+		"team_slots": ["team"],
+		"accent_slots": ["accent"],
+		"glow_slots": ["glow_"],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "unit_wizard",
+		"path": "res://frost_mines_assets/models/units/wizard.glb",
+		"footprint": [1.0, 1.0],
+		"height": 0.40,
+		"tri_gate": 8000,
+		"team_slots": ["team"],
+		"accent_slots": ["accent"],
+		"glow_slots": ["glow_"],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "unit_dragon",
+		"path": "res://frost_mines_assets/models/units/dragon.glb",
+		"footprint": [3.8, 3.8],
+		"height": 0.70,
+		"tri_gate": 8000,
+		"team_slots": ["team"],
+		"accent_slots": ["accent"],
+		"glow_slots": ["glow_"],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "unit_pigeon",
+		"path": "res://frost_mines_assets/models/units/pigeon.glb",
+		"footprint": [0.8, 0.8],
+		"height": 0.12,
+		"tri_gate": 8000,
+		"team_slots": ["team"],
+		"accent_slots": ["accent"],
+		"glow_slots": ["glow_"],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "unit_engineer",
+		"path": "res://frost_mines_assets/models/units/engineer.glb",
+		"footprint": [0.9, 0.9],
+		"height": 0.36,
+		"tri_gate": 8000,
+		"team_slots": ["team"],
+		"accent_slots": ["accent"],
+		"glow_slots": ["glow_"],
+		"origin": "center",
+		"fallback_on_potato": true
+	},
+	{
+		"key": "unit_crawler",
+		"path": "res://frost_mines_assets/models/units/crawler.glb",
+		"footprint": [1.5, 1.5],
+		"height": 0.18,
+		"tri_gate": 8000,
+		"team_slots": ["team"],
+		"accent_slots": ["accent"],
+		"glow_slots": ["glow_"],
+		"origin": "center",
+		"fallback_on_potato": true
+	}
+]

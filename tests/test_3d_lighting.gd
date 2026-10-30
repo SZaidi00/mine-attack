@@ -67,7 +67,7 @@ func _frames(n: int) -> void:
 func _settle_overcast(max_frames: int = 150) -> void:
 	for i in range(max_frames):
 		await get_tree().process_frame
-		if _lighting.get_mood_name() == "overcast" and absf(_sun.light_energy - 1.1) < 0.05:
+		if _lighting.get_mood_name() == "overcast" and absf(_sun.light_energy - float(Lighting3D._MOODS.overcast.sun_energy)) < 0.05:
 			return
 
 
@@ -83,48 +83,62 @@ func test_audio_listener_3d_exists_and_is_current() -> void:
 
 # ─── §2.4 weather-reactive moods ───
 
-func test_volcano_eruption_reddens_sun_and_back() -> void:
+func test_volcano_eruption_cools_light_and_back() -> void:
 	await _settle_overcast()
 	var base_energy: float = _sun.light_energy
+	var base_ambient: float = _env.ambient_light_energy
+	var base_fog: float = _env.fog_density
 	WeatherManager.force_volcano_start()
 	var shifted := false
-	for i in range(120):  # ~2s of frames: tweens run at ~2/s.
+	for i in range(120):
 		await get_tree().process_frame
 		if _lighting.get_mood_name() == "volcano" \
-				and _sun.light_energy > base_energy + 0.2 \
-				and _sun.light_color.r > _sun.light_color.b:
+				and _sun.light_energy < base_energy - 0.05 \
+				and _env.ambient_light_energy < base_ambient - 0.1 \
+				and _env.fog_density > base_fog + 0.01 \
+				and _sun.light_color.b > _sun.light_color.r \
+				and _env.ambient_light_color.b > _env.ambient_light_color.r:
 			shifted = true
 			break
-	assert_true(shifted, "volcano mood reddens + brightens the sun within ~1s")
+	assert_true(shifted, "eruption cools the key and adds a full-view ash haze")
 	WeatherManager.force_volcano_end()
 	var restored := false
 	for i in range(120):
 		await get_tree().process_frame
-		if _lighting.get_mood_name() == "overcast" and absf(_sun.light_energy - base_energy) < 0.1:
+		if _lighting.get_mood_name() == "overcast" \
+				and absf(_sun.light_energy - base_energy) < 0.1 \
+				and absf(_env.fog_density - base_fog) < 0.005:
 			restored = true
 			break
-	assert_true(restored, "ending the eruption tweens back to the overcast base")
+	assert_true(restored, "ending the eruption restores light and atmospheric density")
 
 
 func test_snowstorm_flattens_sun_and_back() -> void:
 	await _settle_overcast()
 	var base_energy: float = _sun.light_energy
+	var base_fog: float = _env.fog_density
+	var base_background: Color = _env.background_color
 	WeatherManager.force_snowstorm_start()
 	var shifted := false
 	for i in range(120):
 		await get_tree().process_frame
-		if _lighting.get_mood_name() == "storm" and _sun.light_energy < base_energy - 0.2:
+		if _lighting.get_mood_name() == "storm" \
+				and _sun.light_energy < base_energy - 0.2 \
+				and _env.fog_density > base_fog + 0.01 \
+				and _env.background_color.g > base_background.g + 0.15:
 			shifted = true
 			break
-	assert_true(shifted, "storm mood dims the sun within ~1s")
+	assert_true(shifted, "storm dims sun and adds gusting fog (sun %.3f/%.3f, fog %.3f/%.3f, bg %.3f/%.3f)" % [_sun.light_energy, base_energy, _env.fog_density, base_fog, _env.background_color.g, base_background.g])
 	WeatherManager.force_snowstorm_end()
 	var restored := false
 	for i in range(120):
 		await get_tree().process_frame
-		if _lighting.get_mood_name() == "overcast" and absf(_sun.light_energy - base_energy) < 0.1:
+		if _lighting.get_mood_name() == "overcast" \
+				and absf(_sun.light_energy - base_energy) < 0.1 \
+				and absf(_env.fog_density - base_fog) < 0.005:
 			restored = true
 			break
-	assert_true(restored, "ending the storm tweens back to the overcast base")
+	assert_true(restored, "ending the storm restores light and atmospheric density")
 
 
 func test_underground_view_darkens_mine_and_back() -> void:
@@ -188,10 +202,17 @@ func test_post_stack_tonemaps_and_glow_threshold_targets_emissives() -> void:
 	assert_not_null(_env)
 	if _env == null:
 		return
+	_lighting.apply_quality_settings()
 	assert_eq(_env.tonemap_mode, Environment.TONE_MAPPER_ACES,
 		"the world environment tonemaps with ACES")
-	assert_true(_env.glow_hdr_threshold >= 1.0,
-		"glow threshold sits at/above 1.0 so only real emissives bloom")
+	assert_almost_eq(_env.glow_hdr_threshold, ArtStyle3D.BLOOM_HDR_THRESHOLD, 0.001,
+		"R2 bloom uses the shared warm-source threshold")
+	assert_almost_eq(_env.glow_intensity, ArtStyle3D.BLOOM_INTENSITY, 0.001,
+		"R2 bloom intensity stays restrained")
+	assert_eq(_env.background_color, ArtStyle3D.PALETTE.night,
+		"sky/background uses the R2 night token")
+	assert_eq(_env.fog_light_color, ArtStyle3D.PALETTE.night,
+		"distance fog uses the R2 night token")
 
 
 func test_quality_presets_flip_glow_ssao_fog_shadows() -> void:

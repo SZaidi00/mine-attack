@@ -1,79 +1,62 @@
-## Phase 2 art direction (roadmap/3d-conversion/phase-2-art-pass.md §2.1).
+## Shared art tokens for the 3D presentation. R2 of the visual revamp
+## (roadmap/3d-visual-revamp/01-art-direction.md) grades the world onto cold
+## indigo-slate and blue-white snow, with warmth reserved for practical fire.
+## Primitive rigs keep their silhouettes and sky-side rim until later model
+## phases; team colors and the live colorblind swap remain unchanged.
 ##
-## Shared style tokens for the 3D presentation: the Frostpunk-adjacent
-## palette, faction accent colors, cached flat-shaded materials, low-poly
-## primitive builders, and the global quality preset (Potato / Standard /
-## Fancy) that every 3D system consults for particle counts, shadows and
-## model detail. Pure presentation — never touches the sim.
-##
-## Style rules (see roadmap/3d-conversion/style-guide.md):
-## - Flat-shaded stylized low-poly; roughness 1, no textures.
-## - A unit must read by silhouette at max zoom-out.
-## - Cold blues/greys on the surface, warm ore oranges underground,
-##   sickly greens for necromancy, faction accents (Arcane violet,
-##   Brute ember, Industrial brass).
-##
-## 3D rework phase 4 (roadmap/3d-rework/phase-4): a luminance ladder —
-## terrain darkest, structures mid, units brightest. Team colors are
-## value-lifted 3D variants of the 2D palette and route through
-## team_color(), which mirrors the colorblind swap (enemy scarlet ->
-## ember orange) live from SettingsManager. Entity materials carry a
-## subtle sky-side rim so dark units separate from dark ground even on
-## Potato (where no shadows/SSAO exist).
-##
-## 3D rework phase 5 emission hierarchy (brightest wins bloom, Standard+):
-## telegraph lines 3.2 > meteors/event-zone warnings 2.4-3.0 > combat
-## tracers 2.2-2.6 > burn rings 2.0 > ambient lava/lanterns/unit accents
-## 0.7-1.8 > decorative embers 0.9. Nothing decorative outshines a
-## telegraph.
+## Bloom is restrained to warm emissives. Cool team/faction magic remains
+## emissive for readability but is clamped below the HDR bloom threshold.
 class_name ArtStyle3D
 extends RefCounted
 
 enum Quality { POTATO, STANDARD, FANCY }
 
 const PALETTE := {
-	"snow": Color(0.96, 0.98, 1.0),
-	"ice": GameManager.COLOR_ICE,
-	"deep_ice": GameManager.COLOR_DEEP_ICE,
-	"rock": Color(0.24, 0.25, 0.29),
-	"rock_dark": Color(0.14, 0.15, 0.18),
-	"wood": Color(0.36, 0.26, 0.16),
-	"wood_dark": Color(0.24, 0.17, 0.11),
-	"steel": GameManager.COLOR_STEEL,
-	"rust": GameManager.COLOR_RUST,
-	"ore_bright": Color(0.94, 0.7, 0.22),
-	"coal": Color(0.12, 0.12, 0.14),
-	"cloth": Color(0.32, 0.34, 0.38),
-	"cloth_dark": Color(0.2, 0.21, 0.25),
-	"skin": Color(0.78, 0.62, 0.5),
-	"lava": Color(0.91, 0.22, 0.05),
-	"magma": Color(0.16, 0.12, 0.11),
-	"necro": Color(0.62, 1.0, 0.62),
-	"lamp_warm": Color(1.0, 0.82, 0.45),
+	"night": Color("#232C3A"),
+	"fog_void": Color("#10141C"),
+	"snow": Color("#DDE8F2"),
+	"snow_shadow": Color("#8FA3B8"),
+	"ice": Color("#8FA3B8"),
+	"deep_ice": Color("#232C3A"),
+	"rock": Color("#3A3F4A"),
+	"rock_dark": Color("#1C2029"),
+	"wood": Color("#5C4632"),
+	"wood_dark": Color("#40352C"),
+	"steel": Color("#4E5A66"),
+	"brass": Color("#C9A227"),
+	"rust": Color("#C45C26"),
+	"ore_bright": Color("#F0B23C"),
+	"coal": Color("#1C2029"),
+	"cloth": Color("#536171"),
+	"cloth_dark": Color("#2B3442"),
+	"skin": Color("#C4A88F"),
+	"lava": Color("#E8380D"),
+	"magma": Color("#29252A"),
+	"necro": Color("#9EDF9E"),
+	"lamp_warm": Color("#FFB85C"),
+	"witch_light": Color("#A8E6C8"),
+	"storm_gloom": Color("#B9C6D4"),
 }
 
-## 3D rework phase 4: value-lifted team colors (the 2D palette's #3B82F6 /
-## #B91C1C sat too close to the terrain value range). The colorblind enemy
-## mirrors UIThemeTokens' red -> orange swap, lifted the same way.
 const TEAM_PLAYER := Color("#4A90F5")
 const TEAM_ENEMY := Color("#E03232")
 const TEAM_ENEMY_COLORBLIND := Color("#E88A2E")
 
-## Entity rim light (unit/structure materials, not terrain): a subtle
-## sky-side edge so bodies detach from the ground at every quality tier.
 const RIM_STRENGTH: float = 0.5
 const RIM_TINT: float = 0.6
+const MATERIAL_ROUGHNESS: float = 0.92
+const BLOOM_HDR_THRESHOLD: float = 1.4
+const BLOOM_INTENSITY: float = 0.35
+const BLOOM_STRENGTH: float = 0.65
+const COOL_EMISSION_CAP: float = 0.65
 
-## Faction identity accents (§2.2): Arcane violet, Brute ember, Industrial
-## brass. Phase 4 moved Brute off red — it collided with the enemy team
-## scarlet; ember orange fits "raw power" and the lava world instead.
 const FACTION_ACCENTS := {
-	"arcane": Color(0.55, 0.36, 0.96),
-	"brute": Color(0.93, 0.42, 0.11),
-	"industrial": Color(0.79, 0.64, 0.15),
+	"arcane": Color("#8C5CF6"),
+	"brute": Color("#EE6B1C"),
+	"industrial": Color("#C9A227"),
 }
 
-const UNDEAD_TINT := Color(0.62, 1.0, 0.62)
+const UNDEAD_TINT := Color("#9EDF9E")
 
 static var quality: Quality = Quality.FANCY
 
@@ -134,26 +117,66 @@ static func detail_enabled() -> bool:
 	return quality != Quality.POTATO
 
 
-## Cached flat-shaded StandardMaterial3D. Emissive materials get their own
-## cache slot; vertex colors are NOT used here (callers assign albedo).
-## rim adds the sky-side entity rim (RIM_STRENGTH/RIM_TINT) — unit and
-## structure bodies only; terrain, glow, and UI-ish materials stay rimless.
-static func get_material(color: Color, emission: Color = Color(0, 0, 0), emission_energy: float = 0.0, alpha: float = 1.0, rim: bool = false) -> StandardMaterial3D:
-	var key := "%s|%s|%f|%f|%d" % [color.to_html(), emission.to_html(), emission_energy, alpha, int(rim)]
+## 3D render scale per preset (applied to the root viewport's scaling_3d).
+## Potato renders at 3/4 resolution — on weak GPUs this buys more than every
+## other Potato cut combined. Standard stays native on desktop but drops to
+## 0.85 on web, where fill-rate is the usual bottleneck. Fancy is native.
+static func render_scale() -> float:
+	match quality:
+		Quality.POTATO:
+			return 0.75
+		Quality.STANDARD:
+			return 0.85 if OS.has_feature("web") else 1.0
+	return 1.0
+
+
+## MSAA 2x only on desktop Fancy — on gl_compatibility/web the multisample
+## cost outweighs the edge cleanup.
+static func msaa_enabled() -> bool:
+	return quality == Quality.FANCY and not OS.has_feature("web")
+
+
+## Resolve a settings-panel value ("auto" | "potato" | "standard" | "fancy")
+## to a preset; "auto" falls back to the platform detect.
+static func quality_from_string(value: String) -> Quality:
+	match value:
+		"potato":
+			return Quality.POTATO
+		"standard":
+			return Quality.STANDARD
+		"fancy":
+			return Quality.FANCY
+	return auto_detect_quality()
+
+
+static func emission_energy(color: Color, requested: float) -> float:
+	var warm := color.r > color.b and color.r >= color.g
+	return requested if warm else minf(requested, COOL_EMISSION_CAP)
+
+
+static func apply_emission(mat: StandardMaterial3D, color: Color, requested: float) -> void:
+	mat.emission_enabled = requested > 0.0
+	mat.emission = color
+	mat.emission_energy_multiplier = emission_energy(color, requested)
+
+
+## Cached high-roughness material. Emissive materials get their own cache
+## slot; vertex colors are NOT used here (callers assign albedo). Entity rim
+## is opt-in so terrain, glow, and UI-like materials stay rimless.
+static func get_material(color: Color, emission: Color = Color(0, 0, 0), emission_energy_requested: float = 0.0, alpha: float = 1.0, rim: bool = false) -> StandardMaterial3D:
+	var key := "%s|%s|%f|%f|%d" % [color.to_html(), emission.to_html(), emission_energy_requested, alpha, int(rim)]
 	if _materials.has(key):
 		return _materials[key]
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
-	mat.roughness = 1.0
+	mat.roughness = MATERIAL_ROUGHNESS
 	mat.metallic = 0.0
 	if rim:
 		mat.rim_enabled = true
 		mat.rim = RIM_STRENGTH
 		mat.rim_tint = RIM_TINT
-	if emission_energy > 0.0:
-		mat.emission_enabled = true
-		mat.emission = emission
-		mat.emission_energy_multiplier = emission_energy
+	if emission_energy_requested > 0.0:
+		apply_emission(mat, emission, emission_energy_requested)
 	if alpha < 1.0:
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		mat.albedo_color.a = alpha

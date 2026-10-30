@@ -57,3 +57,25 @@ func test_parse_shots_skips_garbage() -> void:
 	var shots := CaptureDriver.parse_shots("bogus;;10:start;custom:1:2")
 	assert_eq(shots.size(), 1)
 	assert_eq(shots[0].pose, "start")
+
+
+func test_parse_shots_accepts_breach_pose() -> void:
+	var shots := CaptureDriver.parse_shots("12:breach")
+	assert_eq(shots.size(), 1)
+	assert_eq(shots[0].pose, "breach")
+	assert_eq(shots[0].t, 12.0)
+
+
+func test_parse_shots_accepts_r7_unit_lineups() -> void:
+	var shots := CaptureDriver.parse_shots("4:units;8:units_underground")
+	assert_eq(shots.size(), 2)
+	assert_eq(shots[0].pose, "units")
+	assert_eq(shots[1].pose, "units_underground")
+
+
+func test_parse_shots_accepts_r8_showcase_poses() -> void:
+	var shots := CaptureDriver.parse_shots("8:base;16:dunes;24:fortress")
+	assert_eq(shots.size(), 3)
+	assert_eq(shots[0].pose, "base")
+	assert_eq(shots[1].pose, "dunes")
+	assert_eq(shots[2].pose, "fortress")

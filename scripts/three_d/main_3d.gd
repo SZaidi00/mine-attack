@@ -21,7 +21,8 @@ const EFFECTS_3D_SCRIPT: GDScript = preload("res://scripts/three_d/effects_3d.gd
 
 ## 3D units per 2D pixel. The map is ~2560x800 px, i.e. ~26x8 units.
 const WORLD_SCALE: float = 0.01
-const PITCH_DEGREES: float = 55.0
+const SURFACE_PITCH_DEGREES: float = 55.0
+const UNDERGROUND_PITCH_DEGREES: float = 82.5
 ## 3D rework Phase 2: narrow vertical FOV (Godot's default is 75). The SC2/
 ## TAB trick — apparent size at the same dolly jumps ~1.6x and the board
 ## stops reading like a tilted diorama. Same for every quality preset;
@@ -32,8 +33,10 @@ const CAMERA_FOV: float = 45.0
 ## (~13 units of ground width need dolly ~5.2; 16 shows the whole map).
 const DOLLY_MIN: float = 3.0
 const DOLLY_MAX: float = 16.0
+const UNDERGROUND_DOLLY_MAX: float = 10.0
 const DOLLY_WHEEL_STEP: float = 1.1
 const DOLLY_START: float = 12.0
+const VIEW_TWEEN_DURATION: float = 0.25
 const PAN_SPEED: float = 10.0
 const EDGE_PAN_MARGIN: float = 24.0
 
@@ -53,13 +56,18 @@ var _focus: Vector3 = Vector3.ZERO
 var _surface_focus: Vector3
 var _underground_focus: Vector3
 var _dolly: float = DOLLY_START
+var _pitch_degrees: float = SURFACE_PITCH_DEGREES
+var _underground_view: bool = false
+var _view_tween: Tween
 var _shake: float = 0.0
+var _breach_played: bool = false
 
 
 func _ready() -> void:
-	# §2.7: the quality preset gates shadows/fog/particles globally; UI to
-	# switch presets is out of scope for the shell.
-	ArtStyle3D.apply_quality(ArtStyle3D.auto_detect_quality())
+	# §2.7: the quality preset gates shadows/post/particles globally. The
+	# Settings panel can override the platform auto-detect (persisted as
+	# [video] graphics_quality); changes apply live via _on_setting_changed.
+	ArtStyle3D.apply_quality(ArtStyle3D.quality_from_string(SettingsManager.get_graphics_quality()))
 	_camera = $CameraRig/Camera3D
 	_camera.fov = CAMERA_FOV
 	_terrain = $World3D/Terrain3D
@@ -95,6 +103,12 @@ func _ready() -> void:
 	_sim.get_node("Units").visible = false
 	_sim.get_node("Projectiles").visible = false
 	_sim.get_node("Structures").visible = false
+	# The HUD stays for controls, but its 2D weather renderer clips snow and
+	# eruption effects to a screen band. The 3D weather volume replaces it.
+	var weather_overlay := _sim.get_node_or_null("UI/HUD/WeatherOverlay") as Control
+	if weather_overlay != null:
+		weather_overlay.hide()
+		weather_overlay.set_process(false)
 
 	# View bookmarks mirror the 2D camera defaults: surface start position
 	# and the own mine entry's underground position.
@@ -106,6 +120,8 @@ func _ready() -> void:
 
 	var grid: GridWorld = _sim.get_node("World/GridWorld") as GridWorld
 	_terrain.setup(grid)
+	# Structure proxies arriving/leaving re-stamp the dune clearances.
+	_proxies.structure_set_changed.connect(_terrain.notify_structures_changed)
 	# §2.5: art-directed effects attach the stub script onto the existing
 	# Effects3D container (node paths stay stable for tests/proxies); wire it
 	# after terrain, before the proxies reconcile.
@@ -128,6 +144,7 @@ func _ready() -> void:
 	# §2.5 juice: world events shake the rig (max-wins, reduced-motion aware).
 	grid.cave_in_occurred.connect(_on_cave_in_occurred)
 	grid.lava_risen.connect(_on_lava_risen)
+	grid.cell_destroyed.connect(_on_cell_destroyed)
 	# Phase 5 volcano presence: a low rumble on the eruption warning, a hard
 	# jolt when the meteors start falling (the same signals the HUD banners
 	# use; add_shake honors the reduced-motion setting). WeatherManager
@@ -146,11 +163,30 @@ func _ready() -> void:
 	SettingsManager.setting_changed.connect(_on_setting_changed)
 
 
-## Live palette swap (phase 4): only the colorblind toggle changes 3D team
-## colors; other settings are handled by their own listeners.
+## Live settings reactions (phase 4 + perf pass): colorblind re-skins the
+## board, graphics_quality re-lands the whole preset.
 func _on_setting_changed(what: StringName) -> void:
 	if what == &"colorblind" and _proxies != null:
 		_proxies.rebuild_all()
+	elif what == &"graphics_quality":
+		_apply_quality_live(ArtStyle3D.quality_from_string(SettingsManager.get_graphics_quality()))
+
+
+## Live quality switch (Settings panel): re-land shadows/post/render-scale,
+## drop every entity proxy so model fidelity and lantern light tiers rebuild
+## against the new preset (the proven colorblind-swap path), and force the
+## terrain/fog to repaint (snow cover, detail density, drift shader).
+func _apply_quality_live(q: ArtStyle3D.Quality) -> void:
+	if q == ArtStyle3D.quality:
+		return
+	ArtStyle3D.apply_quality(q)
+	_lighting.apply_quality_settings()
+	if _proxies != null:
+		_proxies.rebuild_all()
+	if _terrain != null:
+		_terrain.force_full_rebuild()
+	if _fog != null:
+		_fog.apply_quality()
 
 
 func _to_ground(pos2d: Vector2) -> Vector3:
@@ -159,23 +195,28 @@ func _to_ground(pos2d: Vector2) -> Vector3:
 
 func _process(delta: float) -> void:
 	_pan(delta)
-	# Glue the Camera3D to the rig focus at the fixed pitch; dolly changes
-	# only the horizontal distance (and derived height), never the pitch.
-	var height: float = _dolly * tan(deg_to_rad(PITCH_DEGREES))
-	$CameraRig.position = _focus + _shake_offset()
 	if _shake > 0.0:
 		_shake = maxf(0.0, _shake - 4.0 * delta)
+	_sync_camera()
+
+
+func _sync_camera() -> void:
+	# Dolly is the horizontal distance; pitch controls the derived height and
+	# tweens from the surface dolly to the near-top-down underground plane.
+	var height: float = _dolly * tan(deg_to_rad(_pitch_degrees))
+	$CameraRig.position = _focus + _shake_offset()
 	_camera.position = Vector3(0.0, height, _dolly)
-	_camera.rotation_degrees = Vector3(-PITCH_DEGREES, 0.0, 0.0)
+	_camera.rotation_degrees = Vector3(-_pitch_degrees, 0.0, 0.0)
 
 
 ## §2.5 juice: register a world-event rumble. Max-wins like the 2D
 ## PlayerController shake; a no-op under the reduced-motion accessibility
-## setting (which also silences the invisible 2D shake).
+## setting (which also silences the invisible 2D shake). R5 halves ordinary
+## event shake; cave-ins pass 1.0 to retain their original 0.5 impulse.
 func add_shake(strength: float) -> void:
 	if SettingsManager.get_reduced_motion():
 		return
-	_shake = maxf(_shake, strength)
+	_shake = maxf(_shake, strength * 0.5)
 
 
 func _shake_offset() -> Vector3:
@@ -186,7 +227,18 @@ func _shake_offset() -> Vector3:
 
 
 func _on_cave_in_occurred(_center: Vector2i) -> void:
-	add_shake(0.5)
+	add_shake(1.0)
+
+
+func _on_cell_destroyed(center: Vector2i) -> void:
+	if _breach_played:
+		return
+	var grid := _sim.get_node("World/GridWorld") as GridWorld
+	if grid.get_wall_hp() > 0:
+		return
+	_breach_played = true
+	(_effects as Effects3D).play_wall_breach(center)
+	add_shake(0.45)
 
 
 func _on_lava_risen(_layers: int) -> void:
@@ -272,6 +324,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_zoom_toward(null, DOLLY_WHEEL_STEP)
 
 
+func _dolly_max_for_view() -> float:
+	return UNDERGROUND_DOLLY_MAX if _underground_view else DOLLY_MAX
+
+
 ## Wheel zoom dolls toward the cursor's terrain point (the SC2/TAB
 ## convention) instead of the screen center: the focus glides along the line
 ## to the anchor in proportion to the dolly change, so the ground point under
@@ -279,7 +335,7 @@ func _unhandled_input(event: InputEvent) -> void:
 ## camera_zoom actions) passes a null screen pos and anchors on the viewport
 ## center instead.
 func _zoom_toward(screen_pos: Variant, factor: float) -> void:
-	var new_dolly := clampf(_dolly * factor, DOLLY_MIN, DOLLY_MAX)
+	var new_dolly := clampf(_dolly * factor, DOLLY_MIN, _dolly_max_for_view())
 	if is_equal_approx(new_dolly, _dolly):
 		return
 	var anchor: Variant = _terrain_point_at(screen_pos)
@@ -292,9 +348,9 @@ func _zoom_toward(screen_pos: Variant, factor: float) -> void:
 
 
 ## World-space ground point under a screen position (null = viewport
-## center): the camera ray is iterated a few times against the sculpted
-## terrain heights, which vary gently (+-0.03 open ground, wall ridges to
-## 0.2) so the fixed-point loop converges almost immediately. Null when the
+## center): the camera ray is iterated a few times against the dune-field
+## heights, which vary gently (dunes to ~0.13, wall ridges to 0.2) so the
+## fixed-point loop converges almost immediately. Null when the
 ## ray never meets the ground (looking at the sky) or the rig isn't up yet.
 func _terrain_point_at(screen_pos: Variant) -> Variant:
 	if _camera == null or _terrain == null:
@@ -319,20 +375,46 @@ func _terrain_point_at(screen_pos: Variant) -> Variant:
 
 
 ## PlayerController (input authority) says the Tab view changed; the rig
-## teleports to the bookmark of the requested layer, remembering where the
-## view being left was parked (mirrors player_camera.set_view, minus slide).
+## glides to the bookmark of the requested layer, remembering where the view
+## being left was parked (mirrors player_camera.set_view).
 func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
 	_apply_view(mode == PlayerController.ViewMode.UNDERGROUND, false)
 
 
+## Immediate deterministic posing for the capture harness. An active view
+## tween must not overwrite the requested shot on its next process frame.
+func pose_camera(focus: Vector3, dolly: float, pitch: float = SURFACE_PITCH_DEGREES) -> void:
+	if is_instance_valid(_view_tween):
+		_view_tween.kill()
+	_focus = focus
+	_dolly = clampf(dolly, DOLLY_MIN, _dolly_max_for_view())
+	_pitch_degrees = pitch
+	_clamp_focus()
+	_sync_camera()
+
+
 func _apply_view(underground: bool, initial: bool) -> void:
+	_underground_view = underground
+	var target_focus := _underground_focus if underground else _surface_focus
 	if not initial:
 		if underground:
 			_surface_focus = _focus
-			_focus = _underground_focus
 		else:
 			_underground_focus = _focus
-			_focus = _surface_focus
+	var target_pitch := UNDERGROUND_PITCH_DEGREES if underground else SURFACE_PITCH_DEGREES
+	var target_dolly := clampf(_dolly, DOLLY_MIN, _dolly_max_for_view())
+	if is_instance_valid(_view_tween):
+		_view_tween.kill()
+	if initial:
+		_focus = target_focus
+		_dolly = target_dolly
+		_pitch_degrees = target_pitch
+	else:
+		_view_tween = create_tween().set_parallel(true)
+		_view_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		_view_tween.tween_property(self, "_focus", target_focus, VIEW_TWEEN_DURATION)
+		_view_tween.tween_property(self, "_dolly", target_dolly, VIEW_TWEEN_DURATION)
+		_view_tween.tween_property(self, "_pitch_degrees", target_pitch, VIEW_TWEEN_DURATION)
 	_terrain.set_underground_view(underground)
 	_proxies.set_underground_view(underground)
 	_selection_rings.set_underground_view(underground)
@@ -351,6 +433,9 @@ func _exit_tree() -> void:
 		WeatherManager.volcano_warning_started.disconnect(_on_volcano_warning_started)
 	if WeatherManager.volcano_started.is_connected(_on_volcano_started):
 		WeatherManager.volcano_started.disconnect(_on_volcano_started)
+	# Same for the settings listener (SettingsManager outlives the shell).
+	if SettingsManager.setting_changed.is_connected(_on_setting_changed):
+		SettingsManager.setting_changed.disconnect(_on_setting_changed)
 	# The sim is a child of the window root (so /root/Main resolves), not of
 	# this shell — free it or scene switches would leak it and leave a stale
 	# sim running under the next scene. Deferred: the root is busy propagating

@@ -19,32 +19,45 @@ extends Node
 ##                        start     - spawn camera, untouched
 ##                        surface   - surface view bookmark, recentered
 ##                        zoomout   - surface, camera centered, 0.5x zoom
-##                        underground - own-mine underground bookmark
+##                        underground - built mine lantern + local-area light pool
+##                        breach    - underground + forced first wall breach
+##                        units / units_underground - R7 eight-unit lineup
+##                        base      - R8 player keep + active production
+##                        dunes     - R8 open snow-field composition
+##                        fortress  - R8 revealed enemy citadel
 ##                        storm     - surface + forced snowstorm
 ##                        volcano   - surface + forced volcano eruption
-##                        custom:X:Y:Z - explicit camera position (X, Y) and
-##                                      zoom factor Z (e.g. custom:0:-150:0.5)
+##                        custom:X:Y:Z - explicit camera focus (X, Y) and
+##                                      dolly Z (e.g. custom:0:-150:6)
+##   --stress-units <n> spawn n extra units per team (surface) once the match
+##                      is up — the 200-unit perf stress for BENCH runs
+##   --bench <seconds>  run the match for this long (sim-seconds), then print
+##                      the Probe3D script-time report and quit. Shots are
+##                      optional in bench mode and still capture if given.
+##                      GPU frame times under software GL are meaningless —
+##                      script milliseconds are the comparable number.
 ##
 ## The driver configures the autoloads exactly like the main menu's Play
-## flow, swaps in scenes/main.tscn, and hands control to a CapturePilot
+## flow, swaps in the gameplay scene, and hands control to a CapturePilot
 ## node that survives the scene swap (it is parented to the root, not to
-## the freed menu scene).
+## the freed menu scene). On main that's scenes/main.tscn; on the 3D
+## branch (feat/3d-conversion) the menu enters scenes/main_3d.tscn and so
+## does the driver — keep this in sync with main_menu.gd's Play flow.
 ##
 ## Determinism: run with --fixed-fps 60 so sim-seconds == frames / 60.
 ## Headless rendering additionally needs --rendering-driver opengl3 under
 ## Xvfb (software Vulkan renders blank frames); see tools/capture/README.md.
 ##
-## This tool is presentation-only: it never writes to sim state beyond the
-## same setters the menu uses (difficulty / faction / seed / speed), and it
-## is inert unless launched as the scene — nothing here runs during normal
-## play or in the GUT suite.
+## This tool changes only its throwaway capture match and is inert unless
+## launched as the scene — nothing here runs during normal play or GUT.
 
 const CapturePilot := preload("res://tools/capture/capture_pilot.gd")
 
 const DEFAULT_SEED := 12345
 const VALID_FACTIONS: Array[String] = ["arcane", "brute", "industrial"]
 const VALID_POSES: Array[String] = [
-	"start", "surface", "zoomout", "underground", "storm", "volcano",
+	"start", "surface", "zoomout", "underground", "breach", "storm", "volcano",
+	"units", "units_underground", "base", "dunes", "fortress",
 ]
 
 
@@ -64,7 +77,7 @@ func _ready() -> void:
 	get_tree().root.add_child.call_deferred(pilot)
 	# Also deferred: change_scene_to_file manipulates the root's children and
 	# errors with "busy" when invoked from inside _ready.
-	get_tree().change_scene_to_file.call_deferred("res://scenes/main.tscn")
+	get_tree().change_scene_to_file.call_deferred("res://scenes/main_3d.tscn")
 
 
 func _apply_game_config(config: Dictionary) -> void:
@@ -74,6 +87,11 @@ func _apply_game_config(config: Dictionary) -> void:
 	GameManager.set_game_speed(config.speed)
 	FactionManager.set_player_faction(config.faction)
 	FactionManager.pick_random_enemy_faction()
+	WeatherManager.set_weather_events_enabled(false)
+	WeatherManager.set_volcano_events_enabled(false)
+	if config.get("bench", 0.0) > 0.0:
+		# BENCH mode: script-time instrumentation on for the whole window.
+		Probe3D.enabled = true
 
 
 ## Parse user args into a config Dictionary, or return {} when the args do
@@ -86,6 +104,8 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 		"seed": DEFAULT_SEED,
 		"speed": 1.0,
 		"shots": [],
+		"stress_units": 0,
+		"bench": 0.0,
 	}
 	var i := 0
 	while i < args.size():
@@ -114,14 +134,25 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 				i += 1
 				if i < args.size():
 					config.shots = parse_shots(args[i])
+			"--stress-units":
+				i += 1
+				if i < args.size():
+					config.stress_units = args[i].to_int()
+			"--bench":
+				i += 1
+				if i < args.size():
+					config.bench = args[i].to_float()
 		i += 1
-	if config.out.is_empty() or (config.shots as Array).is_empty():
+	# Capture mode needs an output dir + shots; bench mode only needs a window.
+	if config.bench <= 0.0 and (config.out.is_empty() or (config.shots as Array).is_empty()):
 		return {}
 	config.difficulty = clampi(config.difficulty, 0, 4)
 	if not VALID_FACTIONS.has(config.faction):
 		config.faction = "arcane"
 	if config.seed <= 0:
 		config.seed = DEFAULT_SEED
+	config.stress_units = clampi(config.stress_units, 0, 100)
+	config.bench = maxf(config.bench, 0.0)
 	return config
 
 

@@ -22,41 +22,43 @@ const COLOR_ARCANE: Color = Color("#AF84FB")
 const COLOR_BRUTE: Color = Color("#EE6B1C")
 const COLOR_INDUSTRIAL: Color = Color("#FBBF24")
 
-# ─── Core UI colors (source of truth: design_tokens.json) ───
-const COLOR_PANEL_BG: Color = Color(12.0 / 255.0, 17.0 / 255.0, 27.0 / 255.0, 0.94)
-const COLOR_PANEL_BORDER: Color = Color(1.0, 1.0, 1.0, 0.08)
-const COLOR_BUTTON_NORMAL: Color = Color("#1A2434")
-const COLOR_BUTTON_HOVER: Color = Color("#253650")
-const COLOR_BUTTON_PRESSED: Color = Color("#111927")
-const COLOR_BUTTON_DISABLED: Color = Color("#151C29")
-const COLOR_BUTTON_BORDER: Color = Color(1.0, 1.0, 1.0, 0.07)
-const COLOR_BUTTON_HOVER_BORDER: Color = Color("#4A86C8")
-const COLOR_TAB_ACTIVE: Color = Color("#1F3A5C")
-const COLOR_TAB_ACTIVE_BORDER: Color = Color("#4A86C8")
-const COLOR_UPGRADE_BG: Color = Color("#272210")
-const COLOR_UPGRADE_BORDER: Color = Color("#8A6D1F")
-const COLOR_TEXT_GOLD: Color = Color("#FBBF24")
-const COLOR_TEXT_PRIMARY: Color = Color("#E2E8F0")
-const COLOR_TEXT_DIM: Color = Color("#94A3B8")
+# ─── Core UI colors ───
+const COLOR_BRASS: Color = Color("#C9A227")
+const COLOR_PANEL_BG: Color = Color(13.0 / 255.0, 20.0 / 255.0, 31.0 / 255.0, 0.93)
+const COLOR_PANEL_BORDER: Color = Color(COLOR_BRASS, 0.34)
+const COLOR_BUTTON_NORMAL: Color = Color("#182334")
+const COLOR_BUTTON_HOVER: Color = Color("#26364B")
+const COLOR_BUTTON_PRESSED: Color = Color("#101927")
+const COLOR_BUTTON_DISABLED: Color = Color("#141C28")
+const COLOR_BUTTON_BORDER: Color = Color(COLOR_BRASS, 0.15)
+const COLOR_BUTTON_HOVER_BORDER: Color = Color("#D8BC6A")
+const COLOR_TAB_ACTIVE: Color = Color("#263750")
+const COLOR_TAB_ACTIVE_BORDER: Color = COLOR_BRASS
+const COLOR_UPGRADE_BG: Color = Color("#2B2517")
+const COLOR_UPGRADE_BORDER: Color = Color("#A98832")
+const COLOR_TEXT_GOLD: Color = Color("#E3C46B")
+const COLOR_TEXT_PRIMARY: Color = Color("#E6EDF4")
+const COLOR_TEXT_DIM: Color = Color("#9AAABD")
+const DISPLAY_FONT: Font = preload("res://frost_mines_assets/ui/Cinzel.ttf")
 
 # ─── Warning / event colors ───
-const COLOR_SNOWSTORM_WARNING: Color = Color("#FF4D3F")
-const COLOR_LAVA_WARNING: Color = Color("#FF7F26")
-const COLOR_VOLCANO_WARNING: Color = Color("#FF5926")
+const COLOR_SNOWSTORM_WARNING: Color = Color("#FF6257")
+const COLOR_LAVA_WARNING: Color = Color("#FFB85C")
+const COLOR_VOLCANO_WARNING: Color = Color("#FF8548")
 
 # ─── Derived UI colors ───
-const COLOR_RECESSED_BG: Color = Color("#0b1018")
-const COLOR_RECESSED_BORDER: Color = Color(1.0, 1.0, 1.0, 0.05)
-const COLOR_DANGER_NORMAL: Color = Color("#3d1a1a")
-const COLOR_DANGER_HOVER: Color = Color("#5c2626")
-const COLOR_DANGER_PRESSED: Color = Color("#2a1212")
-const COLOR_SUCCESS_BG: Color = Color("#14251a")
-const COLOR_SUCCESS_BORDER: Color = Color("#3d7a4a")
+const COLOR_RECESSED_BG: Color = Color("#0A111C")
+const COLOR_RECESSED_BORDER: Color = Color(COLOR_BRASS, 0.13)
+const COLOR_DANGER_NORMAL: Color = Color("#3D1D20")
+const COLOR_DANGER_HOVER: Color = Color("#612A2D")
+const COLOR_DANGER_PRESSED: Color = Color("#2A1418")
+const COLOR_SUCCESS_BG: Color = Color("#14251F")
+const COLOR_SUCCESS_BORDER: Color = Color("#3D7A62")
 
 # ─── Spacing / sizing ───
-const RADIUS_PANEL: int = 10
-const RADIUS_BUTTON: int = 8
-const RADIUS_PROGRESS: int = 7
+const RADIUS_PANEL: int = 7
+const RADIUS_BUTTON: int = 5
+const RADIUS_PROGRESS: int = 3
 const PANEL_PADDING: int = 14
 const DENSE_PADDING: int = 8
 const BUTTON_H_PADDING: int = 12
@@ -101,6 +103,10 @@ static func apply_colorblind_palette(enabled: bool) -> void:
 		COLOR_VICTORY = COLOR_VICTORY_DEFAULT
 
 
+static func apply_display_font(control: Control) -> void:
+	control.add_theme_font_override("font", DISPLAY_FONT)
+
+
 # ─── Panel factories ───
 
 static func make_panel_style(
@@ -112,10 +118,11 @@ static func make_panel_style(
 	style.bg_color = bg
 	style.border_color = border
 	style.set_border_width_all(1)
+	style.border_width_top = 2
 	style.set_corner_radius_all(radius)
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
-	style.shadow_size = 6
-	style.shadow_offset = Vector2(0.0, 2.0)
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.48)
+	style.shadow_size = 10
+	style.shadow_offset = Vector2(0.0, 3.0)
 	return style
 
 
@@ -124,14 +131,12 @@ static func make_panel_style(
 ## battlefield backdrop.
 static func make_metal_card_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.set_corner_radius_all(14)
+	style.set_corner_radius_all(RADIUS_PANEL)
 	style.set_border_width_all(1)
-	# Frosted rim highlight (StyleBoxFlat uses one border color for all sides).
-	style.border_color = Color(1.0, 1.0, 1.0, 0.20)
-	# Thicker top edge to read as a stamped-steel lip.
+	style.border_color = Color(COLOR_BRASS, 0.48)
 	style.border_width_top = 2
-	style.bg_color = Color("#151c29")
-	style.shadow_color = Color(0.0, 0.0, 0.0, 0.52)
+	style.bg_color = COLOR_PANEL_BG
+	style.shadow_color = Color(0.0, 0.0, 0.0, 0.58)
 	style.shadow_size = 26
 	style.shadow_offset = Vector2(0.0, 10.0)
 	style.content_margin_left = PANEL_PADDING + 10

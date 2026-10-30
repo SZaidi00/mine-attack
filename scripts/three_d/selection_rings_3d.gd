@@ -24,11 +24,18 @@ const BASE_RADIUS: float = 0.24 * UnitProxy3D.PROXY_SCALE
 const FLYER_RADIUS: float = 0.44 * UnitProxy3D.PROXY_SCALE
 const PULSE_AMOUNT: float = 0.06
 const PULSE_PERIOD: float = 0.8
+## Hovered-unit re-scan cadence: the full units-group scan used to run every
+## frame even with an empty selection; it now re-runs on mouse motion plus a
+## 10Hz fallback (a unit can walk under a stationary cursor).
+const HOVER_RESCAN_INTERVAL: float = 0.1
 
 var _pc: PlayerController
 var _underground_view := false
 var _multimesh: MultiMesh
 var _pulse_time := 0.0
+var _hovered: Unit = null
+var _hover_accum := 0.0
+var _last_mouse_pos := Vector2(-1e9, -1e9)
 
 
 func _init() -> void:
@@ -50,6 +57,9 @@ func setup(pc: PlayerController) -> void:
 
 func set_underground_view(underground: bool) -> void:
 	_underground_view = underground
+	# Eligibility changed for every unit: re-scan on the next tick.
+	_hovered = null
+	_hover_accum = HOVER_RESCAN_INTERVAL
 
 
 func _process(delta: float) -> void:
@@ -57,6 +67,7 @@ func _process(delta: float) -> void:
 	if _pc == null or not is_instance_valid(_pc):
 		_multimesh.instance_count = 0
 		return
+	_update_hovered(delta)
 	var transforms: Array[Transform3D] = []
 	var colors: Array[Color] = []
 	var pulse: float = 1.0 + PULSE_AMOUNT * sin(_pulse_time * TAU / PULSE_PERIOD)
@@ -64,7 +75,9 @@ func _process(delta: float) -> void:
 		if not _ring_eligible(unit):
 			continue
 		_add_ring(transforms, colors, unit, _ring_radius(unit) * pulse, SELECT_COLOR)
-	var hovered: Unit = _hovered_unit()
+	# The scan runs at 10Hz + on mouse motion; eligibility (death, fog, layer)
+	# is re-checked at draw time so a stale pick never survives those flips.
+	var hovered: Unit = _hovered if (_hovered != null and _ring_eligible(_hovered)) else null
 	if hovered != null and not _pc.get_selected_units().has(hovered):
 		_add_ring(transforms, colors, hovered, _ring_radius(hovered), HOVER_COLOR)
 	_multimesh.instance_count = transforms.size()
@@ -83,7 +96,11 @@ func _ring_eligible(unit: Variant) -> bool:
 
 func _add_ring(transforms: Array[Transform3D], colors: Array[Color], unit: Unit, radius: float, color: Color) -> void:
 	var pos: Vector2 = unit.global_position
-	var origin := Vector3(pos.x * Presentation3D.WORLD_SCALE, Presentation3D.GROUND_LIFT, pos.y * Presentation3D.WORLD_SCALE)
+	var wx := pos.x * Presentation3D.WORLD_SCALE
+	var wz := pos.y * Presentation3D.WORLD_SCALE
+	# R3: the ring hovers the standard lift above the dune surface under the
+	# unit (flat 0 underground), same clearance the flat floor used.
+	var origin := Vector3(wx, Presentation3D.ground_height(get_tree(), wx, wz) + Presentation3D.GROUND_LIFT, wz)
 	transforms.append(Transform3D(Basis.from_scale(Vector3(radius, 1.0, radius)), origin))
 	colors.append(color)
 
@@ -99,17 +116,31 @@ func _ring_radius(unit: Unit) -> float:
 
 
 ## Nearest unit under the cursor (either team, like the 2D hover HP bar) on
-## the viewed layer and visible through fog. Returns null when the cursor is
-## over empty ground, the HUD, or while a click-drag selection box is open.
-func _hovered_unit() -> Unit:
+## the viewed layer and visible through fog. Returns early without scanning
+## unless the cursor moved or the 10Hz fallback fired. Null while a
+## click-drag box is open, a build mode is armed, or the cursor is over a
+## Control (HUD).
+func _update_hovered(delta: float) -> void:
+	_hover_accum += delta
 	if _pc._is_dragging or _pc._build_mode != "":
-		return null
+		_hovered = null
+		return
 	var viewport := _pc.get_viewport()
-	if viewport == null or viewport.gui_get_hovered_control() != null:
-		return null
-	var world_pos: Vector2 = viewport.get_canvas_transform().affine_inverse() * viewport.get_mouse_position()
+	if viewport == null:
+		_hovered = null
+		return
+	var mouse_pos: Vector2 = viewport.get_mouse_position()
+	if mouse_pos == _last_mouse_pos and _hover_accum < HOVER_RESCAN_INTERVAL:
+		return
+	_last_mouse_pos = mouse_pos
+	_hover_accum = 0.0
+	if viewport.gui_get_hovered_control() != null:
+		_hovered = null
+		return
+	var world_pos: Vector2 = viewport.get_canvas_transform().affine_inverse() * mouse_pos
 	var best: Unit = null
 	var best_dist: float = GridWorld.CELL_SIZE / 1.5
+	var probe_start := Time.get_ticks_usec() if Probe3D.enabled else 0
 	for unit in get_tree().get_nodes_in_group("units"):
 		if not _ring_eligible(unit):
 			continue
@@ -117,4 +148,6 @@ func _hovered_unit() -> Unit:
 		if d < best_dist:
 			best_dist = d
 			best = unit
-	return best
+	if Probe3D.enabled:
+		Probe3D.add("ring_hover_scan", (Time.get_ticks_usec() - probe_start) / 1000.0)
+	_hovered = best

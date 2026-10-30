@@ -17,13 +17,21 @@ heavy feature work — they make everything else safer.
 
 ## Performance
 
-- [ ] **Web performance audit** — flagged in IDEAS.md; profile
-      `gl_compatibility` + per-frame `_draw` costs with a large army
-      *before* adding visual features, and again as the Phase 1 gate
-      for the 3D port.
-- [ ] **Perf regression check in CI** — capture frame-time stats from a
-      scripted headless scenario; fail on large regressions. Only worth
-      building after the audit gives us a baseline.
+- [x] **Web performance audit** — 3D presentation perf pass (2026-10):
+      per-frame unit sync is change-detected (fog-hidden/off-layer proxies
+      early-out, dune re-sample on movement/field revision), fog/terrain
+      rebuilds are event-driven off `GridWorld.player_fog_revision` instead
+      of unconditional 0.5s timers, quality presets carry a render scale
+      (Potato 0.75, web Standard 0.85, FSR where supported) plus MSAA 2x on
+      desktop Fancy, shadows are 2-split 2048² (was 4-split 4096²), and the
+      structure GLB textures dropped 2048² → 1024² (17.8 → 6.0 MB embedded).
+      Remaining owner check: 60 fps @ 200+ units on real hardware (F3 debug
+      overlay now shows frame ms, draws/tris, and per-section script ms).
+- [ ] **Perf regression check in CI** — BENCH mode exists locally
+      (`STRESS_UNITS=100 BENCH=30` in tools/capture prints per-section
+      script-time averages via Probe3D; script ms stay meaningful under
+      software GL where GPU frame times do not). The automated CI gate on
+      top of it is not wired yet.
 
 ## Architecture notes (reference, not tasks)
 

@@ -75,6 +75,42 @@ func test_entity_materials_get_rim_others_do_not() -> void:
 	boxed.free()
 
 
+func test_r2_palette_matches_art_direction_tokens() -> void:
+	var expected := {
+		"night": Color("#232C3A"),
+		"snow": Color("#DDE8F2"),
+		"snow_shadow": Color("#8FA3B8"),
+		"rock": Color("#3A3F4A"),
+		"rock_dark": Color("#1C2029"),
+		"wood": Color("#5C4632"),
+		"steel": Color("#4E5A66"),
+		"brass": Color("#C9A227"),
+		"lamp_warm": Color("#FFB85C"),
+		"rust": Color("#C45C26"),
+		"ore_bright": Color("#F0B23C"),
+		"lava": Color("#E8380D"),
+		"necro": Color("#9EDF9E"),
+		"witch_light": Color("#A8E6C8"),
+		"storm_gloom": Color("#B9C6D4"),
+	}
+	for role in expected:
+		assert_eq(ArtStyle3D.PALETTE[role], expected[role], "R2 token: %s" % role)
+	assert_eq(ArtStyle3D.FACTION_ACCENTS.arcane, Color("#8C5CF6"))
+	assert_eq(ArtStyle3D.FACTION_ACCENTS.brute, Color("#EE6B1C"))
+	assert_eq(ArtStyle3D.FACTION_ACCENTS.industrial, Color("#C9A227"))
+
+
+func test_bloom_clamps_cool_emissives_but_preserves_warm_sources() -> void:
+	var warm := ArtStyle3D.get_material(ArtStyle3D.PALETTE.lamp_warm, ArtStyle3D.PALETTE.lamp_warm, 1.8)
+	assert_almost_eq(warm.emission_energy_multiplier, 1.8, 0.001,
+		"amber practical lights keep their emission energy")
+	var cool := ArtStyle3D.get_material(ArtStyle3D.FACTION_ACCENTS.arcane, ArtStyle3D.FACTION_ACCENTS.arcane, 2.2)
+	assert_true(cool.emission_enabled, "cool magic remains emissive for readability")
+	assert_almost_eq(cool.emission_energy_multiplier, ArtStyle3D.COOL_EMISSION_CAP, 0.001,
+		"cool magic is clamped out of the warm-source bloom range")
+	assert_lt(ArtStyle3D.COOL_EMISSION_CAP, ArtStyle3D.BLOOM_HDR_THRESHOLD)
+
+
 func test_snow_cover_is_a_visible_value_lift() -> void:
-	assert_gt(ArtStyle3D.PALETTE.snow.get_luminance(), GameManager.COLOR_ICE.get_luminance() + 0.05,
-		"storm snow cover visibly whitens the ice surface")
+	assert_gt(ArtStyle3D.PALETTE.snow.get_luminance(), ArtStyle3D.PALETTE.snow_shadow.get_luminance() + 0.05,
+		"storm snow cover visibly whitens the shadow-snow surface")
