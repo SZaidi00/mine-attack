@@ -1,6 +1,6 @@
 # Plan 05 — Play-mode setting (3D default / 2D legacy)
 
-Status: Not started
+Status: Done
 Size: S
 Depends on: —
 

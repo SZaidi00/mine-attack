@@ -161,7 +161,8 @@ mine-attack/
 │                      # models/model_manifest.json), resize_glb_textures.py
 │                      # (downscales embedded GLB textures to the 2048² cap)
 ├── .githooks/         # pre-push release hook
-└── improvements/      # revamp.md + new sprites
+├── improvements/      # revamp.md + new sprites
+└── plans/             # Kimi Code implementation plans — see plans/README.md
 ```
 
 **Implemented revamp phases:** Phase 1 (Fog of War & lanterns), Phase 2 (factions), Phase 3 (towers & walls), Phase 4 (dynamic terrain: lava rising, cave-ins, ore depletion), Phase 5 (weather: snowstorms), Phase 6 (tech-tree overhaul: mutually-exclusive research branches, respec, traps, burning ground), Phase 7 (UI & menu updates: faction-select glow + themed particles, enemy-faction "???" top-bar indicator + identified popup, radial build menu, red weather warning), Phase 8 (AI refactor: AIBeliefSystem autoload, faction scouting, AI lantern placement, weather/lava responses, faction-specific strategies), Phase 9 (volcano weather event: background volcano, eruption warnings, meteors, burn patches, snowstorm extinguishing, lava-time acceleration).
@@ -169,8 +170,13 @@ mine-attack/
 ## Runtime architecture
 
 > **3D conversion branch (`feat/3d-conversion`):** the main menu's Play
-> flow loads `scenes/main_3d.tscn` instead of `main.tscn` (the only menu
-> change; `run/main_scene` stays `scenes/ui/main_menu.tscn`). The Node3D
+> flow loads `scenes/main_3d.tscn` by default (the only menu change;
+> `run/main_scene` stays `scenes/ui/main_menu.tscn`). The entry point is a
+> persisted user setting — `SettingsManager`'s `[video] play_mode`,
+> `"3d"` (default) or `"2d"` (legacy: Play loads `main.tscn` directly, and
+> since desktop rendering switched to `forward_plus` for the 3D port, a
+> 2D-legacy desktop run renders through `forward_plus`; the web/mobile
+> overrides keep `gl_compatibility`). The Node3D
 > shell mounts the untouched `scenes/main.tscn` sim at `/root/Main` (so
 > every hard-coded path keeps working), hides its CanvasItem layers, and
 > renders the 3D presentation in `scenes/world_3d.tscn` (chunked terrain
@@ -262,7 +268,7 @@ Global singletons. All hold per-match state that survives scene reloads; `hud.gd
 - `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Baseline income: both teams trickle `BASELINE_INCOME_COIN` every `BASELINE_INCOME_INTERVAL` from match start, no eligibility gates (AI scaled by the difficulty coin multiplier). Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (same AI scaling), so a wiped economy can always re-staff.
 - `research_manager.gd` — timed branch research tree: mutually-exclusive tiers, one-time 500g respec, active research slot with queue, Ore Sonar scan.
 - `audio_manager.gd` — synthesized SFX and ambience, plus dynamic music: a combat percussion loop fades in with `combat_intensity` (pulsed by `UnitCombat.take_damage` whenever the player team is involved; decays over ~4.5s) while the calm wind/drips layers thin under snowstorms and volcano eruptions. Weather state is polled (`WeatherManager.is_snowstorm_active()`/`is_volcano_active()`) because AudioManager's `_ready` runs before the WeatherManager singleton exists.
-- `settings_manager.gd` — window resolution persistence (desktop only), SFX bus volume (all platforms), graphics-quality override for the 3D presets (`[video] graphics_quality`: auto/potato/standard/fancy; the 3D shell applies it at startup and live via `setting_changed`), accessibility preferences (UI scale, colorblind palette, reduced motion/flash, tutorial-hint state), and remappable key bindings (`[input]` section), all in `user://settings.cfg`. Emits `setting_changed(what: StringName)` so live UI (HUD scale, camera shake, palettes) reacts without polling. `apply_saved_bindings()` rebuilds InputMap key events at startup (mouse buttons are never remapped).
+- `settings_manager.gd` — window resolution persistence (desktop only), SFX bus volume (all platforms), graphics-quality override for the 3D presets (`[video] graphics_quality`: auto/potato/standard/fancy; the 3D shell applies it at startup and live via `setting_changed`), play-mode pick (`[video] play_mode`: "3d" default / "2d" legacy, validated on read), accessibility preferences (UI scale, colorblind palette, reduced motion/flash, tutorial-hint state), and remappable key bindings (`[input]` section), all in `user://settings.cfg`. Emits `setting_changed(what: StringName)` so live UI (HUD scale, camera shake, palettes) reacts without polling. `apply_saved_bindings()` rebuilds InputMap key events at startup (mouse buttons are never remapped).
 - `weather_manager.gd` — snowstorms + volcano eruptions: independent game-time state machines, scheduling/damage/duration scaled by difficulty. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` and `WeatherManager.set_volcano_events_enabled(false)` (tests force events instead).
 - `ai_belief_system.gd` — per-team belief maps (cells/unit sightings/enemy-faction guess) built only from that team's vision; confidence decays on stale intel. Reset per match via `AIBeliefSystem.reset()`.
 - `match_stats.gd` — per-match stats recording: units lost (hooked from `Unit._die`), damage dealt (hooked from unit `take_damage`, credited to the attacker's team), and a 5s coin/population/base-HP timeline (relative to match start, with a t=0 baseline and a match-end point). `build_summary()` also records each team's max completed research tier (`player_max_tier`/`enemy_max_tier`) for post-game coaching hints. Reset per match from `hud._ready` (metadata: difficulty/factions/opener captured there); on `GameManager.game_over` it finalizes `last_summary` for the game-over panel and writes a JSON log to `user://match_logs/`.
@@ -325,7 +331,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
   - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists). Picking a structure hides the tray while the placement ghost is armed — a visible tray would eat the confirming click — and reopening the menu mid-placement cancels the ghost.
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
-- `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system.
+- `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system. A persisted Mode dropdown (`[video] play_mode`, default `"3d"`) beside the Resolution row picks the Play target — the 3D shell or the legacy 2D `main.tscn` — via `_play_scene_path()`.
 - `settings_panel.gd` — shared settings popup opened from the main menu and pause menu Settings buttons; scrollable card with three groups — Display (map seed, UI scale slider, colorblind / reduced motion / reduced flash / tutorial checkboxes, tutorial reset), Audio (SFX volume slider on the SFX bus), Controls (capture-key rebinding rows for `Constants.REMAPPABLE_ACTIONS` with conflict rejection). Main menu and pause menu keep their own inline resolution rows (desktop only).
 - `tutorial_panel.gd` — paginated first-time-player tutorial (7 screens: goal, economy, units, structures, research, weather/terrain, controls/tips) opened from the main menu's Tutorial button; `create()` returns a hidden full-rect overlay like `SettingsPanel`, with Back/Next/Finish navigation and icon-illustrated entry rows built from `_PAGES` data.
 - `minimap.gd` — canvas-drawn minimap Control (terrain by `CellType`, 3-state fog overlay, team-colored unit/building dots, camera viewport rect, click/drag to move the camera; shape-coded ore/lava when colorblind mode is on).

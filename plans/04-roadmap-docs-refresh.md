@@ -1,6 +1,6 @@
 # Plan 04 — Roadmap docs refresh
 
-Status: Not started
+Status: Done
 Size: S
 Depends on: —
 
