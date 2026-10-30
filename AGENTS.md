@@ -92,8 +92,25 @@ mine-attack/
 │   │                  # underground dust motes, world-space cave-in bursts + R6
 │   │                  # first-breach dust pool and fading ground-crack decal), art_style_3d.gd
 │   │                  # (3d-visual-revamp R2 palette/material/bloom tokens, warm-emission
-│   │                  # policy, Potato/Standard/Fancy quality switch; team_color() keeps
+│   │                  # policy, Potato/Standard/Fancy quality switch — presets also
+│   │                  # carry a viewport render scale (Potato 0.75, web Standard 0.85,
+│   │                  # FSR where the renderer supports it), MSAA 2x on desktop Fancy,
+│   │                  # and quality_from_string() for the persisted Settings override;
+│   │                  # team_color() keeps
 │   │                  # the live colorblind swap and entity rim materials),
+│   │                  # plus the perf-pass layer (3D performance pass, 2026-10):
+│   │                  # change-detected unit proxy sync (fog-hidden/off-layer proxies
+│   │                  # early-out; dune ground-snap re-samples on movement or a
+│   │                  # HeightField3D.revision change — storm flatten / structure
+│   │                  # clearances), Presentation3D static node-resolution caching,
+│   │                  # event-driven fog/terrain rebuilds (GridFogOfWar diffs the
+│   │                  # player's per-cell fog state every frame and bumps
+│   │                  # GridWorld.player_fog_revision; Fog3D/Terrain3D poll the
+│   │                  # revision at their refresh cadence — full rebuilds no longer
+│   │                  # run on unconditional 0.5s timers — with a 5s terrain
+│   │                  # backstop for signal-less mutations), throttled selection
+│   │                  # hover scans, and probe_3d.gd (opt-in script-time probes the
+│   │                  # F3 debug overlay and capture BENCH mode read),
 │   │                  # plus the 3D-rework Phase 1 feedback layer:
 │   │                  # presentation_3d.gd (3D-shell detection + 2D->3D conversion
 │   │                  # for sim-side spawn points), flat_geo_3d.gd (shared unshaded
@@ -245,7 +262,7 @@ Global singletons. All hold per-match state that survives scene reloads; `hud.gd
 - `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Baseline income: both teams trickle `BASELINE_INCOME_COIN` every `BASELINE_INCOME_INTERVAL` from match start, no eligibility gates (AI scaled by the difficulty coin multiplier). Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (same AI scaling), so a wiped economy can always re-staff.
 - `research_manager.gd` — timed branch research tree: mutually-exclusive tiers, one-time 500g respec, active research slot with queue, Ore Sonar scan.
 - `audio_manager.gd` — synthesized SFX and ambience, plus dynamic music: a combat percussion loop fades in with `combat_intensity` (pulsed by `UnitCombat.take_damage` whenever the player team is involved; decays over ~4.5s) while the calm wind/drips layers thin under snowstorms and volcano eruptions. Weather state is polled (`WeatherManager.is_snowstorm_active()`/`is_volcano_active()`) because AudioManager's `_ready` runs before the WeatherManager singleton exists.
-- `settings_manager.gd` — window resolution persistence (desktop only), SFX bus volume (all platforms), accessibility preferences (UI scale, colorblind palette, reduced motion/flash, tutorial-hint state), and remappable key bindings (`[input]` section), all in `user://settings.cfg`. Emits `setting_changed(what: StringName)` so live UI (HUD scale, camera shake, palettes) reacts without polling. `apply_saved_bindings()` rebuilds InputMap key events at startup (mouse buttons are never remapped).
+- `settings_manager.gd` — window resolution persistence (desktop only), SFX bus volume (all platforms), graphics-quality override for the 3D presets (`[video] graphics_quality`: auto/potato/standard/fancy; the 3D shell applies it at startup and live via `setting_changed`), accessibility preferences (UI scale, colorblind palette, reduced motion/flash, tutorial-hint state), and remappable key bindings (`[input]` section), all in `user://settings.cfg`. Emits `setting_changed(what: StringName)` so live UI (HUD scale, camera shake, palettes) reacts without polling. `apply_saved_bindings()` rebuilds InputMap key events at startup (mouse buttons are never remapped).
 - `weather_manager.gd` — snowstorms + volcano eruptions: independent game-time state machines, scheduling/damage/duration scaled by difficulty. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` and `WeatherManager.set_volcano_events_enabled(false)` (tests force events instead).
 - `ai_belief_system.gd` — per-team belief maps (cells/unit sightings/enemy-faction guess) built only from that team's vision; confidence decays on stale intel. Reset per match via `AIBeliefSystem.reset()`.
 - `match_stats.gd` — per-match stats recording: units lost (hooked from `Unit._die`), damage dealt (hooked from unit `take_damage`, credited to the attacker's team), and a 5s coin/population/base-HP timeline (relative to match start, with a t=0 baseline and a match-end point). `build_summary()` also records each team's max completed research tier (`player_max_tier`/`enemy_max_tier`) for post-game coaching hints. Reset per match from `hud._ready` (metadata: difficulty/factions/opener captured there); on `GameManager.game_over` it finalizes `last_summary` for the game-over panel and writes a JSON log to `user://match_logs/`.
@@ -320,7 +337,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 - `unit_button.gd` — training buttons; cost/time labels and the affordability gate read the building's `get_train_cost`/`get_train_time` so research discounts (e.g. Broodmother's dragon discount) show immediately, refreshed via `ResearchManager.research_completed`/`research_changed`.
 - `layer_indicator.gd` — underground layer accessibility indicator.
 - `threat_alert_layer.gd` — canvas-drawn threat layer on the HUD root: one fading arrow per active threat (clamped to a screen-edge inset rect, pointing at off-screen threats; on-screen threats get a diamond), aged out over 4s; world→HUD conversion divides by the HUD root's UI scale.
-- `debug_overlay.gd` — runtime debug display.
+- `debug_overlay.gd` — runtime debug display (F3). Beyond the unit/path overlays and stats panel: a perf readout (frame ms, draw calls, triangle count, and per-section Probe3D script averages — probing auto-enables while the overlay is visible).
 
 ## Game concepts
 
@@ -431,7 +448,10 @@ vs `tri_gate`, per-image ≤ 2048², and the ≤ 64 MB total embedded-texture we
 budget. Pure-python GLB parser by default (trimesh/pygltflib used when
 installed); exits 0 on pass, 1 on budget violation, 2 on tooling error. New
 or regenerated GLBs with textures over 2048² go through
-`tools/resize_glb_textures.py` first (convention 5 "resize at import"). R7
+`tools/resize_glb_textures.py` first (convention 5 "resize at import"; the
+2048² cap stays the gate ceiling — the perf pass resized the five structure
+GLBs' actual textures to 1024² via `--max=1024 --only=/structures/`, cutting
+embedded textures 17.8 → 6.0 MB). R7
 unit GLBs are deterministically regenerated with `python3 tools/gen_unit_glbs.py`
 (Pillow, same as the texture-resize tool); re-run the budget gate afterward.
 
@@ -463,6 +483,8 @@ tools/capture/run_capture.sh /tmp/shots
 ```
 
 Launches `tools/capture/capture_driver.tscn` instead of the main menu, starts a seeded match (difficulty/faction/speed via env vars), and saves PNGs of named camera poses (`start`, `surface`, `zoomout`, `underground`, `breach`, `units`, `units_underground`, `base`, `dunes`, `fortress`, `storm`, `volcano`, `custom:X:Y:Z`) at fixed sim-seconds. Built for CI and AI-agent sandboxes: an agent can render, look, and iterate without a display or a human screenshot provider. Requires `xvfb-run`; downloads a Godot Linux binary on first run (`GODOT_BIN` to override). `RESOLUTION=3840x2160` selects 4K output (default 1920×1080); `tools/capture/run_showcase.sh roadmap/3d-visual-revamp/r8` captures the six R8 marketing poses at both sizes.
+
+Perf BENCH mode (3D perf pass): `STRESS_UNITS=100 BENCH=30 SHOTS="" tools/capture/run_capture.sh /tmp/bench` spawns 100 extra units per team (real, live units — the 200-unit ceiling both teams at cap) and, after 30 sim-seconds, prints the Probe3D per-section script-time averages (unit sync, terrain/fog rebuilds, sim fog recompute, ring hover scan). GPU frame times under software GL are meaningless (see below), but script milliseconds are comparable across runs — this is the regression-gate number. On macOS dev machines without xvfb, run the driver directly with the same flags, windowed.
 
 Hard requirements, learned the hard way in headless/CI environments (full notes in `tools/capture/README.md`):
 

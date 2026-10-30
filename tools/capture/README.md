@@ -9,9 +9,16 @@ the PNGs, iterate.
 ```bash
 tools/capture/run_capture.sh /tmp/shots
 # → /tmp/shots/001_start.png, 002_zoomout.png, 003_underground.png, ...
+
+# Perf BENCH: run a 200-unit stress match for 30 sim-seconds, then print
+# per-section script-time averages (Probe3D). GPU frame times under
+# software GL are meaningless; script milliseconds are comparable.
+STRESS_UNITS=100 BENCH=30 SHOTS="" tools/capture/run_capture.sh /tmp/bench
 ```
 
-Requirements: Linux, `xvfb-run`, `curl`, `unzip`. A Godot 4.7-stable Linux
+Requirements: Linux, `xvfb-run`, `curl`, `unzip` (macOS dev machines can
+run the driver directly — same flags, windowed instead of headless; a
+window pops up for the run). A Godot 4.7-stable Linux
 binary is downloaded automatically on first run (`GODOT_BIN` env var to
 override with a local install).
 

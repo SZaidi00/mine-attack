@@ -38,6 +38,12 @@ var _grid: GridWorld
 var _camera: Camera3D
 var _built := false
 var _pc_connected := false
+## Cached once-per-frame WeatherManager polls (see _process); both the
+## emission-state refresh and the ember ramp read these instead of re-calling
+## the autoload.
+var _storm_active := false
+var _volcano_active := false
+var _volcano_warning := false
 var _underground_view := false
 
 var _motes: GPUParticles3D
@@ -84,6 +90,11 @@ func _process(delta: float) -> void:
 		_try_lazy_setup()
 		return
 	_ensure_pc_connected()
+	# One WeatherManager poll per frame, shared by the emission state and the
+	# ember ramp (they used to re-query the autoload independently).
+	_storm_active = WeatherManager.is_snowstorm_active()
+	_volcano_active = WeatherManager.is_volcano_active()
+	_volcano_warning = WeatherManager.is_volcano_warning()
 	_apply_quality_amounts()
 	_refresh_emitters()
 	var focus: Vector3 = _camera.global_position
@@ -208,10 +219,10 @@ func _refresh_emitters() -> void:
 		return
 	_motes.emitting = _underground_view and ArtStyle3D.detail_enabled()
 	var surface_view := not _underground_view
-	_storm.emitting = surface_view and WeatherManager.is_snowstorm_active()
+	_storm.emitting = surface_view and _storm_active
 	_storm_near.emitting = _storm.emitting
-	_embers.emitting = surface_view and (WeatherManager.is_volcano_active() or WeatherManager.is_volcano_warning())
-	_ash.emitting = surface_view and WeatherManager.is_volcano_active()
+	_embers.emitting = surface_view and (_volcano_active or _volcano_warning)
+	_ash.emitting = surface_view and _volcano_active
 	_ash_near.emitting = _ash.emitting
 	_meteor_shower.emitting = _ash.emitting
 
@@ -221,9 +232,9 @@ func _refresh_emitters() -> void:
 ## .amount restarts the emitter, so a smoothly varying amount would restart
 ## it every frame.
 func _ember_intensity() -> float:
-	if WeatherManager.is_volcano_active():
+	if _volcano_active:
 		return 1.0
-	if WeatherManager.is_volcano_warning():
+	if _volcano_warning:
 		var total: float = maxf(Constants.VOLCANO_WARNING_TIME, 0.01)
 		var progress: float = 1.0 - clampf(WeatherManager.get_volcano_warning_remaining() / total, 0.0, 1.0)
 		return lerpf(0.3, 0.9, floor(progress * 6.0) / 6.0)

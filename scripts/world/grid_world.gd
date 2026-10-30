@@ -5,6 +5,12 @@ signal cell_destroyed(grid_pos: Vector2i)
 signal wall_hp_changed(current: int, maximum: int)
 # Emitted by the Ore Sonar scan with the newly revealed ore cells (VFX hook).
 signal cells_revealed(cells: Array)
+# Fog-change feed for the 3D projections: bumped by the fog recompute's
+# change detector (vision moves, memory expiry, reveal-all flips). Fog3D and
+# Terrain3D poll this counter at their refresh cadence — fog still emits no
+# per-frame push signals by design.
+var player_fog_revision: int = 0
+var _player_fog_changed_cells: Dictionary = {}  # Vector2i -> true, drained by consumers
 # Revamp Phase 4 dynamic-terrain events (HUD banners, VFX hooks).
 signal lava_warning_started(seconds: float, layers: int)
 signal lava_risen(layers: int)
@@ -211,9 +217,13 @@ func _process(delta: float) -> void:
 	# match ends, like the units). Redraw every frame so the fog edge tracks
 	# moving units smoothly.
 	if GameManager.game_active:
+		var probe_start := Time.get_ticks_usec() if Probe3D.enabled else 0
 		_fog._update_vision(GameManager.Team.PLAYER)
+		_fog._detect_player_fog_changes()
 		_fog._update_vision(GameManager.Team.ENEMY)
 		_fog._prune_unit_ghosts()
+		if Probe3D.enabled:
+			Probe3D.add("sim_fog_recompute", (Time.get_ticks_usec() - probe_start) / 1000.0)
 		_events._process_events(delta)
 		queue_redraw()
 	var expired: Array[Vector2i] = []
@@ -396,6 +406,15 @@ func is_remembered_by(team: GameManager.Team, world_pos: Vector2) -> bool:
 
 func fog_state_at(team: GameManager.Team, grid_pos: Vector2i) -> int:
 	return _fog.fog_state_at(team, grid_pos)
+
+
+## Drains the player-side fog cells that changed since the last drain — the
+## 3D terrain projection turns these into per-chunk dirty marks instead of
+## rebuilding everything on a timer.
+func consume_player_fog_changes() -> Array:
+	var cells: Array = _player_fog_changed_cells.keys()
+	_player_fog_changed_cells.clear()
+	return cells
 
 
 func _get_vision_sources(team: GameManager.Team) -> Array:

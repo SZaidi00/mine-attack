@@ -12,10 +12,19 @@ extends Node3D
 const WORLD_SCALE: float = 0.01
 const LIT_TERRAIN: bool = true
 const REBUILD_INTERVAL: float = 0.15
+## Player-fog poll cadence: the tick only dirties chunks when the sim's fog
+## diff actually bumped player_fog_revision (was: unconditional full rebuild).
 const FOG_REFRESH_INTERVAL: float = 0.5
+## Slow full-sweep backstop for the signal-less cell mutations (cave-in
+## restore, ore respawn, depletion tint) the fog diff can't see.
+const BACKSTOP_INTERVAL: float = 5.0
 const CHUNK_COLS: int = 21
 const CHUNK_ROWS: int = 8
 const SNOW_RATE: float = 0.1
+## Snow-dirty quantization: the cover tween marks chunks dirty only when the
+## level crosses a 1/N step, so a storm ramp rebuilds ~N times total instead
+## of every frame for its whole duration.
+const SNOW_DIRTY_STEPS: int = 32
 const GLOW_LIFT: float = 0.004
 
 const LAVA_COLOR := ArtStyle3D.PALETTE.lava
@@ -44,6 +53,13 @@ var _dirty_all := false
 var _underground_view := false
 var _accum := 0.0
 var _fog_accum := 0.0
+var _backstop_accum := 0.0
+var _seen_fog_revision := -1
+var _last_snow_step := -1
+## Structure-clearance re-stamp is gated on the entity proxies actually
+## spawning/culling a structure proxy (signal from main_3d); true at setup so
+## the first rebuild batch stamps the initial board.
+var _clearances_dirty := true
 var _snow_level := 0.0  # 0..1 surface snow accumulation (presentation only)
 var _snow_target := 0.0
 var _pulse_time := 0.0
@@ -106,6 +122,7 @@ func setup(grid: GridWorld) -> void:
 	_grid.lava_receded.connect(_on_world_changed)
 	_grid.cave_in_occurred.connect(_on_cave_in)
 	_mark_all_dirty()
+	_seen_fog_revision = _grid.player_fog_revision
 
 
 func get_snow_level() -> float:
@@ -128,6 +145,13 @@ func world_height_at(world_x: float, world_z: float) -> float:
 	return height_field.height_at(world_x, world_z)
 
 
+## Changes whenever the field's output changes (storm flattening, structure
+## clearances) without the query position moving — ground-snapped proxies
+## watch this to re-sample standing poses.
+func ground_height_revision() -> int:
+	return height_field.revision if height_field != null else 0
+
+
 func _on_snowstorm_started() -> void:
 	_snow_target = 1.0
 
@@ -147,6 +171,19 @@ func _chunk_key_for(pos: Vector2i) -> Vector2i:
 
 
 ## Layer switching rebuilds the visible world, exactly like the 2D camera
+## EntityProxies3D emits structure_set_changed when a reconcile spawns or
+## culls a structure proxy; the height field's clearance stamps only need a
+## re-run at those moments (plus the first rebuild batch after setup).
+func notify_structures_changed() -> void:
+	_clearances_dirty = true
+
+
+## Public alias for the full-dirty mark (live quality switches, external
+## callers); keeps the _dirty mechanics internal.
+func force_full_rebuild() -> void:
+	_mark_all_dirty()
+
+
 ## bookmark jump.
 func set_underground_view(underground: bool) -> void:
 	if _underground_view == underground:
@@ -185,25 +222,36 @@ func _mark_all_dirty() -> void:
 
 func _process(delta: float) -> void:
 	# Snow cover tweens toward the storm target even when no chunk is dirty;
-	# while the cover is visibly changing, every rebuild pass re-lerps the
-	# surface palette (the chunk throttle below absorbs the churn). The same
-	# tween flattens the dune field (§2.4: storms fill the relief) — the
-	# height field applies it on its next sample.
+	# the level only marks chunks dirty when it crosses a 1/SNOW_DIRTY_STEPS
+	# step (the chunk throttle below absorbs the ramp). The same tween
+	# flattens the dune field (§2.4: storms fill the relief) — the height
+	# field applies it on its next sample and bumps its revision.
 	if _snow_level != _snow_target:
 		_snow_level = move_toward(_snow_level, _snow_target, SNOW_RATE * delta)
-		if absf(_snow_level - _snow_target) > 0.01:
+		var snow_step := int(_snow_level * SNOW_DIRTY_STEPS + 0.5)
+		if snow_step != _last_snow_step:
+			_last_snow_step = snow_step
 			_mark_all_dirty()
 	if height_field != null:
 		height_field.set_storm_level(_snow_level)
 	# Slow emissive heartbeat on the shared lava material (~0.6s period).
 	_pulse_time += delta
 	_glow_mat.emission_energy_multiplier = lerpf(0.7, 1.6, 0.5 + 0.5 * sin(_pulse_time * TAU / 0.6))
-	# Fog moves with vision every frame but emits no signals, and a few cell
-	# mutations (cave-in restore, ore respawn, depletion tint) are signal-less
-	# too — a slow full sweep keeps the projection convergent.
+	# Fog moves with vision every frame; GridFogOfWar diffs the player's fog
+	# state each frame and bumps player_fog_revision on real changes, so this
+	# tick only dirties the chunks those changed cells fall in (the old
+	# unconditional full sweep rebuilt all 16 chunks every 0.5s for the whole
+	# match). A slow full backstop covers the signal-less mutations.
 	_fog_accum += delta
 	if _fog_accum >= FOG_REFRESH_INTERVAL:
 		_fog_accum = 0.0
+		if _grid != null and _grid.player_fog_revision != _seen_fog_revision:
+			_seen_fog_revision = _grid.player_fog_revision
+			for cell in _grid.consume_player_fog_changes():
+				_dirty[_chunk_key_for(cell)] = true
+	_backstop_accum += delta
+	if _backstop_accum >= BACKSTOP_INTERVAL:
+		_backstop_accum = 0.0
 		_mark_all_dirty()
 	if _dirty.is_empty() and not _dirty_all:
 		return
@@ -212,9 +260,12 @@ func _process(delta: float) -> void:
 		return
 	_accum = 0.0
 	# Structure placements mid-match re-stamp their clearances before the
-	# batch samples heights (throttled with the same rebuild pass).
-	if height_field != null:
+	# batch samples heights — gated on the entity proxies actually
+	# spawning/culling a structure proxy (main_3d wires the signal).
+	if _clearances_dirty and height_field != null:
+		_clearances_dirty = false
 		height_field.refresh_clearances()
+	var probe_start := Time.get_ticks_usec() if Probe3D.enabled else 0
 	if _dirty_all:
 		_dirty_all = false
 		_dirty.clear()
@@ -224,6 +275,8 @@ func _process(delta: float) -> void:
 		for key in _dirty:
 			_rebuild_chunk(key)
 		_dirty.clear()
+	if Probe3D.enabled:
+		Probe3D.add("terrain_rebuild", (Time.get_ticks_usec() - probe_start) / 1000.0)
 
 
 func _rebuild_chunk(key: Vector2i) -> void:

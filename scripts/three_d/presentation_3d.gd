@@ -16,6 +16,17 @@ const WORLD_SCALE: float = 0.01
 ## clips it, and still hugging the flat underground floor.
 const GROUND_LIFT: float = 0.05
 
+## Resolution cache: shell()/terrain()/effects_parent() used to re-walk the
+## scene tree (has_node + get_node_or_null string lookups) on EVERY call, and
+## per-frame callers (selection rings, burn decals, telegraphs) invoke them
+## dozens of times a frame. The shell rig is static for a scene's lifetime,
+## so resolve once per current_scene and only re-resolve when the scene
+## changes (Play Again / Quit to Menu / test harness scene swaps).
+static var _cached_scene: Node = null
+static var _shell: Node3D = null
+static var _terrain: Node = null
+static var _effects_parent: Node3D = null
+
 
 ## The live 3D shell when it runs the show, else null. Detection mirrors how
 ## the shell itself is identified: the current scene is a Node3D hosting the
@@ -25,9 +36,16 @@ static func shell(tree: SceneTree) -> Node3D:
 	if tree == null:
 		return null
 	var cs: Node = tree.current_scene
+	if cs == _cached_scene and (cs == null or is_instance_valid(cs)):
+		return _shell
+	# New current scene: drop everything resolved against the old one.
+	_cached_scene = cs
+	_shell = null
+	_terrain = null
+	_effects_parent = null
 	if cs is Node3D and cs.has_node("World3D"):
-		return cs
-	return null
+		_shell = cs as Node3D
+	return _shell
 
 
 ## World-space parent for transient 3D feedback (order markers, popups).
@@ -35,7 +53,10 @@ static func effects_parent(tree: SceneTree) -> Node3D:
 	var s: Node3D = shell(tree)
 	if s == null:
 		return null
-	return s.get_node_or_null("World3D/Effects3D") as Node3D
+	if _effects_parent != null and is_instance_valid(_effects_parent):
+		return _effects_parent
+	_effects_parent = s.get_node_or_null("World3D/Effects3D") as Node3D
+	return _effects_parent
 
 
 ## The shell's terrain node (duck-typed: it answers world_height_at), else
@@ -45,7 +66,10 @@ static func terrain(tree: SceneTree) -> Node:
 	var s: Node3D = shell(tree)
 	if s == null:
 		return null
-	return s.get_node_or_null("World3D/Terrain3D")
+	if _terrain != null and is_instance_valid(_terrain):
+		return _terrain
+	_terrain = s.get_node_or_null("World3D/Terrain3D")
+	return _terrain
 
 
 ## Ground height in world units at a world XZ position (0 when the shell or

@@ -29,6 +29,13 @@ extends Node
 ##                        volcano   - surface + forced volcano eruption
 ##                        custom:X:Y:Z - explicit camera focus (X, Y) and
 ##                                      dolly Z (e.g. custom:0:-150:6)
+##   --stress-units <n> spawn n extra units per team (surface) once the match
+##                      is up — the 200-unit perf stress for BENCH runs
+##   --bench <seconds>  run the match for this long (sim-seconds), then print
+##                      the Probe3D script-time report and quit. Shots are
+##                      optional in bench mode and still capture if given.
+##                      GPU frame times under software GL are meaningless —
+##                      script milliseconds are the comparable number.
 ##
 ## The driver configures the autoloads exactly like the main menu's Play
 ## flow, swaps in the gameplay scene, and hands control to a CapturePilot
@@ -82,6 +89,9 @@ func _apply_game_config(config: Dictionary) -> void:
 	FactionManager.pick_random_enemy_faction()
 	WeatherManager.set_weather_events_enabled(false)
 	WeatherManager.set_volcano_events_enabled(false)
+	if config.get("bench", 0.0) > 0.0:
+		# BENCH mode: script-time instrumentation on for the whole window.
+		Probe3D.enabled = true
 
 
 ## Parse user args into a config Dictionary, or return {} when the args do
@@ -94,6 +104,8 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 		"seed": DEFAULT_SEED,
 		"speed": 1.0,
 		"shots": [],
+		"stress_units": 0,
+		"bench": 0.0,
 	}
 	var i := 0
 	while i < args.size():
@@ -122,14 +134,25 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 				i += 1
 				if i < args.size():
 					config.shots = parse_shots(args[i])
+			"--stress-units":
+				i += 1
+				if i < args.size():
+					config.stress_units = args[i].to_int()
+			"--bench":
+				i += 1
+				if i < args.size():
+					config.bench = args[i].to_float()
 		i += 1
-	if config.out.is_empty() or (config.shots as Array).is_empty():
+	# Capture mode needs an output dir + shots; bench mode only needs a window.
+	if config.bench <= 0.0 and (config.out.is_empty() or (config.shots as Array).is_empty()):
 		return {}
 	config.difficulty = clampi(config.difficulty, 0, 4)
 	if not VALID_FACTIONS.has(config.faction):
 		config.faction = "arcane"
 	if config.seed <= 0:
 		config.seed = DEFAULT_SEED
+	config.stress_units = clampi(config.stress_units, 0, 100)
+	config.bench = maxf(config.bench, 0.0)
 	return config
 
 

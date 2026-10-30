@@ -15,7 +15,12 @@ pixels, kept in sync for any external reference).
 
 Safe to re-run: images already <= 2048^2 are left untouched.
 
-Usage: tools/resize_glb_textures.py
+Usage: tools/resize_glb_textures.py [--max=N] [--only=SUBSTR]
+
+--max=N         override the 2048^2 cap (e.g. --max=1024 to downscale the
+                structure GLBs for the perf pass)
+--only=SUBSTR   process only manifest entries whose path contains SUBSTR
+                (e.g. --only=/structures/)
 """
 import json
 import os
@@ -87,7 +92,7 @@ def resize_image(raw, max_dim):
     return out.getvalue(), True, kind
 
 
-def process_glb(path):
+def process_glb(path, max_dim=MAX_DIM):
     gltf, bin_buf = parse_glb(path)
     views = gltf.get("bufferViews", [])
     images = gltf.get("images", [])
@@ -101,13 +106,13 @@ def process_glb(path):
         view = views[idx]
         start = view.get("byteOffset", 0)
         raw = bytes(bin_buf[start:start + view["byteLength"]])
-        new, changed, kind = resize_image(raw, MAX_DIM)
+        new, changed, kind = resize_image(raw, max_dim)
         if changed:
             replacements[idx] = new
             print("  %s: bufferView %d (%s) %d -> %d bytes"
                   % (os.path.basename(path), idx, kind, len(raw), len(new)))
     if not replacements:
-        print("  %s: all images already <= %d^2" % (os.path.basename(path), MAX_DIM))
+        print("  %s: all images already <= %d^2" % (os.path.basename(path), max_dim))
         return
     # Rebuild the BIN buffer in original bufferView order, 4-byte aligned,
     # substituting resized images. Vertex/index data is copied verbatim.
@@ -127,7 +132,7 @@ def process_glb(path):
     build_glb(path, gltf, new_buf)
 
 
-def process_external(glb_path):
+def process_external(glb_path, max_dim=MAX_DIM):
     """Resize the standalone duplicate textures next to the GLB (named
     <model>_<image name>.<ext>)."""
     base = os.path.dirname(glb_path)
@@ -144,7 +149,7 @@ def process_external(glb_path):
             p = os.path.join(base, f)
             with open(p, "rb") as fh:
                 raw = fh.read()
-            new, changed, _kind = resize_image(raw, MAX_DIM)
+            new, changed, _kind = resize_image(raw, max_dim)
             if changed:
                 with open(p, "wb") as fh:
                     fh.write(new)
@@ -152,16 +157,25 @@ def process_external(glb_path):
 
 
 def main():
+    max_dim = MAX_DIM
+    only = ""
+    for arg in sys.argv[1:]:
+        if arg.startswith("--max="):
+            max_dim = int(arg[len("--max="):])
+        elif arg.startswith("--only="):
+            only = arg[len("--only="):]
     with open(MANIFEST) as f:
         entries = json.load(f)
     for e in entries:
         rel = e.get("path", "")
         if not rel.startswith("res://"):
             continue
+        if only and only not in rel:
+            continue
         path = os.path.join(ROOT, rel[len("res://"):])
         print("%s:" % e.get("key", rel))
-        process_glb(path)
-        process_external(path)
+        process_glb(path, max_dim)
+        process_external(path, max_dim)
     print("done")
 
 

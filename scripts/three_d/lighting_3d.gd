@@ -80,6 +80,11 @@ var _warning_pulse_time: float = 0.0
 var _storm_gust_time: float = 0.0
 
 var _pc_connected: bool = false
+## Reusable per-frame mood target — the storm-gust layer used to duplicate a
+## mood Dictionary every frame for the whole storm; the resolution now fills
+## this fixed-key dict in place. (_apply_warning_pulse keeps its test-facing
+## pure form; it only allocates during the rare eruption-warning window.)
+var _resolved: Dictionary = {}
 
 
 func setup(camera: Camera3D) -> void:
@@ -103,10 +108,17 @@ func setup(camera: Camera3D) -> void:
 
 ## Apply shared R2 post tokens and the preset gates after startup or a live
 ## quality change. Fog-of-war remains a separate, darker terrain treatment.
+## Also applies the per-tier viewport render scale / MSAA / shadow-split
+## configuration (the perf-side half of the quality presets).
 func apply_quality_settings() -> void:
 	if _sun != null:
 		_sun.shadow_enabled = ArtStyle3D.shadows_enabled()
 		_sun.directional_shadow_max_distance = ArtStyle3D.shadow_distance()
+		# Two blended PSSM splits cover the 40-unit top-down board; the
+		# engine default of four doubles the shadow pass for no visible
+		# gain at this camera angle.
+		_sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+		_sun.directional_shadow_blend_splits = true
 	if _env != null:
 		_env.background_color = ArtStyle3D.PALETTE.night
 		_env.fog_light_color = ArtStyle3D.PALETTE.night
@@ -116,6 +128,16 @@ func apply_quality_settings() -> void:
 		_env.glow_strength = ArtStyle3D.BLOOM_STRENGTH
 		_env.ssao_enabled = ArtStyle3D.ssao_enabled()
 		_env.fog_enabled = ArtStyle3D.fog_enabled()
+	var viewport := get_viewport()
+	if viewport != null:
+		# FSR 1.0 upscaling where the renderer supports it (gl_compatibility
+		# falls back to bilinear); the scale itself is the perf lever.
+		if RenderingServer.get_current_rendering_method() == "gl_compatibility":
+			viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+		else:
+			viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
+		viewport.scaling_3d_scale = ArtStyle3D.render_scale()
+		viewport.msaa_3d = Viewport.MSAA_2X if ArtStyle3D.msaa_enabled() else Viewport.MSAA_DISABLED
 
 
 ## Underground-view mood hook. The shell's view switch and (lazily connected)
@@ -145,20 +167,39 @@ func _process(delta: float) -> void:
 	var lava_glow: bool = _lava_event
 	if not lava_glow and _underground_view and _grid != null:
 		lava_glow = _grid.is_lava_active() or _grid.is_lava_warning()
-	var mood := _apply_storm_gusts(_MOODS[get_mood_name()], delta)
-	_tween_toward(_apply_warning_pulse(mood, delta), lava_glow, delta)
+	_tween_toward(_resolve_mood(delta, lava_glow), delta)
 
 
-func _apply_storm_gusts(target: Dictionary, delta: float) -> Dictionary:
-	if get_mood_name() != "storm":
+## Fills the reusable _resolved mood target in place: base mood for the
+## current state, plus the storm gust on fog, plus the eruption-warning beat
+## on sun/ambient, plus the warm lava under-glow.
+func _resolve_mood(delta: float, lava_glow: bool) -> Dictionary:
+	var mood_name := get_mood_name()
+	var base: Dictionary = _MOODS[mood_name]
+	_resolved["sun_color"] = base["sun_color"]
+	_resolved["sun_energy"] = base["sun_energy"]
+	_resolved["ambient_color"] = base["ambient_color"]
+	_resolved["ambient_energy"] = base["ambient_energy"]
+	_resolved["background_color"] = base["background_color"]
+	_resolved["fog_color"] = base["fog_color"]
+	_resolved["fog_density"] = base["fog_density"]
+	if mood_name == "storm":
+		_storm_gust_time += delta
+		var gust := clampf(0.5 + 0.5 * sin(_storm_gust_time * 1.9) + 0.25 * sin(_storm_gust_time * 0.63), 0.0, 1.0)
+		_resolved["fog_density"] = float(base["fog_density"]) * lerpf(0.75, 1.25, gust)
+		_resolved["fog_color"] = (base["fog_color"] as Color).lerp(ArtStyle3D.PALETTE.storm_gloom, 0.08 * gust)
+	else:
 		_storm_gust_time = 0.0
-		return target
-	_storm_gust_time += delta
-	var gust := clampf(0.5 + 0.5 * sin(_storm_gust_time * 1.9) + 0.25 * sin(_storm_gust_time * 0.63), 0.0, 1.0)
-	var gusted: Dictionary = target.duplicate()
-	gusted["fog_density"] = float(target["fog_density"]) * lerpf(0.75, 1.25, gust)
-	gusted["fog_color"] = (target["fog_color"] as Color).lerp(ArtStyle3D.PALETTE.storm_gloom, 0.08 * gust)
-	return gusted
+	if WeatherManager.is_volcano_warning():
+		var pulsed: Dictionary = _apply_warning_pulse(_resolved, delta)
+		_resolved["sun_energy"] = pulsed["sun_energy"]
+		_resolved["sun_color"] = pulsed["sun_color"]
+		_resolved["ambient_energy"] = pulsed["ambient_energy"]
+	if lava_glow:
+		# Warm red under-glow rising from the flood below.
+		_resolved["ambient_color"] = (_resolved["ambient_color"] as Color).lerp(ArtStyle3D.PALETTE["lava"], 0.35)
+		_resolved["ambient_energy"] = float(_resolved["ambient_energy"]) + 0.1
+	return _resolved
 
 
 ## 3D rework phase 5: while the eruption warning counts down (meteors not yet
@@ -197,22 +238,16 @@ func _exit_tree() -> void:
 		_pc_connected = false
 
 
-func _tween_toward(target: Dictionary, lava_glow: bool, delta: float) -> void:
+func _tween_toward(target: Dictionary, delta: float) -> void:
 	if _sun == null and _env == null:
 		return
 	var f: float = 1.0 - exp(-TWEEN_RATE * delta)
-	var ambient_color: Color = target["ambient_color"]
-	var ambient_energy: float = target["ambient_energy"]
-	if lava_glow:
-		# Warm red under-glow rising from the flood below.
-		ambient_color = ambient_color.lerp(ArtStyle3D.PALETTE["lava"], 0.35)
-		ambient_energy += 0.1
 	if _sun != null:
 		_sun.light_color = _sun.light_color.lerp(target["sun_color"], f)
 		_sun.light_energy = lerpf(_sun.light_energy, target["sun_energy"], f)
 	if _env != null:
-		_env.ambient_light_color = _env.ambient_light_color.lerp(ambient_color, f)
-		_env.ambient_light_energy = lerpf(_env.ambient_light_energy, ambient_energy, f)
+		_env.ambient_light_color = _env.ambient_light_color.lerp(target["ambient_color"], f)
+		_env.ambient_light_energy = lerpf(_env.ambient_light_energy, target["ambient_energy"], f)
 		_env.background_color = _env.background_color.lerp(target["background_color"], f)
 		_env.fog_light_color = _env.fog_light_color.lerp(target["fog_color"], f)
 		_env.fog_density = lerpf(_env.fog_density, target["fog_density"], f)

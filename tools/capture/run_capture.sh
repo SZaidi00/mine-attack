@@ -12,6 +12,10 @@
 #   SHOTS       shot spec override (default: the five baseline poses)
 #   FACTION / DIFFICULTY / SEED / SPEED   match config overrides
 #   RESOLUTION  WxH output size (default 1920x1080; use 3840x2160 for 4K)
+#   STRESS_UNITS  spawn N extra units per team (BENCH stress load)
+#   BENCH       run BENCH seconds of sim, then print the Probe3D
+#               script-time report (shots optional; GPU frame times under
+#               software GL are meaningless, script ms are comparable)
 #
 # Requirements: xvfb-run, curl, unzip. Output: PNGs named NNN_<pose>.png.
 set -euo pipefail
@@ -25,6 +29,8 @@ DIFFICULTY="${DIFFICULTY:-1}"
 SEED="${SEED:-12345}"
 SPEED="${SPEED:-1.0}"
 RESOLUTION="${RESOLUTION:-1920x1080}"
+STRESS_UNITS="${STRESS_UNITS:-0}"
+BENCH="${BENCH:-0}"
 if [[ ! "$RESOLUTION" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]]; then
 	echo "run_capture: RESOLUTION must be WxH (got '$RESOLUTION')" >&2
 	exit 2
@@ -76,4 +82,5 @@ exec xvfb-run -a -s "-screen 0 ${CAPTURE_WIDTH}x${CAPTURE_HEIGHT}x24" "$GODOT_BI
 	res://tools/capture/capture_driver.tscn -- \
 	--out "$OUT_DIR" --shots "$SHOTS" \
 	--difficulty "$DIFFICULTY" --faction "$FACTION" \
-	--seed "$SEED" --speed "$SPEED" "${EXTRA_ARGS[@]}"
+	--seed "$SEED" --speed "$SPEED" \
+	--stress-units "$STRESS_UNITS" --bench "$BENCH" "${EXTRA_ARGS[@]}"

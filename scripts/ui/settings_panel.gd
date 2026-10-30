@@ -158,6 +158,34 @@ static func _build_display_group(content: VBoxContainer, root: Control) -> HSlid
 	scale_row.add_child(scale_slider)
 	scale_row.add_child(scale_value)
 
+	# 3D graphics preset: Auto (platform detect) or a manual override. Applies
+	# live when the 3D shell is running (shadows, post, render scale, models).
+	var quality_row := HBoxContainer.new()
+	quality_row.add_theme_constant_override("separation", 10)
+	quality_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	group.add_child(quality_row)
+
+	var quality_label := Label.new()
+	quality_label.text = "Graphics Quality:"
+	quality_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+	quality_row.add_child(quality_label)
+
+	var quality_opt := OptionButton.new()
+	quality_opt.custom_minimum_size = Vector2(330, 0)
+	quality_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	quality_opt.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+	var quality_values: Array[String] = ["auto", "potato", "standard", "fancy"]
+	var quality_names: Array[String] = ["Auto (recommended)", "Potato (fastest)", "Standard", "Fancy (best looking)"]
+	var current_quality := SettingsManager.get_graphics_quality()
+	for i in range(quality_values.size()):
+		quality_opt.add_item(quality_names[i])
+		if quality_values[i] == current_quality:
+			quality_opt.select(i)
+	quality_opt.item_selected.connect(func(index: int) -> void:
+		SettingsManager.set_graphics_quality(quality_values[index])
+		AudioManager.play("click"))
+	quality_row.add_child(quality_opt)
+
 	_make_check(group, "Colorblind mode", SettingsManager.get_colorblind(),
 		func(on: bool): SettingsManager.set_colorblind(on))
 	_make_check(group, "Reduced motion (no camera shake)", SettingsManager.get_reduced_motion(),

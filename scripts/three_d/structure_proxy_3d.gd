@@ -698,8 +698,15 @@ func _tint_bodies(remembered: bool, built: bool) -> void:
 		c = c * _reveal_mult
 		c.a = alpha
 		var mat := _body_mats[i]
-		mat.albedo_color = c
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED if built else BaseMaterial3D.TRANSPARENCY_ALPHA
+		# refresh() runs at reconcile time (5Hz) for every structure; the
+		# inputs above only change on damage/fog/construction flips, so skip
+		# the writes (and the transparency shader-variant rebind) when the
+		# computed state already matches.
+		if mat.albedo_color != c:
+			mat.albedo_color = c
+		var want_transparency := BaseMaterial3D.TRANSPARENCY_DISABLED if built else BaseMaterial3D.TRANSPARENCY_ALPHA
+		if mat.transparency != want_transparency:
+			mat.transparency = want_transparency
 
 
 ## Reconcile-time refresh: fog visibility, layer visibility, construction

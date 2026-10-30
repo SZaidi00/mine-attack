@@ -55,14 +55,28 @@ const CAVEIN_SHADOW_COLOR := Color(0.02, 0.015, 0.01, 0.5)
 
 var _grid: GridWorld
 var _underground_view := false
+## Reused release buffer: Dictionary erasure during iteration is unsafe
+## (ordered-hash reorder), so dead proxy ids collect here first.
+var _pending: Array = []
 
 # Meteor proxies (per-frame reconcile; a fall lasts only ~0.4s).
 var _meteor_proxies: Dictionary = {}  # meteor instance id -> Node3D
 var _meteor_pool: Array[Node3D] = []
+## Child refs fetched once per acquire (get_node string lookups used to run
+## per meteor per frame).
+var _meteor_parts: Dictionary = {}  # proxy instance id -> [streak, ring]
 
 # Burning-ground decals, keyed by the sim patch.
 var _burn_decals: Dictionary = {}  # patch instance id -> Node3D
 var _burn_pool: Array[Node3D] = []
+## The "burning_grounds" group query used to run every frame; 4Hz refresh is
+## invisible at patch lifetimes of several seconds.
+const BURN_GROUP_REFRESH: float = 0.25
+var _burn_group_cache: Array = []
+var _burn_group_accum := BURN_GROUP_REFRESH  # refresh on the first tick
+## Child/material refs + static ground cache per decal (burn patches never
+## move, so the dune sample happens once, not per frame per patch).
+var _burn_parts: Dictionary = {}  # decal instance id -> [ring, scorch, ring_mat, scorch_mat, pos, ground_y]
 
 # Lava-rise warning shimmer (single MultiMesh covering the flood zone).
 var _lava_shimmer: MultiMeshInstance3D
@@ -97,7 +111,7 @@ func _process(delta: float) -> void:
 	if _grid == null:
 		return
 	_reconcile_meteors()
-	_reconcile_burn_patches()
+	_reconcile_burn_patches(delta)
 	_update_lava_shimmer(delta)
 	_update_cavein_zone(delta)
 
@@ -120,16 +134,20 @@ func _reconcile_meteors() -> void:
 				proxy = _acquire_meteor_proxy()
 				_meteor_proxies[meteor.get_instance_id()] = proxy
 			_sync_meteor(proxy, meteor)
-	for id in _meteor_proxies.keys():
+	for id in _meteor_proxies:
 		if not seen.has(id):
-			_release_meteor_proxy(_meteor_proxies[id])
-			_meteor_proxies.erase(id)
+			_pending.append(id)
+	for id in _pending:
+		_release_meteor_proxy(_meteor_proxies[id])
+		_meteor_proxies.erase(id)
+	_pending.clear()
 
 
 func _sync_meteor(proxy: Node3D, meteor: Meteor) -> void:
 	var target: Vector2 = meteor._target_pos
-	var streak: MeshInstance3D = proxy.get_node("Streak")
-	var ring: MeshInstance3D = proxy.get_node("ImpactRing")
+	var parts: Array = _meteor_parts[proxy.get_instance_id()]
+	var streak: MeshInstance3D = parts[0]
+	var ring: MeshInstance3D = parts[1]
 	if meteor._impacted:
 		# Impact flash phase: the streak dies, the shockwave ring expands to
 		# exactly the sim's damage radius over the flash window.
@@ -178,6 +196,7 @@ func _acquire_meteor_proxy() -> Node3D:
 	ring.set_material_override(ArtStyle3D.get_material(IMPACT_COLOR, IMPACT_COLOR, IMPACT_RING_ENERGY, 0.85))
 	proxy.add_child(ring)
 	add_child(proxy)
+	_meteor_parts[proxy.get_instance_id()] = [streak, ring]
 	return proxy
 
 
@@ -188,10 +207,17 @@ func _release_meteor_proxy(proxy: Node3D) -> void:
 
 # ─── Burning ground ───
 
-func _reconcile_burn_patches() -> void:
+func _reconcile_burn_patches(delta: float) -> void:
 	var seen := {}
+	_burn_group_accum += delta
 	if not _underground_view:
-		for node in get_tree().get_nodes_in_group("burning_grounds"):
+		if _burn_group_accum >= BURN_GROUP_REFRESH:
+			_burn_group_accum = 0.0
+			_burn_group_cache = get_tree().get_nodes_in_group("burning_grounds")
+		for node in _burn_group_cache:
+			# The cache can outlive a patch that burned out between refreshes.
+			if not is_instance_valid(node):
+				continue
 			var patch := node as BurningGround
 			if patch == null:
 				continue
@@ -201,26 +227,37 @@ func _reconcile_burn_patches() -> void:
 				decal = _acquire_burn_decal()
 				_burn_decals[patch.get_instance_id()] = decal
 			_sync_burn_decal(decal, patch)
-	for id in _burn_decals.keys():
+	for id in _burn_decals:
 		if not seen.has(id):
-			_release_burn_decal(_burn_decals[id])
-			_burn_decals.erase(id)
+			_pending.append(id)
+	for id in _pending:
+		_release_burn_decal(_burn_decals[id])
+		_burn_decals.erase(id)
+	_pending.clear()
 
 
 func _sync_burn_decal(decal: Node3D, patch: BurningGround) -> void:
-	# R3: scorch marks sit on the dune surface (0 on the flat floor).
-	decal.position = Presentation3D.to_3d(patch.global_position, Presentation3D.ground_height(get_tree(),
-		patch.global_position.x * WORLD_SCALE, patch.global_position.y * WORLD_SCALE))
+	var parts: Array = _burn_parts[decal.get_instance_id()]
+	var ring: MeshInstance3D = parts[0]
+	var scorch: MeshInstance3D = parts[1]
+	var ring_mat: StandardMaterial3D = parts[2]
+	var scorch_mat: StandardMaterial3D = parts[3]
+	# R3: scorch marks sit on the dune surface; burn patches never move, so
+	# the ground sample happens once per placement (old code re-evaluated it
+	# every frame per patch).
+	var pos: Vector2 = patch.global_position
+	if pos != parts[4]:
+		parts[4] = pos
+		parts[5] = Presentation3D.ground_height(get_tree(),
+			pos.x * WORLD_SCALE, pos.y * WORLD_SCALE)
+		decal.position = Presentation3D.to_3d(pos, parts[5])
 	var radius: float = patch.radius * WORLD_SCALE
+	if ring.scale.x != radius:
+		ring.scale = Vector3(radius, 1.0, radius)
+		scorch.scale = Vector3(radius, 1.0, radius)
 	var life_left: float = clampf(1.0 - patch._elapsed / maxf(patch.duration, 0.01), 0.0, 1.0)
 	var pulse: float = 0.75 + 0.25 * sin(patch._flicker * 9.0)
-	var ring: MeshInstance3D = decal.get_node("Ring")
-	var scorch: MeshInstance3D = decal.get_node("Scorch")
-	ring.scale = Vector3(radius, 1.0, radius)
-	scorch.scale = Vector3(radius, 1.0, radius)
-	var ring_mat := ring.get_material_override() as StandardMaterial3D
 	ring_mat.emission_energy_multiplier = BURN_RING_ENERGY * pulse * maxf(life_left, 0.15)
-	var scorch_mat := scorch.get_material_override() as StandardMaterial3D
 	scorch_mat.albedo_color.a = SCORCH_COLOR.a * life_left
 	# The sim already fog-gates the 2D patch's visibility; mirror it.
 	decal.visible = patch.visible
@@ -244,9 +281,11 @@ func _acquire_burn_decal() -> Node3D:
 	var ring := FlatGeo3D.make_ring(1.0, BURN_RING_COLOR, Presentation3D.GROUND_LIFT + 0.002, 0.85)
 	ring.name = "Ring"
 	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	ring.set_material_override(ArtStyle3D.get_material(BURN_RING_COLOR, BURN_RING_COLOR, BURN_RING_ENERGY).duplicate())
+	var ring_mat := ArtStyle3D.get_material(BURN_RING_COLOR, BURN_RING_COLOR, BURN_RING_ENERGY).duplicate()
+	ring.set_material_override(ring_mat)
 	decal.add_child(ring)
 	add_child(decal)
+	_burn_parts[decal.get_instance_id()] = [ring, scorch, ring_mat, scorch_mat, Vector2(1e9, 1e9), 0.0]
 	return decal
 
 

@@ -441,8 +441,10 @@ func _exit_tree() -> void:
 ## duck-typed (the real Unit in game, a fake in tests): it exposes _state,
 ## _attack_timer, _mine_timer, _mine_target_angle, _hit_flash_timer,
 ## _target_unit/_target_building/_target_position, global_position and
-## get_flight_altitude().
-func sync_animation(unit: Node2D, delta: float) -> void:
+## get_flight_altitude(). `pos` is the caller's already-read unit position
+## (the proxy sync reads it each frame); omitting it falls back to a fresh
+## read so direct test callers keep working.
+func sync_animation(unit: Node2D, delta: float, pos := Vector2(1e18, 1e18)) -> void:
 	delta = clampf(delta, 0.0, 0.1)
 	if _dead:
 		_advance_death(delta)
@@ -457,7 +459,8 @@ func sync_animation(unit: Node2D, delta: float) -> void:
 	if want_flash != _flashing:
 		_set_flashing(want_flash)
 	# Facing: actual movement wins; an attack target steers a stationary unit.
-	var pos: Vector2 = unit.global_position
+	if pos.x > 9e17:
+		pos = unit.global_position
 	var moved: float = pos.distance_to(_last_pos)
 	if moved > 0.4:
 		_last_dir = (pos - _last_pos) / moved

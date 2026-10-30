@@ -66,6 +66,64 @@ func _update_vision(team: GameManager.Team) -> void:
 				grid._unit_ghosts.erase(id)
 
 
+## 3D perf: per-cell player fog-state change detection. _update_vision runs
+## every frame and used to notify nobody, so the 3D fog/terrain projections
+## polled fog_state_at on fixed timers and rebuilt whether or not anything
+## changed. This pass diffs the player's per-cell state (visible / remembered
+## / hidden — memory expiry included, since a state can flip on time alone)
+## against the previous frame; on any difference it bumps
+## grid.player_fog_revision and records the cells so chunk-granular consumers
+## (Terrain3D) can dirty only the chunks that actually changed. One O(cells)
+## compare pass, cheap next to the recompute itself. Plain per-column Arrays
+## (not Packed) so aliased element writes land in the stored columns.
+var _prev_player_states: Array = []  # per-column Array[int], -1 = first-pass baseline
+var _prev_reveal_all: bool = false
+
+
+func _detect_player_fog_changes() -> void:
+	var vision: Array = grid._vision_maps[GameManager.Team.PLAYER]
+	var memory: Array = grid._memory_maps[GameManager.Team.PLAYER]
+	var now: float = GameManager.match_time
+	var duration: float = grid._Constants.FOG_MEMORY_DURATION
+	var reveal_all: bool = grid._reveal_all.get(GameManager.Team.PLAYER, false)
+	var changed := reveal_all != _prev_reveal_all
+	_prev_reveal_all = reveal_all
+	var width: int = vision.size()
+	if _prev_player_states.size() != width:
+		_prev_player_states.clear()
+		for ix in range(width):
+			var states: Array = []
+			states.resize(vision[ix].size())
+			states.fill(-1)
+			_prev_player_states.append(states)
+	for ix in range(width):
+		var states: Array = _prev_player_states[ix]
+		var vcol: Array = vision[ix]
+		var mcol: Array = memory[ix]
+		for iy in range(states.size()):
+			var state := 2
+			if not reveal_all and not vcol[iy]:
+				state = 0
+				var last_seen: float = mcol[iy]
+				var elapsed: float = now - last_seen
+				if last_seen >= 0.0 and elapsed >= 0.0 and elapsed < duration:
+					state = 1
+			if states[iy] != state:
+				# -1 is the never-observed sentinel: count it as a change too,
+				# otherwise the initial vision reveal at match start (the
+				# consumer's assumed all-hidden baseline) would never trigger
+				# a rebuild. Costs one full fog/terrain rebuild per match.
+				changed = true
+				# Capped accumulation: standalone 2D runs have no Terrain3D
+				# draining this, and a big bounded set still maps to "dirty
+				# everything" for the chunk-granular consumer.
+				if grid._player_fog_changed_cells.size() < 512:
+					grid._player_fog_changed_cells[Vector2i(ix + grid.X_MIN, iy + grid.SURFACE_TOP)] = true
+				states[iy] = state
+	if changed:
+		grid.player_fog_revision += 1
+
+
 ## Every vision source for a team as [center_cell, radius_cells, layer_mask]
 ## triples: living units (per-type radii), the team's building, and built
 ## lanterns. Sentry towers no longer provide vision — only lanterns light the

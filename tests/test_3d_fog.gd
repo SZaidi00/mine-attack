@@ -102,11 +102,19 @@ func test_underground_hidden_cells_use_the_same_opaque_void() -> void:
 
 func test_corner_averaging_feathers_rgba() -> void:
 	var fog := _fog()
-	fog._colors.clear()
-	fog._colors[Vector2i(9, 9)] = Color(1.0, 1.0, 1.0, 0.0)
-	fog._colors[Vector2i(10, 9)] = Color(Fog3D.VOID_COLOR, 1.0)
-	fog._colors[Vector2i(9, 10)] = Color(Fog3D.SHADOW_COLOR, Fog3D.ALPHA_REMEMBERED)
-	fog._colors[Vector2i(10, 10)] = Color(Fog3D.VOID_COLOR, 1.0)
+	# Synthesize the four states around vertex (10, 10) directly in the
+	# per-column state grid: visible at (9,9), remembered at (9,10), hidden
+	# at (10,9) and (10,10). Columns/rows are indexed from the one-cell skirt.
+	fog._states.clear()
+	for x in range(GridWorld.X_MIN - 1, GridWorld.X_MAX + 2):
+		var col: Array = []
+		col.resize(GridWorld.Y_MAX - GridWorld.SURFACE_TOP + 3)
+		col.fill(0)
+		fog._states.append(col)
+	var x0 := GridWorld.X_MIN - 1
+	var y0 := GridWorld.SURFACE_TOP - 1
+	fog._states[9 - x0][9 - y0] = 2
+	fog._states[9 - x0][10 - y0] = 1
 	var expected := (Color(1.0, 1.0, 1.0, 0.0)
 		+ Color(Fog3D.VOID_COLOR, 1.0)
 		+ Color(Fog3D.SHADOW_COLOR, Fog3D.ALPHA_REMEMBERED)

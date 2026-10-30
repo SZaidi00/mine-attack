@@ -125,6 +125,27 @@ func _load_sfx_volume() -> float:
 	return clampf(cfg.get_value("audio", "sfx_volume", 1.0), 0.0, 1.0)
 
 
+# ---------- Graphics quality ----------
+
+## Settings-panel override for the 3D presentation presets: "auto" (platform
+## detect: web -> Standard, desktop -> Fancy) or a preset name. The 3D shell
+## reads this at startup and reacts live via the setting_changed signal;
+## non-3D scenes (standalone 2D, tests) ignore it.
+const GRAPHICS_QUALITY_VALUES: Array[String] = ["auto", "potato", "standard", "fancy"]
+
+
+func get_graphics_quality() -> String:
+	var value := str(_load_value("video", "graphics_quality", "auto"))
+	return value if value in GRAPHICS_QUALITY_VALUES else "auto"
+
+
+func set_graphics_quality(value: String) -> void:
+	if value not in GRAPHICS_QUALITY_VALUES:
+		value = "auto"
+	_save_value("video", "graphics_quality", value)
+	setting_changed.emit(&"graphics_quality")
+
+
 # ---------- Accessibility / gameplay preferences ----------
 
 ## HUD scale, 0.75 (smallest) to 1.5 (largest). 1.0 leaves the 1920x1080

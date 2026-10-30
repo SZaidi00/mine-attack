@@ -31,6 +31,7 @@ var _fortress_revealed := false
 var _ui_prepared := false
 var _lineup_units: Array[Node2D] = []
 var _lineup_revealed := false
+var _stress_spawned := false
 
 
 func setup(config: Dictionary) -> void:
@@ -61,13 +62,22 @@ func _process(delta: float) -> void:
 			unit.position = unit.get_meta("lineup_position")
 			unit.is_underground = bool(unit.get_meta("lineup_underground"))
 			unit.set("_state", Unit.State.IDLE)
+	if int(_config.get("stress_units", 0)) > 0 and not _stress_spawned:
+		_spawn_stress_units()
 	_elapsed += delta
 	var shots: Array = _config.shots
 	if _shot_idx >= shots.size():
 		# The last shot's capture coroutine may still be awaiting its frames —
-		# only wrap up once every save has landed.
+		# only wrap up once every save has landed. A bench window keeps the
+		# match running past the shots so Probe3D accumulates real load.
 		if _pending_captures == 0:
+			var bench: float = float(_config.get("bench", 0.0))
+			if bench > 0.0 and _elapsed < bench:
+				return
 			_end_forced_weather()
+			if Probe3D.enabled:
+				print("BENCH script-time report (avg ms per sample):")
+				print(Probe3D.report())
 			print("Capture: done (%d shots in %s)" % [shots.size(), _config.out])
 			get_tree().quit()
 		return
@@ -204,6 +214,41 @@ func _spawn_unit_lineup(underground: bool) -> Vector2:
 		_ensure_underground_lantern(Vector2i(-6, row + 1))
 		return grid.grid_to_world(Vector2i(-6, row + 1))
 	return grid.grid_to_world(Vector2i(0, row))
+
+
+## BENCH stress load: spawn n units per team across the surface band — real,
+## live units (process on) so the sim, proxies, fog, and combat feedback all
+## see genuine load. Reveal-all keeps every proxy on the expensive visible
+## path; half the player army stays selected so HP bars render too.
+func _spawn_stress_units() -> void:
+	var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+	var container := get_node_or_null("/root/Main/Units")
+	if grid == null or container == null:
+		return  # Scene still mounting; retry next frame.
+	_stress_spawned = true
+	grid.set_reveal_all(GameManager.Team.PLAYER, true)
+	var n: int = int(_config.get("stress_units", 0))
+	var scene: PackedScene = load("res://scenes/unit.tscn")
+	var per_row := 20
+	var spawned := 0
+	var type_idx := 0
+	while spawned < n * 2:
+		var team: GameManager.Team = GameManager.Team.PLAYER if spawned < n else GameManager.Team.ENEMY
+		var i := spawned if team == GameManager.Team.PLAYER else spawned - n
+		var row := GridWorld.SURFACE_TOP + 1 + (i / per_row) % 4
+		# Each team spawns on its own half so the bench load persists for the
+		# whole window instead of brawling to death at the midfield line.
+		var col := (-19 + (i % per_row)) if team == GameManager.Team.PLAYER else (1 + (i % per_row))
+		var unit: Unit = scene.instantiate()
+		unit.data = load("res://scripts/resources/units/%s.tres" % UNIT_IDS[type_idx % UNIT_IDS.size()]).duplicate(true)
+		type_idx += 1
+		unit.team = team
+		unit.is_underground = false
+		unit.position = grid.grid_to_world(Vector2i(col, row))
+		container.add_child(unit)
+		if team == GameManager.Team.PLAYER and i % 2 == 0:
+			unit.selected = true
+		spawned += 1
 
 
 func _clear_unit_lineup() -> void:

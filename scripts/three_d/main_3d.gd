@@ -64,9 +64,10 @@ var _breach_played: bool = false
 
 
 func _ready() -> void:
-	# §2.7: the quality preset gates shadows/fog/particles globally; UI to
-	# switch presets is out of scope for the shell.
-	ArtStyle3D.apply_quality(ArtStyle3D.auto_detect_quality())
+	# §2.7: the quality preset gates shadows/post/particles globally. The
+	# Settings panel can override the platform auto-detect (persisted as
+	# [video] graphics_quality); changes apply live via _on_setting_changed.
+	ArtStyle3D.apply_quality(ArtStyle3D.quality_from_string(SettingsManager.get_graphics_quality()))
 	_camera = $CameraRig/Camera3D
 	_camera.fov = CAMERA_FOV
 	_terrain = $World3D/Terrain3D
@@ -119,6 +120,8 @@ func _ready() -> void:
 
 	var grid: GridWorld = _sim.get_node("World/GridWorld") as GridWorld
 	_terrain.setup(grid)
+	# Structure proxies arriving/leaving re-stamp the dune clearances.
+	_proxies.structure_set_changed.connect(_terrain.notify_structures_changed)
 	# §2.5: art-directed effects attach the stub script onto the existing
 	# Effects3D container (node paths stay stable for tests/proxies); wire it
 	# after terrain, before the proxies reconcile.
@@ -160,11 +163,30 @@ func _ready() -> void:
 	SettingsManager.setting_changed.connect(_on_setting_changed)
 
 
-## Live palette swap (phase 4): only the colorblind toggle changes 3D team
-## colors; other settings are handled by their own listeners.
+## Live settings reactions (phase 4 + perf pass): colorblind re-skins the
+## board, graphics_quality re-lands the whole preset.
 func _on_setting_changed(what: StringName) -> void:
 	if what == &"colorblind" and _proxies != null:
 		_proxies.rebuild_all()
+	elif what == &"graphics_quality":
+		_apply_quality_live(ArtStyle3D.quality_from_string(SettingsManager.get_graphics_quality()))
+
+
+## Live quality switch (Settings panel): re-land shadows/post/render-scale,
+## drop every entity proxy so model fidelity and lantern light tiers rebuild
+## against the new preset (the proven colorblind-swap path), and force the
+## terrain/fog to repaint (snow cover, detail density, drift shader).
+func _apply_quality_live(q: ArtStyle3D.Quality) -> void:
+	if q == ArtStyle3D.quality:
+		return
+	ArtStyle3D.apply_quality(q)
+	_lighting.apply_quality_settings()
+	if _proxies != null:
+		_proxies.rebuild_all()
+	if _terrain != null:
+		_terrain.force_full_rebuild()
+	if _fog != null:
+		_fog.apply_quality()
 
 
 func _to_ground(pos2d: Vector2) -> Vector3:
@@ -411,6 +433,9 @@ func _exit_tree() -> void:
 		WeatherManager.volcano_warning_started.disconnect(_on_volcano_warning_started)
 	if WeatherManager.volcano_started.is_connected(_on_volcano_started):
 		WeatherManager.volcano_started.disconnect(_on_volcano_started)
+	# Same for the settings listener (SettingsManager outlives the shell).
+	if SettingsManager.setting_changed.is_connected(_on_setting_changed):
+		SettingsManager.setting_changed.disconnect(_on_setting_changed)
 	# The sim is a child of the window root (so /root/Main resolves), not of
 	# this shell — free it or scene switches would leak it and leave a stale
 	# sim running under the next scene. Deferred: the root is busy propagating

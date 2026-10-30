@@ -117,6 +117,38 @@ static func detail_enabled() -> bool:
 	return quality != Quality.POTATO
 
 
+## 3D render scale per preset (applied to the root viewport's scaling_3d).
+## Potato renders at 3/4 resolution — on weak GPUs this buys more than every
+## other Potato cut combined. Standard stays native on desktop but drops to
+## 0.85 on web, where fill-rate is the usual bottleneck. Fancy is native.
+static func render_scale() -> float:
+	match quality:
+		Quality.POTATO:
+			return 0.75
+		Quality.STANDARD:
+			return 0.85 if OS.has_feature("web") else 1.0
+	return 1.0
+
+
+## MSAA 2x only on desktop Fancy — on gl_compatibility/web the multisample
+## cost outweighs the edge cleanup.
+static func msaa_enabled() -> bool:
+	return quality == Quality.FANCY and not OS.has_feature("web")
+
+
+## Resolve a settings-panel value ("auto" | "potato" | "standard" | "fancy")
+## to a preset; "auto" falls back to the platform detect.
+static func quality_from_string(value: String) -> Quality:
+	match value:
+		"potato":
+			return Quality.POTATO
+		"standard":
+			return Quality.STANDARD
+		"fancy":
+			return Quality.FANCY
+	return auto_detect_quality()
+
+
 static func emission_energy(color: Color, requested: float) -> float:
 	var warm := color.r > color.b and color.r >= color.g
 	return requested if warm else minf(requested, COOL_EMISSION_CAP)

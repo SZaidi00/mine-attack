@@ -27,6 +27,12 @@ const STORM_KEEP: float = 0.2
 var _grid: GridWorld
 var _seed: int = 0
 var _storm_level: float = 0.0
+## Bumped whenever the field's output changes without the caller moving:
+## storm flattening (set_storm_level) and structure clearances
+## (refresh_clearances). Ground-snapped proxies re-sample on a revision
+## change even when standing still, so terrain edits never leave them
+## floating above freshly flattened ground.
+var revision: int = 0
 ## Surface cells within a structure clearance, strength 0..1 (bilinear-
 ## sampled between cells so the feather stays continuous at corners).
 var _clear: Dictionary = {}  # Vector2i -> float
@@ -40,7 +46,11 @@ func setup(grid: GridWorld) -> void:
 
 
 func set_storm_level(level: float) -> void:
-	_storm_level = clampf(level, 0.0, 1.0)
+	var clamped := clampf(level, 0.0, 1.0)
+	if clamped == _storm_level:
+		return
+	_storm_level = clamped
+	revision += 1
 
 
 ## Ground height in world units at a world XZ position (0 outside the
@@ -82,6 +92,7 @@ func height_at_cell(cx: float, cy: float) -> float:
 ## neighbourhood on the next pass.
 func refresh_clearances() -> void:
 	_clear.clear()
+	revision += 1
 	if _grid == null or not _grid.is_inside_tree():
 		return
 	# WALL-type surface cells: central wall, map border, and building

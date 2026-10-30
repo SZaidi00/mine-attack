@@ -9,6 +9,8 @@
 ## change). Layer (Tab) switches come in via set_underground_view().
 extends Node3D
 
+signal structure_set_changed  # a reconcile spawned/culled structure proxies
+
 const RECONCILE_INTERVAL: float = 0.2
 const STRUCTURE_GROUPS: Array[StringName] = [
 	&"buildings", &"towers", &"lanterns", &"walls", &"traps", &"mine_entries", &"ladders",
@@ -64,9 +66,12 @@ func _process(delta: float) -> void:
 		_reconcile_accum = 0.0
 		_reconcile()
 	var camera_yaw: float = _camera.global_rotation.y
+	var probe_start := Time.get_ticks_usec() if Probe3D.enabled else 0
 	for p in _unit_proxies:
 		if not p.dead:
-			p.sync_from_entity(_underground_view, camera_yaw)
+			p.sync_from_entity(_underground_view, camera_yaw, delta)
+	if Probe3D.enabled:
+		Probe3D.add("unit_sync", (Time.get_ticks_usec() - probe_start) / 1000.0)
 
 
 func _reconcile() -> void:
@@ -91,6 +96,7 @@ func _reconcile() -> void:
 			p.queue_free()
 
 	# Structures.
+	var structures_changed := false
 	var seen_structures := {}
 	for group in STRUCTURE_GROUPS:
 		for s in get_tree().get_nodes_in_group(group):
@@ -101,6 +107,7 @@ func _reconcile() -> void:
 				_structures_container.add_child(proxy)
 				_structure_proxies.append(proxy)
 				_structure_proxy_ids[s.get_instance_id()] = proxy
+				structures_changed = true
 	for i in range(_structure_proxies.size() - 1, -1, -1):
 		var p: StructureProxy3D = _structure_proxies[i]
 		var sid := p.source_id
@@ -110,5 +117,8 @@ func _reconcile() -> void:
 			_structure_proxies.remove_at(i)
 			_structure_proxy_ids.erase(sid)
 			p.queue_free()
+			structures_changed = true
 		else:
 			p.refresh(_underground_view)
+	if structures_changed:
+		structure_set_changed.emit()

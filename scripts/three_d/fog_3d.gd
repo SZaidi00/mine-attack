@@ -49,8 +49,20 @@ var _grid: GridWorld
 var _mat: ShaderMaterial
 var _underground_view := false
 var _accum := 0.0
-## Per-cell base colors from the last rebuild (both layers, one-cell skirt).
-var _colors: Dictionary = {}  # Vector2i -> Color
+## Per-cell fog states (0 hidden / 1 remembered / 2 visible) from the last
+## rebuild, stored as per-column Arrays indexed [x - (X_MIN-1)][y - (SURFACE_TOP-1)]
+## (the one-cell skirt included, off-map reads hidden) — the corner-averaging
+## pass used to do ~28k Dictionary lookups per rebuild against a color map;
+## these are plain array reads and the three states map to three constants.
+var _states: Array = []
+## Last player_fog_revision consumed; the refresh tick only rebuilds when the
+## sim's fog recompute actually changed something (vision moves, memory
+## expiry, reveal-all flips) instead of committing a new mesh every 0.5s.
+var _seen_revision := -1
+## Lazily-filled corner-color table keyed by state counts (n2*100 + n1*10 +
+## n0): all four corner colors are constants, so an average depends only on
+## how many of each state the four touching cells are in.
+var _corner_colors: Dictionary = {}
 
 
 func setup(grid: GridWorld) -> void:
@@ -63,10 +75,17 @@ func setup(grid: GridWorld) -> void:
 	set_material_override(_mat)
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_rebuild()
+	_seen_revision = _grid.player_fog_revision
 
 
 func is_underground_view() -> bool:
 	return _underground_view
+
+
+## Quality flip (live settings switch): Potato turns the edge-drift shader
+## noise off; the rebuild-driven state already follows ArtStyle3D elsewhere.
+func apply_quality() -> void:
+	_mat.set_shader_parameter("drift_enabled", 0.0 if ArtStyle3D.quality == ArtStyle3D.Quality.POTATO else 1.0)
 
 
 func set_underground_view(underground: bool) -> void:
@@ -81,18 +100,7 @@ func alpha_at_cell(pos: Vector2i) -> float:
 
 
 func color_at_cell(pos: Vector2i) -> Color:
-	return _colors.get(pos, Color(VOID_COLOR, ALPHA_HIDDEN))
-
-
-func _process(delta: float) -> void:
-	_accum += delta
-	if _accum >= REFRESH_INTERVAL:
-		_accum = 0.0
-		_rebuild()
-
-
-func _cell_color(pos: Vector2i) -> Color:
-	match _grid.fog_state_at(GameManager.Team.PLAYER, pos):
+	match _state_at(pos.x, pos.y):
 		2:
 			return Color(1.0, 1.0, 1.0, ALPHA_VISIBLE)
 		1:
@@ -100,13 +108,57 @@ func _cell_color(pos: Vector2i) -> Color:
 	return Color(VOID_COLOR, ALPHA_HIDDEN)
 
 
-## Average full RGBA values so the hidden void and remembered shadow feather
-## into one another as well as into visible ground. Off-map cells count hidden.
+func _process(delta: float) -> void:
+	_accum += delta
+	if _accum < REFRESH_INTERVAL:
+		return
+	_accum = 0.0
+	# Rebuild only when the sim's per-frame fog recompute detected an actual
+	# state change (GridFogOfWar bumps player_fog_revision). The old 0.5s
+	# unconditional rebuild committed a brand-new mesh twice a second for the
+	# whole match, changed or not.
+	if _grid == null or _grid.player_fog_revision == _seen_revision:
+		return
+	_seen_revision = _grid.player_fog_revision
+	_rebuild()
+
+
+## Fog state at grid-space corner coordinates; off-map counts hidden (the old
+## _colors default) so the feathered edge fades into the void.
+func _state_at(vx: int, vy: int) -> int:
+	var ix: int = vx - (GridWorld.X_MIN - 1)
+	var iy: int = vy - (GridWorld.SURFACE_TOP - 1)
+	if ix < 0 or ix >= _states.size() or iy < 0:
+		return 0
+	var col: Array = _states[ix]
+	if iy >= col.size():
+		return 0
+	return col[iy]
+
+
+func _average_corner_color(n0: int, n1: int, n2: int) -> Color:
+	var key := n2 * 100 + n1 * 10 + n0
+	var cached: Variant = _corner_colors.get(key)
+	if cached != null:
+		return cached
+	var c := (Color(VOID_COLOR, ALPHA_HIDDEN) * n0 \
+		+ Color(SHADOW_COLOR, ALPHA_REMEMBERED) * n1 \
+		+ Color(1.0, 1.0, 1.0, ALPHA_VISIBLE) * n2) * 0.25
+	_corner_colors[key] = c
+	return c
+
+
+## Average the RGBA of the four touching cells. Every per-state color is a
+## constant, so the average is a pure function of the state counts — table
+## lookup instead of four Color adds per corner.
 func _vertex_color(vx: int, vy: int) -> Color:
-	var sum := Color(0.0, 0.0, 0.0, 0.0)
-	for cell in [Vector2i(vx - 1, vy - 1), Vector2i(vx, vy - 1), Vector2i(vx - 1, vy), Vector2i(vx, vy)]:
-		sum += color_at_cell(cell)
-	return sum * 0.25
+	var s00 := _state_at(vx - 1, vy - 1)
+	var s10 := _state_at(vx, vy - 1)
+	var s01 := _state_at(vx - 1, vy)
+	var s11 := _state_at(vx, vy)
+	var n2 := int(s00 == 2) + int(s10 == 2) + int(s01 == 2) + int(s11 == 2)
+	var n1 := int(s00 == 1) + int(s10 == 1) + int(s01 == 1) + int(s11 == 1)
+	return _average_corner_color(4 - n2 - n1, n1, n2)
 
 
 func _vertex_alpha(vx: int, vy: int) -> float:
@@ -116,15 +168,22 @@ func _vertex_alpha(vx: int, vy: int) -> float:
 func _rebuild() -> void:
 	if _grid == null:
 		return
+	var probe_start := Time.get_ticks_usec() if Probe3D.enabled else 0
 	if _grid._reveal_all.get(GameManager.Team.PLAYER, false):
 		mesh = null
-		_colors.clear()
+		_states.clear()
+		if Probe3D.enabled:
+			Probe3D.add("fog_rebuild", (Time.get_ticks_usec() - probe_start) / 1000.0)
 		return
-	_colors.clear()
+	# One fog_state_at per cell (skirt included); the quad pass below reads
+	# these as plain array entries.
+	_states.clear()
 	for x in range(GridWorld.X_MIN - 1, GridWorld.X_MAX + 2):
+		var col: Array = []
+		col.resize(GridWorld.Y_MAX - GridWorld.SURFACE_TOP + 3)
 		for y in range(GridWorld.SURFACE_TOP - 1, GridWorld.Y_MAX + 2):
-			var pos := Vector2i(x, y)
-			_colors[pos] = _cell_color(pos)
+			col[y - (GridWorld.SURFACE_TOP - 1)] = _grid.fog_state_at(GameManager.Team.PLAYER, Vector2i(x, y))
+		_states.append(col)
 	var lift: float = UNDERGROUND_LIFT if _underground_view else SURFACE_LIFT
 	var y0: int = GridWorld.Y_MIN + 1 if _underground_view else GridWorld.SURFACE_TOP
 	var y1: int = GridWorld.Y_MAX if _underground_view else GridWorld.Y_MIN
@@ -156,3 +215,5 @@ func _rebuild() -> void:
 			st.set_color(c01)
 			st.add_vertex(Vector3(x0, lift, z1))
 	mesh = st.commit()
+	if Probe3D.enabled:
+		Probe3D.add("fog_rebuild", (Time.get_ticks_usec() - probe_start) / 1000.0)

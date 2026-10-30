@@ -26,16 +26,22 @@ func setup(grid: GridWorld) -> void:
 
 
 ## Rebuild the decorations for one terrain chunk right after the chunk's own
-## mesh pass. Frees and replaces the chunk's previous decoration holder.
+## mesh pass. The chunk's holder node is pooled (only its MultiMesh children
+## are replaced) and the crystal/drift materials are shared — the old path
+## freed and recreated the holder plus two new materials per chunk per
+## rebuild batch, which ran at 0.5s intervals for the whole match.
 ## ground (when given) lifts surface drifts onto the R3 dune field.
 func rebuild_chunk(key: Vector2i, x_start: int, y_start: int, underground_view: bool, snow_level: float, ground: HeightField3D = null) -> void:
+	var holder: Node3D
 	if _containers.has(key):
-		_containers[key].free()
-		_containers.erase(key)
-	var holder := Node3D.new()
-	holder.name = "Detail_%d_%d" % [key.x, key.y]
-	add_child(holder)
-	_containers[key] = holder
+		holder = _containers[key]
+		for child in holder.get_children():
+			child.free()
+	else:
+		holder = Node3D.new()
+		holder.name = "Detail_%d_%d" % [key.x, key.y]
+		add_child(holder)
+		_containers[key] = holder
 	if not ArtStyle3D.detail_enabled():
 		return
 	var crystals_xf: Array[Transform3D] = []
@@ -74,9 +80,9 @@ func rebuild_chunk(key: Vector2i, x_start: int, y_start: int, underground_view: 
 			elif cell.type == GridWorld.CellType.SURFACE_GROUND:
 				_add_drift(pos, cx, cz, snow_level, drifts_xf, drifts_col, ground)
 	if not crystals_xf.is_empty():
-		holder.add_child(_make_multimesh(_cone(), crystals_xf, crystals_col, _crystal_material()))
+		holder.add_child(_make_multimesh(_cone(), crystals_xf, crystals_col, _detail_material()))
 	if not drifts_xf.is_empty():
-		holder.add_child(_make_multimesh(_cone(), drifts_xf, drifts_col, _drift_material()))
+		holder.add_child(_make_multimesh(_cone(), drifts_xf, drifts_col, _detail_material()))
 	if not embers_xf.is_empty():
 		holder.add_child(_make_multimesh(_cone(), embers_xf, embers_col, _ember_material()))
 
@@ -161,18 +167,18 @@ func _make_multimesh(mesh: Mesh, xforms: Array[Transform3D], colors: Array[Color
 	return mmi
 
 
-func _crystal_material() -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = ArtStyle3D.MATERIAL_ROUGHNESS
-	return mat
+## Crystal and drift materials are configured identically (vertex-color
+## albedo, shared roughness) — one cached instance serves both, so a rebuild
+## batch no longer allocates two materials per chunk.
+static var _detail_mat: StandardMaterial3D
 
 
-func _drift_material() -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = ArtStyle3D.MATERIAL_ROUGHNESS
-	return mat
+static func _detail_material() -> StandardMaterial3D:
+	if _detail_mat == null:
+		_detail_mat = StandardMaterial3D.new()
+		_detail_mat.vertex_color_use_as_albedo = true
+		_detail_mat.roughness = ArtStyle3D.MATERIAL_ROUGHNESS
+	return _detail_mat
 
 
 func _ember_material() -> StandardMaterial3D:

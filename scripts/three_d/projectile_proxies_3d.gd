@@ -22,7 +22,11 @@ enum _Kind { ARROW, ORB, FLAME }
 
 var _grid: GridWorld
 var _underground_view := false
+## Cached /root/Main/Projectiles container (resolved once; the shell-mounted
+## sim lives for the whole match). Re-resolved if it ever goes away.
+var _container: Node = null
 var _active: Dictionary = {}  # projectile instance id -> MeshInstance3D
+var _pending_release: Array = []  # reused buffer; no per-frame allocs
 var _pools: Dictionary = {
 	_Kind.ARROW: [],
 	_Kind.ORB: [],
@@ -39,10 +43,11 @@ func set_underground_view(underground: bool) -> void:
 
 
 func _process(_delta: float) -> void:
-	var container := get_node_or_null("/root/Main/Projectiles")
+	if _container == null or not is_instance_valid(_container):
+		_container = get_node_or_null("/root/Main/Projectiles")
 	var seen := {}
-	if container != null and not _underground_view:
-		for node in container.get_children():
+	if _container != null and not _underground_view:
+		for node in _container.get_children():
 			# Burning-ground patches share the container; only real projectiles
 			# (identified by their script) get tracers.
 			if node.get_script() != PROJECTILE_SCRIPT:
@@ -56,11 +61,15 @@ func _process(_delta: float) -> void:
 				_active[node.get_instance_id()] = tracer
 			_sync_tracer(tracer, node)
 	# Release tracers whose projectile died (or while the underground view is
-	# up — surface combat is not visible from the mine).
-	for id in _active.keys():
+	# up — surface combat is not visible from the mine). Collected first:
+	# erasing during Dictionary iteration is unsafe (ordered-hash reorder).
+	for id in _active:
 		if not seen.has(id):
-			_release(_active[id])
-			_active.erase(id)
+			_pending_release.append(id)
+	for id in _pending_release:
+		_release(_active[id])
+		_active.erase(id)
+	_pending_release.clear()
 
 
 func _kind_of(proj: Node2D) -> int:
@@ -111,11 +120,13 @@ func _sync_tracer(tracer: MeshInstance3D, proj: Node2D) -> void:
 	elif kind == _Kind.ORB:
 		# Tint variants (Arcane missiles) recolor from a per-color cache; a
 		# plain fireball resets a pooled orb back to the default material.
+		# Change-guarded: set_material_override re-binds, so only swap when
+		# the pooled tracer actually needs a different material.
 		var tint: Color = proj.get("tint")
-		if tint != Color.WHITE:
-			tracer.set_material_override(_tinted_orb_material(tint))
-		else:
-			tracer.set_material_override(_tracer_material(_Kind.ORB, Color(1.0, 0.6, 0.2), 2.2))
+		var desired: Material = _tinted_orb_material(tint) if tint != Color.WHITE \
+			else _tracer_material(_Kind.ORB, Color(1.0, 0.6, 0.2), 2.2)
+		if tracer.get_material_override() != desired:
+			tracer.set_material_override(desired)
 	# Fog honesty: no tracers for combat the player cannot see.
 	if _grid != null:
 		tracer.visible = _grid.is_visible_to(GameManager.Team.PLAYER, proj.global_position)
@@ -154,18 +165,24 @@ func _build_tracer(kind: int) -> MeshInstance3D:
 ## Unshaded + emissive so tracers pop against any lighting and bloom picks
 ## them up on Fancy. Cached per kind; orb tint variants (Arcane missiles) get
 ## their own per-color cache slots so pooled tracers only swap materials.
+## Nested kind -> color -> energy Dictionaries: the old "%d|%s|%f" format
+## string rebuilt a key per call per tracer per frame even on cache hits.
 static var _tracer_mats: Dictionary = {}
 
 
 static func _tracer_material(kind: int, color: Color, energy: float) -> StandardMaterial3D:
-	var key := "%d|%s|%f" % [kind, color.to_html(), energy]
-	if _tracer_mats.has(key):
-		return _tracer_mats[key]
+	var by_kind: Dictionary = _tracer_mats.get(kind, {})
+	var by_color: Dictionary = by_kind.get(color, {})
+	var cached: Variant = by_color.get(energy)
+	if cached != null:
+		return cached
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.albedo_color = color
 	ArtStyle3D.apply_emission(mat, color, energy)
-	_tracer_mats[key] = mat
+	by_color[energy] = mat
+	by_kind[color] = by_color
+	_tracer_mats[kind] = by_kind
 	return mat
 
 
