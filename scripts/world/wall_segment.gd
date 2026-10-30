@@ -111,23 +111,23 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
-## Blocks the surface cell and every dug cell directly below it. Walls are
-## full-depth barriers, like the central wall that spans all layers —
-## otherwise A* happily routes enemies through tunnels dug beneath the
-## surface row and the wall never gets attacked. Undug dirt and real wall
-## cells are already A*-solid on their own.
+## Blocks the whole surface band and every dug cell directly below it. Walls
+## are full-depth barriers, like the central wall that spans all layers —
+## otherwise A* happily routes enemies around the wall through another band
+## row or through tunnels dug beneath the surface and the wall never gets
+## attacked. Undug dirt and real wall cells are already A*-solid on their own.
 func _seal_column() -> void:
-	for y in range(GridWorld.Y_MIN, GridWorld.Y_MAX + 1):
+	for y in range(GridWorld.SURFACE_TOP, GridWorld.Y_MAX + 1):
 		var pos := Vector2i(_cell.x, y)
 		if _is_sealable(pos):
 			_grid.seal_wall_cell(pos, team)
 
 
-## A column cell the wall is responsible for sealing: the surface row, and
-## dug-out cells beneath (carved tunnels are erased from the grid, so they
-## read as null; EMPTY covers any cell object left behind).
+## A column cell the wall is responsible for sealing: any row in the surface
+## band, and dug-out cells beneath (carved tunnels are erased from the grid,
+## so they read as null; EMPTY covers any cell object left behind).
 func _is_sealable(pos: Vector2i) -> bool:
-	if pos.y == _cell.y:
+	if _grid.is_surface_row(pos.y):
 		return true
 	var cell: GridWorld.Cell = _grid.get_cell(pos)
 	return cell == null or cell.type == GridWorld.CellType.EMPTY
@@ -194,7 +194,7 @@ func repair(amount: int) -> int:
 func demolish() -> void:
 	remove_from_group("walls")
 	if _grid != null:
-		for y in range(GridWorld.Y_MIN, GridWorld.Y_MAX + 1):
+		for y in range(GridWorld.SURFACE_TOP, GridWorld.Y_MAX + 1):
 			var pos := Vector2i(_cell.x, y)
 			if _is_sealable(pos):
 				_grid.unseal_wall_cell(pos)
@@ -208,10 +208,10 @@ func demolish() -> void:
 
 func _destroy() -> void:
 	remove_from_group("walls")
-	# Free the cells this wall sealed: the surface row and dug cells beneath
+	# Free the cells this wall sealed: the surface band and dug cells beneath
 	# it. Undug dirt stays A*-solid on its own.
 	if _grid != null:
-		for y in range(GridWorld.Y_MIN, GridWorld.Y_MAX + 1):
+		for y in range(GridWorld.SURFACE_TOP, GridWorld.Y_MAX + 1):
 			var pos := Vector2i(_cell.x, y)
 			if _is_sealable(pos):
 				_grid.unseal_wall_cell(pos)
@@ -227,9 +227,10 @@ func _destroy() -> void:
 
 
 ## Interaction rect for unit.attack_building(): a zero-height strip at the
-## wall's ground line so the stand point lands on the walkable surface row.
+## wall's own cell row so the stand point lands on a walkable band cell.
 func get_bounds_rect() -> Rect2:
-	return Rect2(global_position.x - 16.0, 0.0, 32.0, 0.0)
+	var top: float = floorf(global_position.y / GridWorld.CELL_SIZE) * GridWorld.CELL_SIZE
+	return Rect2(global_position.x - 16.0, top, 32.0, 0.0)
 
 
 func _draw() -> void:

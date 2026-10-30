@@ -8,7 +8,8 @@ extends Control
 const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
 
 const _COLS: int = Constants.GRID_X_MAX - Constants.GRID_X_MIN + 1
-const _ROWS: int = Constants.GRID_Y_MAX - Constants.GRID_Y_MIN + 1
+const _Y_TOP: int = Constants.GRID_Y_MIN - Constants.SURFACE_ROWS + 1
+const _ROWS: int = Constants.GRID_Y_MAX - _Y_TOP + 1
 const _REDRAW_INTERVAL: float = 0.25
 
 const _DIRT_BY_LAYER: Dictionary = {
@@ -47,23 +48,24 @@ func _ready() -> void:
 func grid_to_map(grid_pos: Vector2i) -> Vector2:
 	return Vector2(
 		(grid_pos.x - Constants.GRID_X_MIN) * size.x / _COLS,
-		(grid_pos.y - Constants.GRID_Y_MIN) * size.y / _ROWS)
+		(grid_pos.y - _Y_TOP) * size.y / _ROWS)
 
 
 func world_to_map(world_pos: Vector2) -> Vector2:
 	var fx: float = world_pos.x / Constants.TILE_SIZE - Constants.GRID_X_MIN
-	var fy: float = world_pos.y / Constants.TILE_SIZE - Constants.GRID_Y_MIN
+	var fy: float = world_pos.y / Constants.TILE_SIZE - _Y_TOP
 	return Vector2(fx * size.x / _COLS, fy * size.y / _ROWS)
 
 
 func map_to_world(map_pos: Vector2) -> Vector2:
 	var gx: float = map_pos.x * _COLS / maxf(size.x, 1.0) + Constants.GRID_X_MIN
-	var gy: float = map_pos.y * _ROWS / maxf(size.y, 1.0) + Constants.GRID_Y_MIN
+	var gy: float = map_pos.y * _ROWS / maxf(size.y, 1.0) + _Y_TOP
 	var world := Vector2((gx + 0.5) * Constants.TILE_SIZE, (gy + 0.5) * Constants.TILE_SIZE)
 	var x_min: float = Constants.GRID_X_MIN * Constants.TILE_SIZE
 	var x_max: float = (Constants.GRID_X_MAX + 1) * Constants.TILE_SIZE
+	var y_min: float = _Y_TOP * Constants.TILE_SIZE
 	var y_max: float = (Constants.GRID_Y_MAX + 1) * Constants.TILE_SIZE
-	return Vector2(clampf(world.x, x_min, x_max), clampf(world.y, 0.0, y_max))
+	return Vector2(clampf(world.x, x_min, x_max), clampf(world.y, y_min, y_max))
 
 
 # ─── Input ───
@@ -103,7 +105,7 @@ func _draw_terrain() -> void:
 		var cell: GridWorld.Cell = _grid._cells[pos]
 		var rect := Rect2(
 			(pos.x - Constants.GRID_X_MIN) * cw,
-			(pos.y - Constants.GRID_Y_MIN) * ch,
+			(pos.y - _Y_TOP) * ch,
 			cw + 0.6, ch + 0.6)
 		match cell.type:
 			GridWorld.CellType.SURFACE_GROUND:

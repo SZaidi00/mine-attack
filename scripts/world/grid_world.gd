@@ -5,6 +5,12 @@ signal cell_destroyed(grid_pos: Vector2i)
 signal wall_hp_changed(current: int, maximum: int)
 # Emitted by the Ore Sonar scan with the newly revealed ore cells (VFX hook).
 signal cells_revealed(cells: Array)
+# Fog-change feed for the 3D projections: bumped by the fog recompute's
+# change detector (vision moves, memory expiry, reveal-all flips). Fog3D and
+# Terrain3D poll this counter at their refresh cadence — fog still emits no
+# per-frame push signals by design.
+var player_fog_revision: int = 0
+var _player_fog_changed_cells: Dictionary = {}  # Vector2i -> true, drained by consumers
 # Revamp Phase 4 dynamic-terrain events (HUD banners, VFX hooks).
 signal lava_warning_started(seconds: float, layers: int)
 signal lava_risen(layers: int)
@@ -75,6 +81,11 @@ const X_MAX: int = _Constants.GRID_X_MAX
 const Y_MIN: int = _Constants.GRID_Y_MIN
 const Y_MAX: int = _Constants.GRID_Y_MAX
 
+# Walkable surface battlefield: SURFACE_ROWS rows stacked above row 0
+# (y in [SURFACE_TOP, Y_MIN]). Underground stays at y >= 1.
+const SURFACE_ROWS: int = _Constants.SURFACE_ROWS
+const SURFACE_TOP: int = Y_MIN - SURFACE_ROWS + 1
+
 # Central wall is a single objective with shared HP. The pool is per-instance
 # (not a const) because the per-seed map profile scales it: map generation
 # sets _wall_max_hp from WALL_HP * profile wall multiplier.
@@ -97,7 +108,7 @@ var _astar: AStarGrid2D = AStarGrid2D.new()
 var _wall_sealed_cells: Dictionary = {}
 
 # ─── Fog of War (Revamp Phase 1) ───
-# Per-team vision: _vision_maps[team][x - X_MIN][y - Y_MIN] is true while the
+# Per-team vision: _vision_maps[team][x - X_MIN][y - SURFACE_TOP] is true while the
 # cell is inside any friendly vision source's radius; _memory_maps holds the
 # GameManager.match_time when the cell was last visible (-1 = never seen).
 # A remembered cell stays dimly visible for FOG_MEMORY_DURATION seconds, then
@@ -206,9 +217,13 @@ func _process(delta: float) -> void:
 	# match ends, like the units). Redraw every frame so the fog edge tracks
 	# moving units smoothly.
 	if GameManager.game_active:
+		var probe_start := Time.get_ticks_usec() if Probe3D.enabled else 0
 		_fog._update_vision(GameManager.Team.PLAYER)
+		_fog._detect_player_fog_changes()
 		_fog._update_vision(GameManager.Team.ENEMY)
 		_fog._prune_unit_ghosts()
+		if Probe3D.enabled:
+			Probe3D.add("sim_fog_recompute", (Time.get_ticks_usec() - probe_start) / 1000.0)
 		_events._process_events(delta)
 		queue_redraw()
 	var expired: Array[Vector2i] = []
@@ -264,6 +279,12 @@ func is_solid(grid_pos: Vector2i) -> bool:
 
 func has_cell(grid_pos: Vector2i) -> bool:
 	return _cells.has(grid_pos)
+
+
+## True for grid rows in the walkable surface battlefield band
+## ([SURFACE_TOP, Y_MIN]). Underground is y >= 1.
+func is_surface_row(y: int) -> bool:
+	return y >= SURFACE_TOP and y <= Y_MIN
 
 
 func is_walkable(grid_pos: Vector2i) -> bool:
@@ -385,6 +406,15 @@ func is_remembered_by(team: GameManager.Team, world_pos: Vector2) -> bool:
 
 func fog_state_at(team: GameManager.Team, grid_pos: Vector2i) -> int:
 	return _fog.fog_state_at(team, grid_pos)
+
+
+## Drains the player-side fog cells that changed since the last drain — the
+## 3D terrain projection turns these into per-chunk dirty marks instead of
+## rebuilding everything on a timer.
+func consume_player_fog_changes() -> Array:
+	var cells: Array = _player_fog_changed_cells.keys()
+	_player_fog_changed_cells.clear()
+	return cells
 
 
 func _get_vision_sources(team: GameManager.Team) -> Array:

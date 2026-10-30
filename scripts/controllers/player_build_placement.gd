@@ -32,6 +32,16 @@ class _RangeIndicator:
 
 var pc: PlayerController
 
+## 3D rework Phase 1: while the 3D shell runs the scene, the ghost's gold
+## range/vision disc is a flat 3D disc (the 2D _RangeIndicator would draw on
+## the sim's hidden canvas); null in 2D mode.
+var _range_disc_3d: RangeDisc3D = null
+## Shell-mode placement preview model. The 2D GhostVisual sprite can't serve
+## there: it would draw in the sim's stale 2D camera space (edge pan and
+## zoom-to-cursor move only the rig), floating nowhere near the cursor's 3D
+## ground point. Null in 2D mode.
+var _ghost_3d: BuildGhost3D = null
+
 
 func _init(p: PlayerController) -> void:
 	pc = p
@@ -45,11 +55,23 @@ func _update_ghost() -> void:
 		var world: Vector2 = pc._commands._screen_to_world(pc.get_viewport().get_mouse_position())
 		var cell: Vector2i = pc._grid.world_to_grid(world)
 		pc._build_ghost.global_position = pc._grid.grid_to_world(cell)
+		if _range_disc_3d != null:
+			_range_disc_3d.position = Presentation3D.to_3d(pc._build_ghost.global_position, _ground_y(pc._build_ghost.global_position))
 		var err: String = _placement_error(pc._build_mode, cell)
 		var tint := Color(0.4, 1.0, 0.4, 0.55) if err == "" else Color(1.0, 0.35, 0.35, 0.55)
 		var visual: Node2D = pc._build_ghost.get_node_or_null("GhostVisual")
 		if visual != null:
 			visual.modulate = tint
+		if _ghost_3d != null:
+			_ghost_3d.position = Presentation3D.to_3d(pc._build_ghost.global_position, _ground_y(pc._build_ghost.global_position))
+			_ghost_3d.set_valid(err == "")
+
+
+## R3: placement previews ride the dune surface (0 on the flat underground
+## floor), so the ghost/disc sit on the ground they preview.
+func _ground_y(pos2d: Vector2) -> float:
+	return Presentation3D.ground_height(pc.get_tree(),
+		pos2d.x * Presentation3D.WORLD_SCALE, pos2d.y * Presentation3D.WORLD_SCALE)
 
 
 func _handle_input(event: InputEvent) -> void:
@@ -74,38 +96,54 @@ func start_build_placement(kind: String) -> void:
 	pc._build_mode = kind
 	pc._build_ghost = Node2D.new()
 	pc._build_ghost.name = "BuildGhost"
-	var texture: Texture2D
 	var ring_radius_cells: float = 0.0
 	match kind:
-		"underground_lantern":
-			texture = preload("res://frost_mines_assets/props/lantern_underground.png")
 		"tower":
-			texture = preload("res://frost_mines_assets/props/tower_player.png")
 			ring_radius_cells = _tower_attack_range_cells()
-		"wall":
-			texture = preload("res://frost_mines_assets/props/wall_player.png")
-		"trap":
-			pass  # no texture asset — code-drawn marker added below
-		_:
-			texture = preload("res://frost_mines_assets/props/lantern_t1.png")
+		"lantern":
 			ring_radius_cells = pc._Constants.LANTERN_T1_VISION
-	var sprite: Sprite2D = Sprite2D.new()
-	sprite.name = "GhostVisual"
-	sprite.texture = texture
-	if texture != null:
-		if kind == "lantern" or kind == "tower":
-			# Surface structures stand on the ground line at the bottom of the row.
-			sprite.position = Vector2(0, 16.0 - texture.get_height() / 2.0)
-		pc._build_ghost.add_child(sprite)
-	if kind == "trap":
+	# 3D shell: the preview is a translucent 3D model at the snapped cell,
+	# centered in the gold disc. Standalone 2D keeps the tinted sprite/marker.
+	var parent3d := Presentation3D.effects_parent(pc.get_tree())
+	if parent3d != null:
+		_ghost_3d = BuildGhost3D.create(kind)
+		var anchor: Vector2 = pc._grid.grid_to_world(pc._grid.world_to_grid(
+			pc._commands._screen_to_world(pc.get_viewport().get_mouse_position())))
+		_ghost_3d.position = Presentation3D.to_3d(anchor, _ground_y(anchor))
+		parent3d.add_child(_ghost_3d)
+	elif kind == "trap":
 		var marker := _TrapGhostMarker.new()
 		marker.name = "GhostVisual"
 		pc._build_ghost.add_child(marker)
+	else:
+		var texture: Texture2D
+		match kind:
+			"underground_lantern":
+				texture = preload("res://frost_mines_assets/props/lantern_underground.png")
+			"tower":
+				texture = preload("res://frost_mines_assets/props/tower_player.png")
+			"wall":
+				texture = preload("res://frost_mines_assets/props/wall_player.png")
+			_:
+				texture = preload("res://frost_mines_assets/props/lantern_t1.png")
+		if texture != null:
+			var sprite: Sprite2D = Sprite2D.new()
+			sprite.name = "GhostVisual"
+			sprite.texture = texture
+			if kind == "lantern" or kind == "tower":
+				# Surface structures stand on the ground line at the bottom of the row.
+				sprite.position = Vector2(0, 16.0 - texture.get_height() / 2.0)
+			pc._build_ghost.add_child(sprite)
 	if ring_radius_cells > 0.0:
 		# Faint disc showing the vision/attack radius the structure provides.
-		var indicator := _RangeIndicator.new()
-		indicator.radius = ring_radius_cells * GridWorld.CELL_SIZE
-		pc._build_ghost.add_child(indicator)
+		if parent3d != null:
+			_range_disc_3d = RangeDisc3D.create(ring_radius_cells * GridWorld.CELL_SIZE * Presentation3D.WORLD_SCALE)
+			_range_disc_3d.position = _ghost_3d.position
+			parent3d.add_child(_range_disc_3d)
+		else:
+			var indicator := _RangeIndicator.new()
+			indicator.radius = ring_radius_cells * GridWorld.CELL_SIZE
+			pc._build_ghost.add_child(indicator)
 	pc.add_child(pc._build_ghost)
 	DebugLog.log_command("PlayerController", "build", "placement mode: " + kind)
 
@@ -123,6 +161,12 @@ func _tower_attack_range_cells() -> float:
 
 
 func _cancel_build_mode() -> void:
+	if _range_disc_3d != null:
+		_range_disc_3d.queue_free()
+		_range_disc_3d = null
+	if _ghost_3d != null:
+		_ghost_3d.queue_free()
+		_ghost_3d = null
 	if pc._build_mode == "":
 		return
 	pc._build_mode = ""
@@ -159,10 +203,10 @@ func _structure_at_cell(cell: Vector2i) -> Node2D:
 	return null
 
 
-## Tower rules (Revamp Phase 3): own half's surface row, not within 2 cells of
+## Tower rules (Revamp Phase 3): own half's surface band, not within 2 cells of
 ## a building or mine entry, max TOWER_MAX_COUNT per team plus research bonuses.
 func _tower_placement_error(cell: Vector2i) -> String:
-	if cell.y != 0:
+	if not pc._grid.is_surface_row(cell.y):
 		return "must be placed on the surface"
 	if cell.x > -2:
 		return "own half of the map only"
@@ -186,10 +230,10 @@ func _tower_placement_error(cell: Vector2i) -> String:
 	return ""
 
 
-## Wall rules (Revamp Phase 3): own half's surface row, unoccupied cell, at
+## Wall rules (Revamp Phase 3): own half's surface band, unoccupied cell, at
 ## most a couple of segments per team (faction-modified) plus research bonuses.
 func _wall_placement_error(cell: Vector2i) -> String:
-	if cell.y != 0:
+	if not pc._grid.is_surface_row(cell.y):
 		return "must be placed on the surface"
 	if cell.x > -2:
 		return "own half of the map only"
@@ -291,7 +335,7 @@ func _lantern_placement_error(kind: String, cell: Vector2i) -> String:
 			if Vector2(pc._grid.world_to_grid(lantern.global_position) - cell).length() < pc._Constants.UNDERGROUND_LANTERN_MIN_DISTANCE:
 				return "too close to another lantern"
 	else:
-		if cell.y != 0:
+		if not pc._grid.is_surface_row(cell.y):
 			return "must be placed on the surface"
 		if cell.x > -2:
 			return "own half of the map only"

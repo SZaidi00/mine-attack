@@ -250,22 +250,23 @@ func _pick_tower_cell(building: Node2D) -> Vector2i:
 	var best: Vector2i = Vector2i(-9999, -9999)
 	var best_score: float = INF
 	for x in range(GridWorld.X_MIN, GridWorld.X_MAX + 1):
-		var cell := Vector2i(x, 0)
-		if not _tower_cell_valid(cell):
-			continue
-		var score: float = maxf(cell.distance_to(base_cell), cell.distance_to(mine_cell)) \
-			- team_dir * cell.x * 0.05
-		if score < best_score:
-			best_score = score
-			best = cell
+		for y in range(GridWorld.SURFACE_TOP, GridWorld.Y_MIN + 1):
+			var cell := Vector2i(x, y)
+			if not _tower_cell_valid(cell):
+				continue
+			var score: float = maxf(cell.distance_to(base_cell), cell.distance_to(mine_cell)) \
+				- team_dir * cell.x * 0.05
+			if score < best_score:
+				best_score = score
+				best = cell
 	return best
 
 
 ## Mirrors the player-side tower rules (_tower_placement_error), flipped to
-## the AI's half: surface row, own half, unoccupied, 2 cells clear of any
+## the AI's half: surface band, own half, unoccupied, 2 cells clear of any
 ## building or mine entry.
 func _tower_cell_valid(cell: Vector2i) -> bool:
-	if cell.y != 0:
+	if not ai._grid.is_surface_row(cell.y):
 		return false
 	var team_dir: int = 1 if ai.team == GameManager.Team.ENEMY else -1
 	if cell.x * team_dir < 2:
@@ -297,21 +298,22 @@ func _pick_lantern_cell(building: Node2D) -> Vector2i:
 	var best: Vector2i = Vector2i(-9999, -9999)
 	var best_score: float = INF
 	for x in range(GridWorld.X_MIN, GridWorld.X_MAX + 1):
-		var cell := Vector2i(x, 0)
-		if not _lantern_cell_valid(cell, base_cell, mine_cell):
-			continue
-		var score: float = maxf(cell.distance_to(base_cell), cell.distance_to(mine_cell)) \
-			- team_dir * cell.x * 0.1
-		if score < best_score:
-			best_score = score
-			best = cell
+		for y in range(GridWorld.SURFACE_TOP, GridWorld.Y_MIN + 1):
+			var cell := Vector2i(x, y)
+			if not _lantern_cell_valid(cell, base_cell, mine_cell):
+				continue
+			var score: float = maxf(cell.distance_to(base_cell), cell.distance_to(mine_cell)) \
+				- team_dir * cell.x * 0.1
+			if score < best_score:
+				best_score = score
+				best = cell
 	return best
 
 
 ## Mirrors the player-side placement rules (_lantern_placement_error in
 ## player_build_placement.gd), flipped to the AI's half of the map.
 func _lantern_cell_valid(cell: Vector2i, base_cell: Vector2i, mine_cell: Vector2i) -> bool:
-	if cell.y != 0:
+	if not ai._grid.is_surface_row(cell.y):
 		return false
 	var team_dir: int = 1 if ai.team == GameManager.Team.ENEMY else -1
 	if cell.x * team_dir < 2:

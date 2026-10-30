@@ -5,7 +5,7 @@ MineAttack is a single-player 2D RTS built in Godot 4.7. The player controls the
 ## Technology stack
 
 - **Engine:** Godot 4.7 (standard build, not .NET)
-- **Renderer:** `gl_compatibility`
+- **Renderer:** `forward_plus` on desktop (Phase 1 2.5D port, branch `feat/3d-conversion`); `gl_compatibility` kept for mobile/web export overrides (`rendering_method.mobile`/`.web`)
 - **Physics:** Jolt Physics
 - **Language:** GDScript (static typing preferred on function signatures)
 - **Targets:** Web, macOS, Windows
@@ -24,8 +24,13 @@ mine-attack/
 │   ├── ladder.tscn
 │   ├── lantern.tscn / tower.tscn / wall_segment.tscn / trap.tscn
 │   ├── ui/                    # main_menu, hud, debug_overlay
-│   └── effects/               # coin_popup, damage_popup, coin_pickup,
-│                              # reject_popup, burning_ground, meteor, volcano_background
+│   ├── effects/               # coin_popup, damage_popup, coin_pickup,
+│   │                          # reject_popup, burning_ground, meteor, volcano_background
+│   ├── world_3d.tscn          # Phase 1 World3D: lights, Terrain3D, EntityProxies,
+│   │                          # Units3D/Structures3D/Effects3D containers
+│   └── main_3d.tscn           # Phase 1 main scene (branch feat/3d-conversion): 3D shell
+│                              # that mounts main.tscn at /root/Main (sim untouched, 2D
+│                              # layers hidden) and renders the World3D presentation
 ├── scripts/
 │   ├── autoload/      # constants, game_manager, economy_manager, faction_manager,
 │                      # research_manager, debug_log, audio_manager, settings_manager,
@@ -39,11 +44,122 @@ mine-attack/
 │   ├── effects/       # coin_popup, damage_popup, coin_pickup, reject_popup,
 │                      # order_marker, burning_ground, meteor, volcano_background
 │   ├── units/         # unit.gd + helper modules, projectile.gd, unit_pigeon.gd
+│   ├── three_d/       # Phase 1 2.5D port + Phase 2 art pass presentation layer
+│   │                  # (sim -> render only): main_3d.gd (shell + 45deg-FOV camera
+│   │                  # rig, 55deg surface / 82.5deg underground pitches, 0.25s
+│   │                  # Tab tween, dolly 12 within 3-16 (3-10 underground),
+│   │                  # zoom-to-cursor, pose_camera(), minimal shake,
+│   │                  # AudioListener3D, quality preset), terrain_3d.gd
+│   │                  # (chunked cell->mesh projection, R3 height-field dune
+│   │                  # displacement via height_field_3d.gd — deterministic
+│   │                  # map-seeded value noise + ridged dune bands, structure
+│   │                  # clearances, storm flattening — plus a read-only
+│   │                  # world_height_at() ground query, emissive
+│   │                  # lava pass, storm snow cover; 3D-rework phase 3 relit the
+│   │                  # albedo pass so the ground receives mood light, sun shadows,
+│   │                  # and depth fog), terrain_detail_3d.gd (MultiMesh
+│   │                  # ore crystals / lava embers / snow drifts riding the
+│   │                  # dune surface), entity_proxies_3d.gd
+│   │                  # (group reconcile), unit_proxy_3d.gd (1.4x proxy-root
+│   │                  # scale-up, counter-scaled HP bars, R3 dune ground-snap)
+│   │                  # + unit_model_3d.gd
+│   │                  # (R7: Standard/Fancy import sculpted textured GLBs via
+│   │                  # unit_model_loader.gd + the shared model manifest; named-pivot
+│   │                  # state-driven animation, team/accent/glow rebinds, sculpted
+│   │                  # faction variants hidden until enemy identification, undead
+│   │                  # tint; Potato keeps the procedural recipes), structure_proxy_3d.gd (1.08x
+│   │                  # wall-footprint-capped proxy-root scale — ladders stay 1x;
+│   │                  # keep/tower/wall damage states, lantern OmniLight tiers,
+│   │                  # counter-scaled range disc, faction-reveal
+│   │                  # accents, construction grow — unbuilt towers/walls/lanterns
+│   │                  # rise out of the ground on a per-frame y-scale instead of
+│   │                  # standing full height at construction alpha — R3 surface
+│   │                  # ground-snap; R4 (visual revamp): Standard/Fancy build the
+│   │                  # imported textured GLBs from
+│   │                  # frost_mines_assets/models/model_manifest.json via
+│   │                  # model_manifest.gd + structure_model_loader.gd
+│   │                  # (footprint/ground normalization, per-proxy material
+│   │                  # duplication, accent/glow slot rebind; starter GLBs bake
+│   │                  # window glow into the albedo, so the enemy base's
+│   │                  # pre-reveal read is a body-color dim), Potato keeps the
+│   │                  # procedural recipes; tools/check_model_budgets.sh gates
+│   │                  # tris/texture budgets from the same JSON manifest),
+│   │                  # lighting_3d.gd
+│   │                  # (R2 cold overcast/storm/underground/volcano moods with
+│   │                  # weather-specific background/fog density + ACES, warm-source
+│   │                  # bloom on Standard+, SSAO/shadows on Fancy), effects_3d.gd
+│   │                  # (camera-local full-depth storm snow and eruption cinders/ash,
+│   │                  # underground dust motes, world-space cave-in bursts + R6
+│   │                  # first-breach dust pool and fading ground-crack decal), art_style_3d.gd
+│   │                  # (3d-visual-revamp R2 palette/material/bloom tokens, warm-emission
+│   │                  # policy, Potato/Standard/Fancy quality switch — presets also
+│   │                  # carry a viewport render scale (Potato 0.75, web Standard 0.85,
+│   │                  # FSR where the renderer supports it), MSAA 2x on desktop Fancy,
+│   │                  # and quality_from_string() for the persisted Settings override;
+│   │                  # team_color() keeps
+│   │                  # the live colorblind swap and entity rim materials),
+│   │                  # plus the perf-pass layer (3D performance pass, 2026-10):
+│   │                  # change-detected unit proxy sync (fog-hidden/off-layer proxies
+│   │                  # early-out; dune ground-snap re-samples on movement or a
+│   │                  # HeightField3D.revision change — storm flatten / structure
+│   │                  # clearances), Presentation3D static node-resolution caching,
+│   │                  # event-driven fog/terrain rebuilds (GridFogOfWar diffs the
+│   │                  # player's per-cell fog state every frame and bumps
+│   │                  # GridWorld.player_fog_revision; Fog3D/Terrain3D poll the
+│   │                  # revision at their refresh cadence — full rebuilds no longer
+│   │                  # run on unconditional 0.5s timers — with a 5s terrain
+│   │                  # backstop for signal-less mutations), throttled selection
+│   │                  # hover scans, and probe_3d.gd (opt-in script-time probes the
+│   │                  # F3 debug overlay and capture BENCH mode read),
+│   │                  # plus the 3D-rework Phase 1 feedback layer:
+│   │                  # presentation_3d.gd (3D-shell detection + 2D->3D conversion
+│   │                  # for sim-side spawn points), flat_geo_3d.gd (shared unshaded
+│   │                  # ring/disc meshes + materials), selection_rings_3d.gd
+│   │                  # (MultiMesh selection + hover ground rings),
+│   │                  # projectile_proxies_3d.gd (per-frame projectile reconcile
+│   │                  # into pooled glowing tracers), order_marker_3d.gd +
+│   │                  # damage_popup_3d.gd (3D equivalents the sim spawns when the
+│   │                  # shell is current_scene), range_disc_3d.gd (selected-tower
+│   │                  # range disc + build-ghost range/vision disc),
+│   │                  # build_ghost_3d.gd (translucent 3D placement preview at
+│   │                  # the snapped cell, centered in the disc, with the green/red
+│   │                  # validity tint — the 2D GhostVisual sprite is skipped while
+│   │                  # the shell runs because it would draw in the sim's stale
+│   │                  # 2D camera space, offset from the cursor's ground point),
+│   │                  # plus the 3D-rework Phase 5 effects & telegraphs layer:
+│   │                  # event_proxies_3d.gd (per-frame reconcile of the sim's
+│   │                  # meteors into falling streaks + impact rings, burning-ground
+│   │                  # patches into scorch decals with pulsing danger rings —
+│   │                  # decal lifetime/extinguish read from sim burn state, never
+│   │                  # tracked separately — plus the lava-rise warning shimmer
+│   │                  # MultiMesh over the cells the wave profile will flood and
+│   │                  # the cave-in warning's 3x3 shadow zone + dust trickle),
+│   │                  # telegraph_3d.gd (pooled red dashed arcs from the attacker
+│   │                  # group's centroid to the target on explicit attack orders;
+│   │                  # player_commands.gd spawns them via the same
+│   │                  # Presentation3D branch as the order markers), the eruption
+│   │                  # warning presence (lighting_3d.gd pulses the sun toward the
+│   │                  # eruption cast on a beat, effects_3d.gd ramps ember density
+│   │                  # over the warning, main_3d.gd rumbles the rig on the
+│   │                  # WeatherManager warning/start signals), and the emission
+│   │                  # hierarchy retune (telegraphs 3.2 > tracers 2.2-2.6 >
+│   │                  # ambient lava/lanterns 0.7-1.8 > decorative embers 0.9),
+│   │                  # plus fog_3d.gd (R6 opaque #10141C unexplored void,
+│   │                  # deep-rock remembered shadow, corner-averaged RGBA quads;
+│   │                  # edge-only shader drift never reduces hidden opacity;
+│   │                  # underground lanterns add warm OmniLights + static radial
+│   │                  # ground pools at the sim vision radius, hidden by fog and
+│   │                  # construction state; first central-wall breach triggers
+│   │                  # one-shot dust/crack feedback + minimal camera nudge)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
 ├── tests/             # GUT test suite (~48 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
-│                      # gen_crawler_sprites.gd
+│                      # gen_crawler_sprites.gd, gen_unit_glbs.py (R7 deterministic
+│                      # sculpted/textured unit GLBs), check_model_budgets.sh
+│                      # (R4/R7 GLB tri/texture budget gate vs
+│                      # models/model_manifest.json), resize_glb_textures.py
+│                      # (downscales embedded GLB textures to the 2048² cap)
 ├── .githooks/         # pre-push release hook
 └── improvements/      # revamp.md + new sprites
 ```
@@ -52,7 +168,74 @@ mine-attack/
 
 ## Runtime architecture
 
-`scenes/ui/main_menu.tscn` is the main scene (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
+> **3D conversion branch (`feat/3d-conversion`):** the main menu's Play
+> flow loads `scenes/main_3d.tscn` instead of `main.tscn` (the only menu
+> change; `run/main_scene` stays `scenes/ui/main_menu.tscn`). The Node3D
+> shell mounts the untouched `scenes/main.tscn` sim at `/root/Main` (so
+> every hard-coded path keeps working), hides its CanvasItem layers, and
+> renders the 3D presentation in `scenes/world_3d.tscn` (chunked terrain
+> projected from `GridWorld._cells`, plus unit/structure proxies mirroring
+> the live sim, sim → render only). Phase 2 (art pass, see
+> roadmap/3d-conversion/phase-2-art-pass.md + style-guide.md) replaced the
+> placeholder stand-ins with procedural flat-shaded low-poly models
+> (unit_model_3d.gd; structure models with damage states, faction-reveal
+> accents, lantern OmniLight tiers), sculpted terrain with an emissive lava
+> pass and storm snow cover, weather-reactive lighting (lighting_3d.gd),
+> particle effects (effects_3d.gd), camera shake, and Potato/Standard/Fancy
+> quality presets (ArtStyle3D.apply_quality()). 3D-rework Phase 3
+> (roadmap/3d-rework/) relit the terrain (lit vertex-color albedo receiving
+> mood light, sun shadows, and fog) and added the post stack: ACES
+> tonemapping at every preset, emissive bloom on Standard+, depth fog at all
+> tiers, and SSAO on Fancy (Lighting3D.apply_quality_settings()).
+> The shell stays
+> `current_scene` and
+> frees the root-mounted sim in `_exit_tree`, so Play Again / Quit to Menu
+> work unchanged. The HUD CanvasLayer and all input handling stay on the
+> 2D sim, except its clipped 2D WeatherOverlay, which is disabled because the
+> 3D shell provides full-depth weather; the 3D camera rig follows
+> `PlayerController.view_mode_changed` for Tab. Visual-revamp R5 tweens the
+> rig in 0.25s between the 55deg surface perspective and 82.5deg underground
+> plane, caps underground dolly at 10 (surface stays 3-16), and exposes
+> `pose_camera()` for deterministic harness shots. 3D-rework Phase 1 (roadmap/3d-rework/) added the combat-feedback
+> layer: MultiMesh selection/hover ground rings (selection_rings_3d.gd),
+> pooled glowing projectile tracers (projectile_proxies_3d.gd), HP bars that
+> also show on selection (unit_proxy_3d.gd), terrain-projected order markers
+> and billboarded damage popups (order_marker_3d.gd / damage_popup_3d.gd —
+> the sim spawn points branch to them via Presentation3D.shell() when the
+> shell is `current_scene`, keeping the 2D path for standalone main.tscn and
+> tests), and gold range discs for the selected tower and the build-ghost
+> preview (range_disc_3d.gd). 3D-rework Phase 2 (roadmap/3d-rework/) reframed
+> the camera and scale: a 45deg FOV (same for all quality presets), a retuned
+> dolly range (start 12, clamped 3-16) that keeps a scaled humanoid ~30 px
+> at 1080p while max zoom-out still covers a player's half, zoom-to-cursor
+> wheel zoom (the rig ray-marches the sculpted terrain via
+> `Terrain3D.world_height_at()` and glides the focus toward the cursor's
+> ground point), and a proxy-root scale-up — units 1.4x, structures 1.08x so a
+> wall still fits its cell (ladders unscaled) — with HP bars, selection-ring
+> radii, and the tower range disc counter-scaled to world units. 3D-rework
+> Phase 4 (roadmap/3d-rework/) retuned the palette onto a luminance ladder
+> (terrain darkest, units brightest): value-lifted team colors routed through
+> `ArtStyle3D.team_color()` with a live colorblind swap (enemy scarlet ->
+> ember orange; the shell rebuilds all entity proxies on the settings
+> signal), a sky-side rim on unit/structure materials, Brute's accent moved
+> from red to ember `#EE6B1C` (2D `menu_color`/`COLOR_BRUTE` match),
+> darkened/cooled underground dirt and rock, and a full-strength snow-cover
+> lerp so storms visibly whiten the board. 3D-rework Phase 5
+> (roadmap/3d-rework/) added the effects & telegraph layer: meteors and
+> burning-ground patches mirrored into 3D (event_proxies_3d.gd — falling
+> emissive streaks, expanding impact rings at the sim's damage radius, and
+> scorch decals whose pulse/fade/extinguish read the sim's burn state), an
+> eruption-warning presence (a sun pulse in lighting_3d.gd, an ember density
+> ramp in effects_3d.gd, and a rig rumble on the WeatherManager warning/start
+> signals), event-zone telegraphs (lava-rise shimmer over exactly the cells
+> the wave profile will flood, cave-in 3x3 shadow zone + dust trickle), red
+> attack-order telegraph arcs (telegraph_3d.gd, spawned from
+> player_commands.gd via the Presentation3D branch like the order markers),
+> and an emission-energy retune so telegraphs are the brightest emissive
+> class. On `main`,
+> Play loads `scenes/main.tscn` directly.
+
+`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
 
 - `World/VolcanoBackground` — decorative volcano sprite.
 - `World/GridWorld` — procedural map, A*, fog of war, rendering.
@@ -79,7 +262,7 @@ Global singletons. All hold per-match state that survives scene reloads; `hud.gd
 - `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Baseline income: both teams trickle `BASELINE_INCOME_COIN` every `BASELINE_INCOME_INTERVAL` from match start, no eligibility gates (AI scaled by the difficulty coin multiplier). Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (same AI scaling), so a wiped economy can always re-staff.
 - `research_manager.gd` — timed branch research tree: mutually-exclusive tiers, one-time 500g respec, active research slot with queue, Ore Sonar scan.
 - `audio_manager.gd` — synthesized SFX and ambience, plus dynamic music: a combat percussion loop fades in with `combat_intensity` (pulsed by `UnitCombat.take_damage` whenever the player team is involved; decays over ~4.5s) while the calm wind/drips layers thin under snowstorms and volcano eruptions. Weather state is polled (`WeatherManager.is_snowstorm_active()`/`is_volcano_active()`) because AudioManager's `_ready` runs before the WeatherManager singleton exists.
-- `settings_manager.gd` — window resolution persistence (desktop only), SFX bus volume (all platforms), accessibility preferences (UI scale, colorblind palette, reduced motion/flash, tutorial-hint state), and remappable key bindings (`[input]` section), all in `user://settings.cfg`. Emits `setting_changed(what: StringName)` so live UI (HUD scale, camera shake, palettes) reacts without polling. `apply_saved_bindings()` rebuilds InputMap key events at startup (mouse buttons are never remapped).
+- `settings_manager.gd` — window resolution persistence (desktop only), SFX bus volume (all platforms), graphics-quality override for the 3D presets (`[video] graphics_quality`: auto/potato/standard/fancy; the 3D shell applies it at startup and live via `setting_changed`), accessibility preferences (UI scale, colorblind palette, reduced motion/flash, tutorial-hint state), and remappable key bindings (`[input]` section), all in `user://settings.cfg`. Emits `setting_changed(what: StringName)` so live UI (HUD scale, camera shake, palettes) reacts without polling. `apply_saved_bindings()` rebuilds InputMap key events at startup (mouse buttons are never remapped).
 - `weather_manager.gd` — snowstorms + volcano eruptions: independent game-time state machines, scheduling/damage/duration scaled by difficulty. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` and `WeatherManager.set_volcano_events_enabled(false)` (tests force events instead).
 - `ai_belief_system.gd` — per-team belief maps (cells/unit sightings/enemy-faction guess) built only from that team's vision; confidence decays on stale intel. Reset per match via `AIBeliefSystem.reset()`.
 - `match_stats.gd` — per-match stats recording: units lost (hooked from `Unit._die`), damage dealt (hooked from unit `take_damage`, credited to the attacker's team), and a 5s coin/population/base-HP timeline (relative to match start, with a t=0 baseline and a match-end point). `build_summary()` also records each team's max completed research tier (`player_max_tier`/`enemy_max_tier`) for post-game coaching hints. Reset per match from `hud._ready` (metadata: difficulty/factions/opener captured there); on `GameManager.game_over` it finalizes `last_summary` for the game-over panel and writes a JSON log to `user://match_logs/`.
@@ -90,7 +273,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 - `player_controller.gd` — exports, input routing, camera/view state, stance/build mode state; delegates to helpers. Also owns control groups (Ctrl+1-9 assign / Alt+1-9 recall via raw key handling ahead of the action chain), the attack-move arm toggle (`Q`), and the formation mode (`F` cycles line → column → spread, `get_formation_mode()`).
   - `player_selection.gd` — single/box selection and unit/building picking.
-  - `player_commands.gd` — right-click command resolution, train/upgrade/kill callbacks, stance/rally application, attack-move orders, and the expanding-ring order markers (blue move / red attack / gold mining) spawned per accepted order. Shift+right-click queues context orders (move / attack unit / attack building / attack structure / mine / breach) onto each unit's `_order_queue` (one pops per IDLE tick, before any idle handler); plain orders, `stop()`, and `kill()` clear the queue via `_clear_target`. Group formations (`_formation_destinations`): plain move/attack-move orders to 3+ fighters spread destinations by the current mode — line (perpendicular to the group's march direction), column (single file), spread (grid) — snapped to walkable, non-overlapping slots; queued orders always use exact clicked positions.
+  - `player_commands.gd` — right-click command resolution, train/upgrade/kill callbacks, stance/rally application, attack-move orders, and the expanding-ring order markers (blue move / red attack / gold mining) spawned per accepted order. Screen→world mapping (`_screen_to_world`) routes through the 3D rig's camera ray (`Presentation3D.shell()._terrain_point_at`) when the main_3d shell runs — the hidden 2D Camera2D no longer tracks the rig — and falls back to the 2D canvas transform standalone. Shift+right-click queues context orders (move / attack unit / attack building / attack structure / mine / breach) onto each unit's `_order_queue` (one pops per IDLE tick, before any idle handler); plain orders, `stop()`, and `kill()` clear the queue via `_clear_target`. Group formations (`_formation_destinations`): plain move/attack-move orders to 3+ fighters spread destinations by the current mode — line (perpendicular to the group's march direction), column (single file), spread (grid) — snapped to walkable, non-overlapping slots; queued orders always use exact clicked positions.
   - `player_camera.gd` — zoom, pan, surface/underground view bookmarks, screen shake.
   - `player_build_placement.gd` — lantern/tower/wall/trap placement ghost and validation; towers and lanterns show a gold range/vision disc while placing (tower range includes research bonuses).
 - `ai_controller.gd` — tick fields, aggression state, scout memory; delegates to helpers.
@@ -104,9 +287,9 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 ### `scripts/world/`
 
-- `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers.
-  - `grid_map_generation.gd` — map generation and A* initialization. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
-  - `grid_pathfinding.gd` — `find_path`, `find_path_underground` (crawler variant: seals the surface row for the query so underground raids can't bypass the central wall over the top), walkability helpers, wall cell sealing.
+- `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers. The surface is a multi-row battlefield band, not a single row: `SURFACE_ROWS` (6) walkable rows span `y ∈ [SURFACE_TOP, Y_MIN]` = `[-5, 0]`; underground stays at `y >= 1`. `GridWorld.is_surface_row(y)` is the shared predicate — use it instead of `y == 0` checks. Base building footprints genuinely seal their band cells (`building.gd._mark_footprint_solid`), leaving row 0 in front of each base walkable.
+  - `grid_map_generation.gd` — map generation and A* initialization. Generates the 6-row surface band above row 0 and the underground layers; the A* region covers both. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
+  - `grid_pathfinding.gd` — `find_path`, `find_path_underground` (crawler variant: seals the whole surface band for the query so underground raids can't bypass the central wall over the top), walkability helpers, wall cell sealing.
   - `grid_fog_of_war.gd` — vision maps, memory, ghost silhouettes, fog rendering.
   - `grid_drawing.gd` — surface/underground terrain drawing, effects, wall HP bar.
   - `grid_mining.gd` — cell damage, mining, ore reveal, ore depletion trickle.
@@ -136,10 +319,11 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 ### `scripts/ui/`
 
-- `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners. Semantic colors that change under colorblind mode (`COLOR_ENEMY`, `COLOR_SUCCESS`, `COLOR_VICTORY`) are static-var mirrors swapped by `apply_colorblind_palette()`.
+- `ui_theme_tokens.gd` — shared revamp color/size tokens and `StyleBoxFlat` factories for panels, buttons, tabs, progress bars, and warning banners. R8 uses cold-glass panels, brass key-lines, amber alerts, and the bundled OFL Cinzel display font for titles/numerals. Semantic colors that change under colorblind mode (`COLOR_ENEMY`, `COLOR_SUCCESS`, `COLOR_VICTORY`) are static-var mirrors swapped by `apply_colorblind_palette()`.
+- `ui_progress_dial.gd` — R8 brass-ringed production/research loader with an optional centered icon and clamped 0–1 progress; compatibility-safe custom drawing, mouse-transparent.
 - `hud.gd` — extends `Control` (the root is scaled for UI scale: `pivot_offset` zero, `scale = (s,s)`, fixed-offset virtual rect `window_size / s`, auto-capped so the bars always fit). Node references (bottom-bar buttons are looked up by `%Name` unique name so layout moves can't break paths), signal wiring, game-over flow (summary table + coaching hints from `CoachingHints.generate()` + `MatchGraph` coin/population charts), lava/weather/volcano warning banners (pulse skipped when reduced-flash is on), faction-identified popup, research-completion + production (unit trained / lantern upgraded) toasts; delegates to helpers. The BottomBar is two rows: `TrainRow` (7 train buttons) on top, `CommandRow` (upgrades + stance/kill/research/build) below. The Necromancy Raise toggle is created at runtime and inserted after the Rally button, visible only with the research done and a wizard selected. Threat alerts: `report_threat(world_pos, kind)` (called from `unit_combat.gd` for damaged player miners and from the player-building `hp_changed` handler for base damage) feeds the `threat_alert_layer` screen-edge arrows and a globally throttled `alert_ping` (the HUD is in the `hud` group for lookup without a hard dependency). A brief formation-mode readout label (`show_formation_mode`) appears when `F` cycles formations.
   - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
-  - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists).
+  - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists). Picking a structure hides the tray while the placement ghost is armed — a visible tray would eat the confirming click — and reopening the menu mid-placement cancels the ghost.
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
 - `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system.
 - `settings_panel.gd` — shared settings popup opened from the main menu and pause menu Settings buttons; scrollable card with three groups — Display (map seed, UI scale slider, colorblind / reduced motion / reduced flash / tutorial checkboxes, tutorial reset), Audio (SFX volume slider on the SFX bus), Controls (capture-key rebinding rows for `Constants.REMAPPABLE_ACTIONS` with conflict rejection). Main menu and pause menu keep their own inline resolution rows (desktop only).
@@ -148,12 +332,12 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 - `tutorial_hints.gd` — first-match contextual hints (~10 trigger conditions polled on a 1s tick, one card at a time, dismiss persists to `SettingsManager.tutorial_seen`).
 - `coaching_hints.gd` — `class_name CoachingHints` pure function generating 2–3 post-game observations from the `MatchStats` summary (fast-loss, base-damage, economy ratio, army trade, max-tier rules).
 - `match_graph.gd` — post-game coin/population charts from the MatchStats timeline.
-- `research_panel.gd` — Doctrine Deck research overlay: spatial branch map with tech cards (icon, state badge, discipline-colored accent, active progress strip) and elbow/OR-dashed connectors, persistent detail rail (cost/time/prereq/exclusion + action button) and footer queue chips with cancel/respec/scan.
-- `training_queue_panel.gd` — Frosted Steel production module: active training with progress, scrollable queued-items list, capacity readout, Pause/Resume and Clear actions.
+- `research_panel.gd` — Doctrine Deck research overlay: spatial branch map with tech cards (icon, state badge, discipline-colored accent, active progress strip) and elbow/OR-dashed connectors, persistent detail rail (cost/time/prereq/exclusion + action button) and footer queue chips with cancel/respec/scan. The header's active research uses an R8 `UIProgressDial`.
+- `training_queue_panel.gd` — Frosted Steel production module: active training with an R8 brass-ringed progress dial, scrollable queued-items list, capacity readout, Pause/Resume and Clear actions.
 - `unit_button.gd` — training buttons; cost/time labels and the affordability gate read the building's `get_train_cost`/`get_train_time` so research discounts (e.g. Broodmother's dragon discount) show immediately, refreshed via `ResearchManager.research_completed`/`research_changed`.
 - `layer_indicator.gd` — underground layer accessibility indicator.
 - `threat_alert_layer.gd` — canvas-drawn threat layer on the HUD root: one fading arrow per active threat (clamped to a screen-edge inset rect, pointing at off-screen threats; on-screen threats get a diamond), aged out over 4s; world→HUD conversion divides by the HUD root's UI scale.
-- `debug_overlay.gd` — runtime debug display.
+- `debug_overlay.gd` — runtime debug display (F3). Beyond the unit/path overlays and stats panel: a perf readout (frame ms, draw calls, triangle count, and per-section Probe3D script averages — probing auto-enables while the overlay is visible).
 
 ## Game concepts
 
@@ -178,7 +362,7 @@ Trainable units (costs and times in `Constants.COSTS` / `Constants.TRAIN_TIMES`)
 - **Dragon** — flying, anti-air and ground, high cost.
 - **Pigeon** — flying scout trained from towers; provides vision, vulnerable to anti-air.
 - **Engineer** — support unit (75g, 2 pop, no attack); channels repairs on damaged friendly structures (walls/towers/lanterns/building — never units), charging coin per HP restored. A structure damaged within `ENGINEER_REPAIR_LOCKOUT_SEC` cannot be repaired. Idle engineers auto-seek the nearest damaged friendly structure.
-- **Crawler** — underground-only raider (120g, 2 pop, melee); descends into the mine at spawn and can never surface or dig. Its auto-acquire is the one exception to the midfield rule: it engages any visible enemy unit underground on either side of the central wall. Underground pathing seals the surface row (`find_path_underground`), so crossing midfield requires a breached central wall plus dug tunnels. Not a fighter: waves, garrison, rally, Ctrl+F, and fighter upgrades all ignore it (`UnitData.is_crawler`).
+- **Crawler** — underground-only raider (120g, 2 pop, melee); descends into the mine at spawn and can never surface or dig. Its auto-acquire is the one exception to the midfield rule: it engages any visible enemy unit underground on either side of the central wall. Underground pathing seals the surface band (`find_path_underground`), so crossing midfield requires a breached central wall plus dug tunnels. Not a fighter: waves, garrison, rally, Ctrl+F, and fighter upgrades all ignore it (`UnitData.is_crawler`).
 - **Undead** (Necromancy research only, not trainable) — raised by a wizard channeling on a corpse left by a dead surface swordsman/archer/dragon (corpses last `NECRO_CORPSE_DURATION` s, any team's wizard may raise them). An undead copy runs at ~50% HP/damage with no faction abilities, no fighter upgrades, and no kiting, costs no population, and dies when its raising wizard dies. Per-wizard caps: 5 ground undead or 1 undead dragon (needs a dragon corpse). Player wizards get a Raise toggle button in the CommandRow when selected (off/troops/dragon); enemy wizards default to troops. Sickly green sprite tint instead of new art (`UnitData.is_undead`).
 
 Miner upgrades unlock deeper layers (Level 1: layers 1–2, Level 2: layers 3–4, Level 3: layers 5–7). Fighter upgrades are per-type levels 1–3.
@@ -189,7 +373,7 @@ Placeable from the radial build menu:
 
 - **Lanterns** — surface and underground variants provide vision and upgrade T1→T2→T3.
 - **Towers** — static surface defenses; auto-attack and vision.
-- **Walls** — single-cell surface barriers that block movement and projectiles.
+- **Walls** — single-cell surface barriers (placeable on any row of the surface band) that block movement and projectiles by sealing their entire column through the band plus dug cells below.
 - **Traps** — hidden area damage triggered by enemy units (miner-placed with Guerrilla research).
 
 ### Research
@@ -252,6 +436,25 @@ godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit
 
 Replace `godot` with the path to your Godot binary if it is not on `PATH` (e.g. `/Applications/Godot.app/Contents/MacOS/Godot`).
 
+### Check imported-model budgets (R4/R7)
+
+```bash
+tools/check_model_budgets.sh
+```
+
+Verifies every entry in `frost_mines_assets/models/model_manifest.json` (the
+shared source of truth for the Godot loader and this script): triangle count
+vs `tri_gate`, per-image ≤ 2048², and the ≤ 64 MB total embedded-texture web
+budget. Pure-python GLB parser by default (trimesh/pygltflib used when
+installed); exits 0 on pass, 1 on budget violation, 2 on tooling error. New
+or regenerated GLBs with textures over 2048² go through
+`tools/resize_glb_textures.py` first (convention 5 "resize at import"; the
+2048² cap stays the gate ceiling — the perf pass resized the five structure
+GLBs' actual textures to 1024² via `--max=1024 --only=/structures/`, cutting
+embedded textures 17.8 → 6.0 MB). R7
+unit GLBs are deterministically regenerated with `python3 tools/gen_unit_glbs.py`
+(Pillow, same as the texture-resize tool); re-run the budget gate afterward.
+
 ### Export all presets
 
 ```bash
@@ -279,7 +482,9 @@ The script also packages `MineAttack-macOS.zip` (via `ditto`, preserving bundle 
 tools/capture/run_capture.sh /tmp/shots
 ```
 
-Launches `tools/capture/capture_driver.tscn` instead of the main menu, starts a seeded match (difficulty/faction/speed via env vars), and saves PNGs of named camera poses (`start`, `surface`, `zoomout`, `underground`, `storm`, `volcano`, `custom:X:Y:Z`) at fixed sim-seconds. Built for CI and AI-agent sandboxes: an agent can render, look, and iterate without a display or a human screenshot provider. Requires `xvfb-run`; downloads a Godot Linux binary on first run (`GODOT_BIN` to override).
+Launches `tools/capture/capture_driver.tscn` instead of the main menu, starts a seeded match (difficulty/faction/speed via env vars), and saves PNGs of named camera poses (`start`, `surface`, `zoomout`, `underground`, `breach`, `units`, `units_underground`, `base`, `dunes`, `fortress`, `storm`, `volcano`, `custom:X:Y:Z`) at fixed sim-seconds. Built for CI and AI-agent sandboxes: an agent can render, look, and iterate without a display or a human screenshot provider. Requires `xvfb-run`; downloads a Godot Linux binary on first run (`GODOT_BIN` to override). `RESOLUTION=3840x2160` selects 4K output (default 1920×1080); `tools/capture/run_showcase.sh roadmap/3d-visual-revamp/r8` captures the six R8 marketing poses at both sizes.
+
+Perf BENCH mode (3D perf pass): `STRESS_UNITS=100 BENCH=30 SHOTS="" tools/capture/run_capture.sh /tmp/bench` spawns 100 extra units per team (real, live units — the 200-unit ceiling both teams at cap) and, after 30 sim-seconds, prints the Probe3D per-section script-time averages (unit sync, terrain/fog rebuilds, sim fog recompute, ring hover scan). GPU frame times under software GL are meaningless (see below), but script milliseconds are comparable across runs — this is the regression-gate number. On macOS dev machines without xvfb, run the driver directly with the same flags, windowed.
 
 Hard requirements, learned the hard way in headless/CI environments (full notes in `tools/capture/README.md`):
 
@@ -287,7 +492,7 @@ Hard requirements, learned the hard way in headless/CI environments (full notes 
 - Fresh checkouts must run `--import` once first (the script handles this) or resource loads fail.
 - Frame times under software GL are meaningless — trust only the pixels.
 
-The driver is presentation-only (same autoload setters the menu uses) and inert unless launched as the scene; parsing is covered by `tests/test_capture_driver.gd`.
+The driver is presentation-only and inert unless launched as the scene. It disables random weather scheduling so forced storm/volcano poses cannot overlap; parsing is covered by `tests/test_capture_driver.gd`.
 
 ### Web export and local serve
 
@@ -330,7 +535,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself. Map generation does NOT follow the global RNG stream (dedicated map RNG, see `grid_map_generation.gd`) — tests that need a fixed map pin `GameManager.set_map_seed(n)` in setup and `GameManager.clear_map_seed()` in teardown.
-- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare, control groups, attack-move, minimap, tutorial hints, tutorial panel, coaching hints, production toasts, accessibility settings, key remapping, waypoint orders, formations, threat alerts, dynamic music, juice (hit-stop / necro VFX).
+- Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare, control groups, attack-move, minimap, tutorial hints, tutorial panel, coaching hints, production toasts, accessibility settings, key remapping, waypoint orders, formations, threat alerts, dynamic music, juice (hit-stop / necro VFX), surface band (multi-row battlefield).
 
 ## Security and deployment considerations
 

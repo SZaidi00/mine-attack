@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/world_3d.tscn" id="1_world3d"]
+[ext_resource type="Script" path="res://scripts/three_d/main_3d.gd" id="2_main"]
+
+[node name="Main3D" type="Node3D"]
+script = ExtResource("2_main")
+
+[node name="World3D" parent="." instance=ExtResource("1_world3d")]
+
+[node name="CameraRig" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+current = true
+fov = 45.0
+near = 0.1
+far = 150.0

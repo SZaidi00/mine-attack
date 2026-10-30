@@ -47,17 +47,13 @@ func _cleanup_structures() -> void:
 	for lantern in get_tree().get_nodes_in_group("lanterns"):
 		lantern.free()
 	for wall in get_tree().get_nodes_in_group("walls"):
-		if wall.is_built():
-			# Free the whole sealed column (surface cell + dug cells beneath;
-			# carved tunnels are erased from the grid, so they read as null).
-			for y in range(GridWorld.Y_MIN, GridWorld.Y_MAX + 1):
-				var pos := Vector2i(wall.get_cell().x, y)
-				if not _grid._astar.is_in_boundsv(pos):
-					continue
-				var cell = _grid.get_cell(pos)
-				if pos.y == wall.get_cell().y or cell == null or cell.type == GridWorld.CellType.EMPTY:
-					_grid._astar.set_point_solid(pos, false)
 		wall.free()
+	# Walls seal their whole column through the surface band plus dug cells
+	# beneath; free every sealed cell regardless of which wall owned it.
+	for pos in _grid._wall_sealed_cells.keys():
+		if _grid._astar.is_in_boundsv(pos):
+			_grid._astar.set_point_solid(pos, false)
+	_grid._wall_sealed_cells.clear()
 
 
 func _player_building() -> Node2D:

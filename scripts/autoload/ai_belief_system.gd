@@ -70,7 +70,7 @@ func update_belief_from_vision(team: GameManager.Team) -> void:
 	if grid == null:
 		return
 	var cells: Dictionary = _believed_cells[team]
-	for y in range(GridWorld.Y_MIN, GridWorld.Y_MAX + 1):
+	for y in range(GridWorld.SURFACE_TOP, GridWorld.Y_MAX + 1):
 		for x in range(GridWorld.X_MIN, GridWorld.X_MAX + 1):
 			var pos := Vector2i(x, y)
 			if grid.fog_state_at(team, pos) != _FOG_VISIBLE:

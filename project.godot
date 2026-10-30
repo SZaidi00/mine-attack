@@ -188,7 +188,10 @@ cycle_formation={
 [rendering]
 
 rendering_device/driver.windows="d3d12"
-renderer/rendering_method="gl_compatibility"
+renderer/rendering_method="forward_plus"
 renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method.web="gl_compatibility"
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/positional_shadow/atlas_size=1024
 textures/vram_compression/import_etc2_astc=true
 environment/defaults/default_clear_color=Color(0.06, 0.08, 0.12, 1)

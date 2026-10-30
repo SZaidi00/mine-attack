@@ -1,0 +1,263 @@
+extends GutTest
+
+# Phase 2 art pass (roadmap/3d-conversion/phase-2-art-pass.md):
+# §2.4 weather-reactive lighting moods, §2.5 camera shake juice (reduced-motion
+# aware), §2.6 the 3D audio listener, §2.7 quality presets flipping the
+# shadows gate in ArtStyle3D.
+
+var _shell: Node
+var _main: Node
+var _lighting: Lighting3D
+var _sun: DirectionalLight3D
+var _env: Environment
+var _prev_reduced_motion: bool
+
+
+func before_all() -> void:
+	seed(12345)
+	GameManager.set_map_seed(7)
+	_prev_reduced_motion = SettingsManager.get_reduced_motion()
+	WeatherManager.reset()
+	WeatherManager.set_weather_events_enabled(false)
+	WeatherManager.set_volcano_events_enabled(false)
+	_shell = load("res://scenes/main_3d.tscn").instantiate()
+	get_tree().root.add_child(_shell)
+	# The sim mounts deferred; adopt it as current_scene like test_3d_port.
+	for i in range(60):
+		await get_tree().process_frame
+		_main = get_node_or_null("/root/Main")
+		if _main != null:
+			break
+	get_tree().current_scene = _main
+	_lighting = _shell.get_node("World3D/Lighting3D")
+	_sun = _shell.get_node("World3D/Lights/DirectionalLight3D")
+	_env = _shell.get_node("World3D/Lights/WorldEnvironment").environment
+	await _frames(10)
+
+
+func before_each() -> void:
+	# Clean weather state between mood tests (a lingering volcano would win
+	# the mood priority over a forced storm).
+	WeatherManager.reset()
+	WeatherManager.set_weather_events_enabled(false)
+	WeatherManager.set_volcano_events_enabled(false)
+
+
+func after_all() -> void:
+	WeatherManager.reset()
+	WeatherManager.set_weather_events_enabled(true)
+	WeatherManager.set_volcano_events_enabled(true)
+	SettingsManager.set_reduced_motion(_prev_reduced_motion)
+	# Free immediately (not queue_free): see test_3d_port.after_all.
+	_shell.free()
+	_main = get_node_or_null("/root/Main")
+	if _main != null:
+		_main.free()
+	GameManager.clear_map_seed()
+
+
+func _frames(n: int) -> void:
+	for i in range(n):
+		await get_tree().process_frame
+
+
+## The lighting tweens run at ~2/s, so a mood change needs a moment to land;
+## wait for the overcast steady state before sampling a baseline (a previous
+## test may have left the sun mid-tween).
+func _settle_overcast(max_frames: int = 150) -> void:
+	for i in range(max_frames):
+		await get_tree().process_frame
+		if _lighting.get_mood_name() == "overcast" and absf(_sun.light_energy - float(Lighting3D._MOODS.overcast.sun_energy)) < 0.05:
+			return
+
+
+# ─── §2.6 audio listener ───
+
+func test_audio_listener_3d_exists_and_is_current() -> void:
+	var listener: AudioListener3D = _shell.get_node_or_null("CameraRig/AudioListener3D")
+	assert_not_null(listener, "shell parents an AudioListener3D under CameraRig")
+	if listener == null:
+		return
+	assert_true(listener.is_current(), "the 3D listener is the current one")
+
+
+# ─── §2.4 weather-reactive moods ───
+
+func test_volcano_eruption_cools_light_and_back() -> void:
+	await _settle_overcast()
+	var base_energy: float = _sun.light_energy
+	var base_ambient: float = _env.ambient_light_energy
+	var base_fog: float = _env.fog_density
+	WeatherManager.force_volcano_start()
+	var shifted := false
+	for i in range(120):
+		await get_tree().process_frame
+		if _lighting.get_mood_name() == "volcano" \
+				and _sun.light_energy < base_energy - 0.05 \
+				and _env.ambient_light_energy < base_ambient - 0.1 \
+				and _env.fog_density > base_fog + 0.01 \
+				and _sun.light_color.b > _sun.light_color.r \
+				and _env.ambient_light_color.b > _env.ambient_light_color.r:
+			shifted = true
+			break
+	assert_true(shifted, "eruption cools the key and adds a full-view ash haze")
+	WeatherManager.force_volcano_end()
+	var restored := false
+	for i in range(120):
+		await get_tree().process_frame
+		if _lighting.get_mood_name() == "overcast" \
+				and absf(_sun.light_energy - base_energy) < 0.1 \
+				and absf(_env.fog_density - base_fog) < 0.005:
+			restored = true
+			break
+	assert_true(restored, "ending the eruption restores light and atmospheric density")
+
+
+func test_snowstorm_flattens_sun_and_back() -> void:
+	await _settle_overcast()
+	var base_energy: float = _sun.light_energy
+	var base_fog: float = _env.fog_density
+	var base_background: Color = _env.background_color
+	WeatherManager.force_snowstorm_start()
+	var shifted := false
+	for i in range(120):
+		await get_tree().process_frame
+		if _lighting.get_mood_name() == "storm" \
+				and _sun.light_energy < base_energy - 0.2 \
+				and _env.fog_density > base_fog + 0.01 \
+				and _env.background_color.g > base_background.g + 0.15:
+			shifted = true
+			break
+	assert_true(shifted, "storm dims sun and adds gusting fog (sun %.3f/%.3f, fog %.3f/%.3f, bg %.3f/%.3f)" % [_sun.light_energy, base_energy, _env.fog_density, base_fog, _env.background_color.g, base_background.g])
+	WeatherManager.force_snowstorm_end()
+	var restored := false
+	for i in range(120):
+		await get_tree().process_frame
+		if _lighting.get_mood_name() == "overcast" \
+				and absf(_sun.light_energy - base_energy) < 0.1 \
+				and absf(_env.fog_density - base_fog) < 0.005:
+			restored = true
+			break
+	assert_true(restored, "ending the storm restores light and atmospheric density")
+
+
+func test_underground_view_darkens_mine_and_back() -> void:
+	await _settle_overcast()
+	var base_energy: float = _sun.light_energy
+	# Equivalent of the Tab view switch (test_3d_port drives the terrain
+	# directly; here the lighting hook is the contract under test).
+	_lighting.set_underground_view(true)
+	var darkened := false
+	# 200 frames: the headless runner's frame budget stretches the ~2s tween.
+	for i in range(200):
+		await get_tree().process_frame
+		if _lighting.get_mood_name() == "underground" and _sun.light_energy < base_energy * 0.6:
+			darkened = true
+			break
+	assert_true(darkened, "underground mood drops the sun well below the surface base")
+	_lighting.set_underground_view(false)
+	await _settle_overcast(60)
+	assert_eq(_lighting.get_mood_name(), "overcast", "surface view restores the base mood")
+
+
+# ─── §2.5 camera shake juice ───
+
+func test_camera_shake_respects_reduced_motion() -> void:
+	var rig: Node3D = _shell.get_node("CameraRig")
+	await _frames(5)
+	var still: Vector3 = rig.position
+	SettingsManager.set_reduced_motion(true)
+	_shell.add_shake(1.0)
+	await _frames(5)
+	assert_eq(rig.position, still, "reduced motion: add_shake leaves the rig parked on the focus")
+	SettingsManager.set_reduced_motion(false)
+	_shell.add_shake(1.0)
+	var shaken := false
+	for i in range(10):
+		await get_tree().process_frame
+		if rig.position != still:
+			shaken = true
+			break
+	assert_true(shaken, "with motion allowed, the rumble offsets the rig off the focus")
+	await _frames(60)  # Let the shake decay so later tests start parked.
+
+
+# ─── §2.7 quality presets ───
+
+func test_quality_presets_flip_shadow_gate() -> void:
+	var detected: int = ArtStyle3D.auto_detect_quality()
+	ArtStyle3D.apply_quality(detected)
+	assert_eq(ArtStyle3D.shadows_enabled(), detected == ArtStyle3D.Quality.FANCY,
+		"apply_quality(auto_detect_quality()) sets the shadows gate")
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.POTATO)
+	assert_false(ArtStyle3D.shadows_enabled(), "Potato disables shadows")
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.FANCY)
+	assert_true(ArtStyle3D.shadows_enabled(), "Fancy enables shadows")
+	ArtStyle3D.apply_quality(detected)  # Restore the shell's startup preset.
+
+
+# ─── 3D rework phase 3: post-processing & lit terrain ───
+
+func test_post_stack_tonemaps_and_glow_threshold_targets_emissives() -> void:
+	assert_not_null(_env)
+	if _env == null:
+		return
+	_lighting.apply_quality_settings()
+	assert_eq(_env.tonemap_mode, Environment.TONE_MAPPER_ACES,
+		"the world environment tonemaps with ACES")
+	assert_almost_eq(_env.glow_hdr_threshold, ArtStyle3D.BLOOM_HDR_THRESHOLD, 0.001,
+		"R2 bloom uses the shared warm-source threshold")
+	assert_almost_eq(_env.glow_intensity, ArtStyle3D.BLOOM_INTENSITY, 0.001,
+		"R2 bloom intensity stays restrained")
+	assert_eq(_env.background_color, ArtStyle3D.PALETTE.night,
+		"sky/background uses the R2 night token")
+	assert_eq(_env.fog_light_color, ArtStyle3D.PALETTE.night,
+		"distance fog uses the R2 night token")
+
+
+func test_quality_presets_flip_glow_ssao_fog_shadows() -> void:
+	var detected: int = ArtStyle3D.auto_detect_quality()
+	# Fancy: the full stack.
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.FANCY)
+	_lighting.apply_quality_settings()
+	assert_true(_env.glow_enabled, "Fancy blooms")
+	assert_true(_env.ssao_enabled, "Fancy gets SSAO")
+	assert_true(_env.fog_enabled, "depth fog runs on every preset")
+	assert_true(_sun.shadow_enabled, "Fancy keeps shadows")
+	assert_eq(_sun.directional_shadow_max_distance, ArtStyle3D.shadow_distance(),
+		"shadow distance tuned to the visible board")
+	# Standard: bloom + fog, no SSAO/shadows.
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.STANDARD)
+	_lighting.apply_quality_settings()
+	assert_true(_env.glow_enabled, "Standard blooms")
+	assert_false(_env.ssao_enabled, "Standard skips SSAO")
+	assert_true(_env.fog_enabled, "Standard keeps depth fog")
+	assert_false(_sun.shadow_enabled, "Standard keeps blob-shadow fallback")
+	# Potato: flat and cheap, fog-only.
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.POTATO)
+	_lighting.apply_quality_settings()
+	assert_false(_env.glow_enabled, "Potato stays flat (fps unchanged)")
+	assert_false(_env.ssao_enabled, "Potato skips SSAO")
+	assert_true(_env.fog_enabled, "Potato still gets cheap depth fog")
+	assert_false(_sun.shadow_enabled, "Potato keeps shadows off")
+	ArtStyle3D.apply_quality(detected)  # Restore the shell's startup preset.
+	_lighting.apply_quality_settings()
+
+
+func test_terrain_albedo_pass_is_lit_with_normals() -> void:
+	var terrain = _shell.get_node("World3D/Terrain3D")
+	assert_true(terrain.uses_lit_terrain(),
+		"terrain albedo material is lit (moods/shadows/fog reach the ground)")
+	# Surface view rebuilds every chunk from the start; a lit chunk mesh
+	# must carry per-face normals for the shading to work.
+	await _frames(20)
+	var found_normals := false
+	for child in terrain.get_children():
+		var chunk := child as MeshInstance3D
+		if chunk == null or chunk.mesh == null:
+			continue
+		var arrays: Array = chunk.mesh.surface_get_arrays(0)
+		if not arrays[Mesh.ARRAY_NORMAL].is_empty():
+			found_normals = true
+			break
+	assert_true(found_normals, "rebuilt terrain chunks have face normals")

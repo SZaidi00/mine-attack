@@ -134,8 +134,10 @@ func _mark_footprint_solid() -> void:
 		return
 	var origin: Vector2i = _grid.world_to_grid(global_position)
 	for x in range(-width_cells / 2, width_cells / 2):
-		# Keep the surface row (y = 0) walkable so units can pass the base.
-		for y in range(-1, -height_cells, -1):
+		# Keep the bottom surface row (y = 0) walkable so units can pass the
+		# base; the rows above it (matching get_footprint_cell_rect's full
+		# height) are inside the surface band and seal for real.
+		for y in range(-1, -height_cells - 1, -1):
 			var pos: Vector2i = origin + Vector2i(x, y)
 			if _grid.has_cell(pos):
 				_grid._cells[pos] = GridWorld.Cell.new(GridWorld.CellType.WALL, 0, 99, 9999, 0, true)
@@ -436,6 +438,9 @@ func _make_dot_texture() -> Texture2D:
 
 
 func _spawn_damage_popup(amount: int) -> void:
+	# 3D mode: billboarded popup floating over the keep model.
+	if DamagePopup3D.spawn_damage(get_tree(), global_position, amount):
+		return
 	var popup: DamagePopup = preload("res://scenes/effects/damage_popup.tscn").instantiate()
 	popup.setup(amount)
 	popup.global_position = global_position + Vector2(0, -100)

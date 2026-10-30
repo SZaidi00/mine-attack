@@ -376,9 +376,10 @@ func _count_team_pigeons() -> int:
 
 
 ## Interaction rect for unit.attack_building(): a zero-height strip at the
-## tower's ground line so the stand point lands on the walkable surface row.
+## tower's own cell row so the stand point lands on a walkable band cell.
 func get_bounds_rect() -> Rect2:
-	return Rect2(global_position.x - 24.0, 0.0, 48.0, 0.0)
+	var top: float = floorf(global_position.y / GridWorld.CELL_SIZE) * GridWorld.CELL_SIZE
+	return Rect2(global_position.x - 24.0, top, 48.0, 0.0)
 
 
 func _draw() -> void:

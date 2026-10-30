@@ -348,13 +348,14 @@ func _end_volcano() -> void:
 	_volcano_next_at = _clock + _seconds_to_next_volcano()
 
 
-## Spawns a single meteor at a random surface x coordinate.
+## Spawns a single meteor at a random surface cell anywhere in the band.
 func _spawn_meteor() -> void:
 	var grid: GridWorld = get_node_or_null("/root/Main/World/GridWorld")
 	if grid == null:
 		return
 	var x_cell: int = randi_range(GridWorld.X_MIN, GridWorld.X_MAX)
-	var target_pos: Vector2 = grid.grid_to_world(Vector2i(x_cell, 0))
+	var y_cell: int = randi_range(GridWorld.SURFACE_TOP, GridWorld.Y_MIN)
+	var target_pos: Vector2 = grid.grid_to_world(Vector2i(x_cell, y_cell))
 	var meteor: Node = _METEOR_SCENE.instantiate()
 	meteor.setup(target_pos, GameManager.get_volcano_damage_multiplier(), GameManager.get_volcano_duration_multiplier())
 	# During a snowstorm, meteors deal impact damage but do not leave fire.

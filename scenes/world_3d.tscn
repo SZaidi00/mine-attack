@@ -1,0 +1,66 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/three_d/entity_proxies_3d.gd" id="1_proxies"]
+[ext_resource type="Script" path="res://scripts/three_d/terrain_3d.gd" id="2_terrain"]
+[ext_resource type="Script" path="res://scripts/three_d/selection_rings_3d.gd" id="3_selection"]
+[ext_resource type="Script" path="res://scripts/three_d/projectile_proxies_3d.gd" id="4_projectiles"]
+[ext_resource type="Script" path="res://scripts/three_d/event_proxies_3d.gd" id="5_events"]
+[ext_resource type="Script" path="res://scripts/three_d/fog_3d.gd" id="6_fog"]
+
+[sub_resource type="Environment" id="Environment_world3d"]
+background_mode = 1
+background_color = Color(0.137255, 0.172549, 0.227451, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.137255, 0.172549, 0.227451, 1)
+ambient_light_energy = 0.65
+tonemap_mode = 3
+tonemap_exposure = 1.1
+glow_enabled = true
+glow_intensity = 0.35
+glow_strength = 0.65
+glow_bloom = 0.0
+glow_hdr_threshold = 1.4
+glow_hdr_scale = 1.0
+ssao_enabled = false
+ssao_radius = 1.0
+ssao_intensity = 1.0
+fog_light_color = Color(0.137255, 0.172549, 0.227451, 1)
+fog_density = 0.02
+fog_aerial_perspective = 0.0
+fog_sky_affect = 0.0
+
+[node name="World3D" type="Node3D"]
+
+[node name="Lights" type="Node3D" parent="."]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="Lights"]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 8, 0)
+light_color = Color(0.768627, 0.827451, 0.901961, 1)
+light_energy = 1.0
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="Lights"]
+environment = SubResource("Environment_world3d")
+
+[node name="Terrain3D" type="Node3D" parent="."]
+script = ExtResource("2_terrain")
+
+[node name="EntityProxies" type="Node3D" parent="."]
+script = ExtResource("1_proxies")
+
+[node name="Units3D" type="Node3D" parent="."]
+
+[node name="Structures3D" type="Node3D" parent="."]
+
+[node name="Effects3D" type="Node3D" parent="."]
+
+[node name="SelectionRings3D" type="Node3D" parent="."]
+script = ExtResource("3_selection")
+
+[node name="ProjectileProxies3D" type="Node3D" parent="."]
+script = ExtResource("4_projectiles")
+
+[node name="EventProxies3D" type="Node3D" parent="."]
+script = ExtResource("5_events")
+
+[node name="Fog3D" type="MeshInstance3D" parent="."]
+script = ExtResource("6_fog")

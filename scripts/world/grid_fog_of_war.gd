@@ -15,7 +15,7 @@ func _init_vision_maps() -> void:
 		for x in range(grid.X_MIN, grid.X_MAX + 1):
 			var vision_col: Array = []
 			var memory_col: Array = []
-			for y in range(grid.Y_MIN, grid.Y_MAX + 1):
+			for y in range(grid.SURFACE_TOP, grid.Y_MAX + 1):
 				vision_col.append(false)
 				memory_col.append(-1.0)
 			vision_cols.append(vision_col)
@@ -66,6 +66,64 @@ func _update_vision(team: GameManager.Team) -> void:
 				grid._unit_ghosts.erase(id)
 
 
+## 3D perf: per-cell player fog-state change detection. _update_vision runs
+## every frame and used to notify nobody, so the 3D fog/terrain projections
+## polled fog_state_at on fixed timers and rebuilt whether or not anything
+## changed. This pass diffs the player's per-cell state (visible / remembered
+## / hidden — memory expiry included, since a state can flip on time alone)
+## against the previous frame; on any difference it bumps
+## grid.player_fog_revision and records the cells so chunk-granular consumers
+## (Terrain3D) can dirty only the chunks that actually changed. One O(cells)
+## compare pass, cheap next to the recompute itself. Plain per-column Arrays
+## (not Packed) so aliased element writes land in the stored columns.
+var _prev_player_states: Array = []  # per-column Array[int], -1 = first-pass baseline
+var _prev_reveal_all: bool = false
+
+
+func _detect_player_fog_changes() -> void:
+	var vision: Array = grid._vision_maps[GameManager.Team.PLAYER]
+	var memory: Array = grid._memory_maps[GameManager.Team.PLAYER]
+	var now: float = GameManager.match_time
+	var duration: float = grid._Constants.FOG_MEMORY_DURATION
+	var reveal_all: bool = grid._reveal_all.get(GameManager.Team.PLAYER, false)
+	var changed := reveal_all != _prev_reveal_all
+	_prev_reveal_all = reveal_all
+	var width: int = vision.size()
+	if _prev_player_states.size() != width:
+		_prev_player_states.clear()
+		for ix in range(width):
+			var states: Array = []
+			states.resize(vision[ix].size())
+			states.fill(-1)
+			_prev_player_states.append(states)
+	for ix in range(width):
+		var states: Array = _prev_player_states[ix]
+		var vcol: Array = vision[ix]
+		var mcol: Array = memory[ix]
+		for iy in range(states.size()):
+			var state := 2
+			if not reveal_all and not vcol[iy]:
+				state = 0
+				var last_seen: float = mcol[iy]
+				var elapsed: float = now - last_seen
+				if last_seen >= 0.0 and elapsed >= 0.0 and elapsed < duration:
+					state = 1
+			if states[iy] != state:
+				# -1 is the never-observed sentinel: count it as a change too,
+				# otherwise the initial vision reveal at match start (the
+				# consumer's assumed all-hidden baseline) would never trigger
+				# a rebuild. Costs one full fog/terrain rebuild per match.
+				changed = true
+				# Capped accumulation: standalone 2D runs have no Terrain3D
+				# draining this, and a big bounded set still maps to "dirty
+				# everything" for the chunk-granular consumer.
+				if grid._player_fog_changed_cells.size() < 512:
+					grid._player_fog_changed_cells[Vector2i(ix + grid.X_MIN, iy + grid.SURFACE_TOP)] = true
+				states[iy] = state
+	if changed:
+		grid.player_fog_revision += 1
+
+
 ## Every vision source for a team as [center_cell, radius_cells, layer_mask]
 ## triples: living units (per-type radii), the team's building, and built
 ## lanterns. Sentry towers no longer provide vision — only lanterns light the
@@ -103,15 +161,15 @@ func _reveal_circle(team: GameManager.Team, center: Vector2i, radius: int, layer
 				continue
 			var x: int = center.x + dx
 			var y: int = center.y + dy
-			if x < grid.X_MIN or x > grid.X_MAX or y < grid.Y_MIN or y > grid.Y_MAX:
+			if x < grid.X_MIN or x > grid.X_MAX or y < grid.SURFACE_TOP or y > grid.Y_MAX:
 				continue
 			# Layer-locked sources (lanterns, miners, dragons) only light
-			# their own layer: the surface row, or everything below it.
-			if layer_mask == GridWorld.VISION_LAYER_SURFACE and y != grid.Y_MIN:
+			# their own layer: the surface band, or everything below it.
+			if layer_mask == GridWorld.VISION_LAYER_SURFACE and not grid.is_surface_row(y):
 				continue
 			if layer_mask == GridWorld.VISION_LAYER_UNDERGROUND and y <= grid.Y_MIN:
 				continue
-			vision[x - grid.X_MIN][y - grid.Y_MIN] = true
+			vision[x - grid.X_MIN][y - grid.SURFACE_TOP] = true
 
 
 func _prune_unit_ghosts() -> void:
@@ -122,11 +180,11 @@ func _prune_unit_ghosts() -> void:
 
 
 func _is_cell_visible(team: GameManager.Team, grid_pos: Vector2i) -> bool:
-	if grid_pos.x < grid.X_MIN or grid_pos.x > grid.X_MAX or grid_pos.y < grid.Y_MIN or grid_pos.y > grid.Y_MAX:
+	if grid_pos.x < grid.X_MIN or grid_pos.x > grid.X_MAX or grid_pos.y < grid.SURFACE_TOP or grid_pos.y > grid.Y_MAX:
 		return false
 	if grid._reveal_all.get(team, false):
 		return true
-	return grid._vision_maps[team][grid_pos.x - grid.X_MIN][grid_pos.y - grid.Y_MIN]
+	return grid._vision_maps[team][grid_pos.x - grid.X_MIN][grid_pos.y - grid.SURFACE_TOP]
 
 
 ## Debug/test hook: let a team see the whole map (see _reveal_all).
@@ -147,9 +205,9 @@ func is_remembered_by(team: GameManager.Team, world_pos: Vector2) -> bool:
 		return true
 	if grid._reveal_all.get(team, false):
 		return true
-	if grid_pos.x < grid.X_MIN or grid_pos.x > grid.X_MAX or grid_pos.y < grid.Y_MIN or grid_pos.y > grid.Y_MAX:
+	if grid_pos.x < grid.X_MIN or grid_pos.x > grid.X_MAX or grid_pos.y < grid.SURFACE_TOP or grid_pos.y > grid.Y_MAX:
 		return false
-	var last_seen: float = grid._memory_maps[team][grid_pos.x - grid.X_MIN][grid_pos.y - grid.Y_MIN]
+	var last_seen: float = grid._memory_maps[team][grid_pos.x - grid.X_MIN][grid_pos.y - grid.SURFACE_TOP]
 	if last_seen < 0.0:
 		return false
 	# Elapsed can go negative when match_time resets (Play Again, test
@@ -187,7 +245,7 @@ func _draw_fog() -> void:
 			var remembered: bool = last_seen >= 0.0 and elapsed >= 0.0 and elapsed < grid._Constants.FOG_MEMORY_DURATION
 			var alpha: float = grid._Constants.FOG_MEMORY_ALPHA if remembered else 1.0
 			alpha *= _fog_edge_factor(ix, iy)
-			var rect: Rect2 = Rect2((ix + grid.X_MIN) * grid.CELL_SIZE, (iy + grid.Y_MIN) * grid.CELL_SIZE, grid.CELL_SIZE, grid.CELL_SIZE)
+			var rect: Rect2 = Rect2((ix + grid.X_MIN) * grid.CELL_SIZE, (iy + grid.SURFACE_TOP) * grid.CELL_SIZE, grid.CELL_SIZE, grid.CELL_SIZE)
 			grid.draw_rect(rect, Color(fog_color, alpha), true)
 			if not remembered:
 				_draw_fog_puff(ix, iy, rect)
@@ -197,10 +255,10 @@ func _draw_fog() -> void:
 ## per-cell phase so the fog bank reads as moving weather, not a static
 ## texture grid. Underground puffs are sparser and fainter (cave mist).
 func _draw_fog_puff(ix: int, iy: int, rect: Rect2) -> void:
-	var cell: Vector2i = Vector2i(ix + grid.X_MIN, iy + grid.Y_MIN)
+	var cell: Vector2i = Vector2i(ix + grid.X_MIN, iy + grid.SURFACE_TOP)
 	var phase: float = float(hash(cell) % 1000) / 1000.0 * TAU
 	var t: float = Time.get_ticks_msec() / 1000.0
-	if iy == 0:
+	if grid.is_surface_row(cell.y):
 		# Surface cloud cover: wide, slow-drifting puffs hanging over the row.
 		var drift: Vector2 = Vector2(sin(t * 0.22 + phase) * 14.0, cos(t * 0.16 + phase * 1.7) * 6.0)
 		var size: float = grid.CELL_SIZE * 2.6

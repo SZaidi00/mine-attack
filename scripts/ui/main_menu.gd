@@ -359,6 +359,7 @@ func _build_card() -> void:
 	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	header.add_theme_font_size_override("font_size", 11)
 	header.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	UIThemeTokens.apply_display_font(header)
 	vbox.add_child(header)
 
 	var title := Label.new()
@@ -368,6 +369,7 @@ func _build_card() -> void:
 	title.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
 	title.add_theme_color_override("font_outline_color", Color("#0b1120"))
 	title.add_theme_constant_override("outline_size", 10)
+	UIThemeTokens.apply_display_font(title)
 	vbox.add_child(title)
 
 	var subtitle := Label.new()
@@ -375,6 +377,7 @@ func _build_card() -> void:
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_font_size_override("font_size", 18)
 	subtitle.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_GOLD)
+	UIThemeTokens.apply_display_font(subtitle)
 	vbox.add_child(subtitle)
 
 	var separator := HSeparator.new()
@@ -528,6 +531,7 @@ func _build_faction_select() -> void:
 	title.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
 	title.add_theme_color_override("font_outline_color", Color("#0b1120"))
 	title.add_theme_constant_override("outline_size", 8)
+	UIThemeTokens.apply_display_font(title)
 	vbox.add_child(title)
 
 	var hint := Label.new()
@@ -747,7 +751,9 @@ func _on_play() -> void:
 	FactionManager.set_player_faction(_selected_faction_id)
 	FactionManager.pick_random_enemy_faction()
 	GameManager.roll_ai_opener()
-	get_tree().change_scene_to_file("res://scenes/main.tscn")
+	# 3D conversion branch: Play enters the main_3d shell, which mounts the
+	# untouched main.tscn sim itself (on main this loads main.tscn directly).
+	get_tree().change_scene_to_file("res://scenes/main_3d.tscn")
 
 
 ## Empty or non-numeric seed field = fresh random map every match; a parsed

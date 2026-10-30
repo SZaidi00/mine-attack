@@ -38,7 +38,8 @@ func _init_view_positions() -> void:
 	if pc.camera.position.y < 100:
 		pc._last_surface_cam_pos = pc.camera.position
 	else:
-		pc._last_surface_cam_pos = Vector2(pc.camera.position.x, -150)
+		# Default surface view: vertically centered on the battlefield band.
+		pc._last_surface_cam_pos = Vector2(pc.camera.position.x, (GridWorld.SURFACE_TOP + GridWorld.SURFACE_ROWS * 0.5) * GridWorld.CELL_SIZE)
 	var entry: Node2D = pc._player_mine_entry()
 	if entry:
 		pc._last_underground_cam_pos = entry.call("get_underground_position")
@@ -126,7 +127,7 @@ func _process_camera(delta: float) -> void:
 	# pin the camera to the bounds center on that axis instead of leaving it
 	# free to drift past the world into empty space.
 	var half_size: Vector2 = pc.get_viewport().get_visible_rect().size / (2.0 * pc.camera.zoom)
-	var min_pos: Vector2 = Vector2((GridWorld.X_MIN - 2) * GridWorld.CELL_SIZE, -300)
+	var min_pos: Vector2 = Vector2((GridWorld.X_MIN - 2) * GridWorld.CELL_SIZE, (GridWorld.SURFACE_TOP - 4) * GridWorld.CELL_SIZE)
 	var max_pos: Vector2 = Vector2((GridWorld.X_MAX + 3) * GridWorld.CELL_SIZE, (GridWorld.Y_MAX + 4) * GridWorld.CELL_SIZE)
 	var lo: Vector2 = min_pos + half_size
 	var hi: Vector2 = max_pos - half_size

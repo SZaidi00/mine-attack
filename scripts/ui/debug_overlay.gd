@@ -34,6 +34,11 @@ func _input(event: InputEvent) -> void:
 		_overlay_visible = not _overlay_visible
 		visible = _overlay_visible
 		_panel.visible = _overlay_visible
+		# Probing costs a flag check per section while off; enable it only
+		# while the overlay reads the numbers, and reset for fresh averages.
+		Probe3D.enabled = _overlay_visible
+		if _overlay_visible:
+			Probe3D.reset()
 		_draw_control.queue_redraw()
 
 
@@ -175,6 +180,18 @@ func _update_stats() -> void:
 
 	var text: String = ""
 	text += "FPS: %d\n" % Engine.get_frames_per_second()
+	text += "Frame: %.2f ms\n" % Performance.get_monitor(Performance.TIME_PROCESS)
+	text += "Draws: %d · tris %d\n" % [
+		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+		Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
+	]
+	var probe_avgs: Dictionary = Probe3D.averages()
+	if not probe_avgs.is_empty():
+		text += "-- script ms (avg) --\n"
+		var labels: Array = probe_avgs.keys()
+		labels.sort()
+		for label in labels:
+			text += "%s: %.3f\n" % [label, probe_avgs[label]]
 	text += "Time: %.1f\n" % GameManager.match_time
 	text += "Units: P=%d E=%d\n" % [player_count, enemy_count]
 	text += "Coin: P=%d E=%d\n" % [EconomyManager.get_coin(GameManager.Team.PLAYER), EconomyManager.get_coin(GameManager.Team.ENEMY)]

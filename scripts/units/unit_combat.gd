@@ -57,6 +57,8 @@ func _process_burn(delta: float) -> void:
 
 
 func _spawn_fire_popup(amount: int) -> void:
+	if DamagePopup3D.spawn_fire(unit.get_tree(), unit.get_combat_position(), amount):
+		return
 	var popup: DamagePopup = _DAMAGE_POPUP_SCENE.instantiate()
 	popup.setup_fire(amount)
 	popup.global_position = unit.get_combat_position() + Vector2(0, -20)
@@ -238,7 +240,12 @@ func _pick_retaliation_target(attacker: Node2D) -> Unit:
 	return best
 
 
+## Damage/heal popups: in 3D mode (main_3d shell running the scene) they are
+## billboarded Label3Ds over the unit; the 2D Label stays for the standalone
+## scene and tests.
 func _spawn_damage_popup(amount: int) -> void:
+	if DamagePopup3D.spawn_damage(unit.get_tree(), unit.get_combat_position(), amount):
+		return
 	var popup: DamagePopup = _DAMAGE_POPUP_SCENE.instantiate()
 	popup.setup(amount)
 	popup.global_position = unit.get_combat_position() + Vector2(0, -20)
@@ -246,6 +253,8 @@ func _spawn_damage_popup(amount: int) -> void:
 
 
 func _spawn_immune_popup() -> void:
+	if DamagePopup3D.spawn_immune(unit.get_tree(), unit.get_combat_position()):
+		return
 	var popup: DamagePopup = _DAMAGE_POPUP_SCENE.instantiate()
 	popup.setup_immune()
 	popup.global_position = unit.get_combat_position() + Vector2(0, -20)
@@ -253,6 +262,8 @@ func _spawn_immune_popup() -> void:
 
 
 func _spawn_heal_popup(amount: int) -> void:
+	if DamagePopup3D.spawn_damage(unit.get_tree(), unit.get_combat_position(), amount, true):
+		return
 	var popup: DamagePopup = _DAMAGE_POPUP_SCENE.instantiate()
 	popup.setup(amount, true)
 	popup.global_position = unit.get_combat_position() + Vector2(0, -20)

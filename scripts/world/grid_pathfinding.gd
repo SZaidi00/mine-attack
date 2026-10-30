@@ -56,11 +56,12 @@ func _add_if_walkable(cells: Array[Vector2i], grid_pos: Vector2i) -> void:
 
 
 func find_path(from_world: Vector2, to_world: Vector2, team: int = -1) -> PackedVector2Array:
-	# Units and targets can drift slightly above the surface row (spawn jitter,
-	# separation nudges, per-unit target offsets). Grid y = -1 is outside the
-	# A* region, so snap back to the surface row instead of failing the path.
-	from_world.y = maxf(from_world.y, 0.0)
-	to_world.y = maxf(to_world.y, 0.0)
+	# Units and targets can drift above the surface band (spawn jitter,
+	# separation nudges, per-unit target offsets). Snap back to the band's top
+	# row instead of failing the path.
+	var band_top_px: float = grid.SURFACE_TOP * grid.CELL_SIZE
+	from_world.y = maxf(from_world.y, band_top_px)
+	to_world.y = maxf(to_world.y, band_top_px)
 	var start: Vector2i = grid.world_to_grid(from_world)
 	var end: Vector2i = grid.world_to_grid(to_world)
 	if not grid._astar.is_in_boundsv(start) or not grid._astar.is_in_boundsv(end):
@@ -80,18 +81,19 @@ func find_path(from_world: Vector2, to_world: Vector2, team: int = -1) -> Packed
 	return world_path
 
 
-## Underground-only variant for crawlers: the surface row is sealed for the
-## duration of the query, so an underground raider can only route through dug
-## tunnels. Without this the global A* happily walks an underground unit up
+## Underground-only variant for crawlers: the whole surface band is sealed for
+## the duration of the query, so an underground raider can only route through
+## dug tunnels. Without this the global A* happily walks an underground unit up
 ## the shaft and across the surface, bypassing the central wall entirely.
 func find_path_underground(from_world: Vector2, to_world: Vector2, team: int = -1) -> PackedVector2Array:
 	var sealed: Array = []
 	var region: Rect2i = grid._astar.region
 	for x in range(region.position.x, region.end.x):
-		var pos: Vector2i = Vector2i(x, 0)
-		if grid._astar.is_in_boundsv(pos) and not grid._astar.is_point_solid(pos):
-			grid._astar.set_point_solid(pos, true)
-			sealed.append(pos)
+		for y in range(grid.SURFACE_TOP, grid.Y_MIN + 1):
+			var pos: Vector2i = Vector2i(x, y)
+			if grid._astar.is_in_boundsv(pos) and not grid._astar.is_point_solid(pos):
+				grid._astar.set_point_solid(pos, true)
+				sealed.append(pos)
 	var world_path: PackedVector2Array = find_path(from_world, to_world, team)
 	for pos in sealed:
 		grid._astar.set_point_solid(pos, false)

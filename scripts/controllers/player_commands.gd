@@ -49,6 +49,7 @@ func _issue_command(screen_pos: Vector2, shift_queued: bool = false) -> void:
 		for u in capable:
 			_issue_or_queue(u, {"type": "attack_unit", "target": enemy_unit}, shift_queued)
 		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#B91C1C"), 0.75 if shift_queued else 1.0)
+		_spawn_attack_telegraph(capable, world_pos)
 		return
 
 	# 2. Enemy building clicked -> attack with fighters.
@@ -62,6 +63,7 @@ func _issue_command(screen_pos: Vector2, shift_queued: bool = false) -> void:
 		for u in fighters:
 			_issue_or_queue(u, {"type": "attack_building", "target": enemy_building}, shift_queued)
 		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#B91C1C"), 0.75 if shift_queued else 1.0)
+		_spawn_attack_telegraph(fighters, world_pos)
 		return
 
 	# 2b. Enemy structure clicked (lantern/tower/wall) -> attack with fighters.
@@ -75,6 +77,7 @@ func _issue_command(screen_pos: Vector2, shift_queued: bool = false) -> void:
 		for u in fighters:
 			_issue_or_queue(u, {"type": "attack_building", "target": enemy_structure}, shift_queued)
 		_spawn_order_marker(world_pos, Color("#E5E7EB") if shift_queued else Color("#B91C1C"), 0.75 if shift_queued else 1.0)
+		_spawn_attack_telegraph(fighters, world_pos)
 		return
 
 	# 2c. Damaged friendly structure clicked with engineers selected -> repair.
@@ -212,9 +215,8 @@ func _formation_destinations(fighters: Array, click: Vector2, mode: String) -> A
 ## Nearest walkable point to a formation destination: the raw point when it is
 ## walkable, otherwise the closest candidate of the two surrounding cell rings,
 ## otherwise the raw point (a blocked slot is still a coherent order). Slots in
-## `claimed` are skipped — on the one-cell-tall surface row a perpendicular
-## "line" cannot stand abreast, so this lets the squad file along the axis it
-## can actually occupy instead of stacking every slot onto the same cell.
+## `claimed` are skipped so the squad spreads across the surface band instead
+## of stacking every slot onto the same cell.
 func _snap_walkable(fighter: Unit, point: Vector2, claimed: Array) -> Vector2:
 	if fighter._is_walkable_point(point) and not claimed.has(point):
 		return point
@@ -241,11 +243,31 @@ func _snap_walkable(fighter: Unit, point: Vector2, claimed: Array) -> Vector2:
 ## Brief expanding ring flashed at the world destination of a player order.
 ## Player-only feedback: this command path never runs for the AI. Queued
 ## (Shift) orders use a smaller ring so they read as waypoints, not orders.
+## In 3D mode (main_3d shell running the scene) the ring is a terrain-
+## projected 3D marker; the 2D canvas marker stays for the standalone scene.
 func _spawn_order_marker(at: Vector2, color: Color, scale_mult: float = 1.0) -> void:
+	if OrderMarker3D.spawn(pc.get_tree(), at, color, scale_mult):
+		return
 	var marker: Node2D = _ORDER_MARKER_SCENE.instantiate()
 	marker.global_position = at
 	marker.setup(color, scale_mult)
 	pc.get_tree().current_scene.add_child(marker)
+
+
+## 3D rework Phase 5: on an explicit attack order, flash a red telegraph arc
+## from the attacker group's centroid to the target — 3D mode only (the
+## static spawn no-ops without the shell), presentation-only, sim untouched.
+func _spawn_attack_telegraph(attackers: Array, target: Vector2) -> void:
+	var centroid := Vector2.ZERO
+	var count := 0
+	for u in attackers:
+		if is_instance_valid(u):
+			centroid += u.global_position
+			count += 1
+	if count == 0:
+		return
+	centroid /= count
+	Telegraph3D.spawn_attack(pc.get_tree(), centroid, target)
 
 
 func _reject_command(action: String, reason: String, at: Vector2) -> void:
@@ -256,6 +278,17 @@ func _reject_command(action: String, reason: String, at: Vector2) -> void:
 
 
 func _screen_to_world(screen_pos: Vector2) -> Vector2:
+	# 3D shell: the 2D canvas transform belongs to the hidden sim camera, which
+	# no longer tracks the 3D rig (edge pan and zoom-to-cursor exist only on the
+	# rig), so map the click through the 3D camera ray against the sculpted
+	# terrain instead. Null hit (ray misses the ground) falls back to the 2D
+	# transform. Standalone main.tscn and the GUT suite have no shell and keep
+	# the 2D path.
+	var shell := Presentation3D.shell(pc.get_tree())
+	if shell != null:
+		var hit: Variant = shell._terrain_point_at(screen_pos)
+		if hit != null:
+			return Vector2(hit.x, hit.z) / Presentation3D.WORLD_SCALE
 	# Camera2D has no project_position() (that is a Camera3D API); convert via
 	# the viewport's canvas transform, which also handles zoom and stretch.
 	return pc.get_viewport().get_canvas_transform().affine_inverse() * screen_pos
@@ -329,6 +362,7 @@ func attack_move_order(screen_pos: Vector2) -> void:
 		for u in fighters:
 			u.attack_move_to(world_pos)
 	_spawn_order_marker(world_pos, Color("#B91C1C"))
+	_spawn_attack_telegraph(fighters, world_pos)
 
 
 ## Attack-move armed: left-click issues the order, right-click or Esc cancels.

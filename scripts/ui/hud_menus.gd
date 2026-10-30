@@ -135,9 +135,9 @@ func _add_pause_button(parent: Control, text: String, callback: Callable) -> voi
 
 
 ## Build menu (Revamp Phase 5 — Blueprint Tray): a frosted-steel tray of
-## compact blueprint cards. Picking a structure keeps the tray open and
-## highlights the selected card while the PlayerController ghost handles
-## placement. Pigeons train immediately and close the tray.
+## compact blueprint cards. Picking a structure hides the tray while the
+## PlayerController ghost handles placement — a STOP-filtered tray left open
+## would eat the confirming click. Pigeons train immediately and close the tray.
 func _build_build_menu() -> void:
 	hud._build_menu = Control.new()
 	hud._build_menu.name = "BuildMenu"
@@ -347,9 +347,10 @@ func _set_menu_for_placement(active: bool) -> void:
 	if hud._build_menu == null:
 		return
 	if active:
-		if _dim != null:
-			_dim.visible = false
-		hud._build_menu.mouse_filter = Control.MOUSE_FILTER_PASS
+		# Hide the whole tray while placing: the confirming left-click must
+		# reach the world, and a visible STOP-filtered tray under the cursor
+		# would eat it as GUI input.
+		hud._build_menu.visible = false
 	else:
 		if _dim != null:
 			_dim.visible = true
@@ -380,6 +381,12 @@ func _toggle_build_menu() -> void:
 	if hud._build_menu.visible:
 		_close_build_menu()
 	else:
+		# The tray hides during placement, so reopening it from here means a
+		# ghost may still be armed — cancel it to keep menu and placement
+		# state in lockstep.
+		var pc: PlayerController = hud._get_player_controller()
+		if pc != null and pc.is_build_mode_active():
+			pc.cancel_build_mode()
 		_selected_kind = ""
 		_set_menu_for_placement(false)
 		hud._build_menu.visible = true
