@@ -19,7 +19,7 @@ extends Node3D
 const SIM_SCENE: PackedScene = preload("res://scenes/main.tscn")
 const EFFECTS_3D_SCRIPT: GDScript = preload("res://scripts/three_d/effects_3d.gd")
 
-## 3D units per 2D pixel. The map is ~2560x800 px, i.e. ~26x8 units.
+## 3D units per 2D pixel. The map is ~2560x1000 px, i.e. ~26x10 units.
 const WORLD_SCALE: float = 0.01
 const SURFACE_PITCH_DEGREES: float = 55.0
 const UNDERGROUND_PITCH_DEGREES: float = 82.5

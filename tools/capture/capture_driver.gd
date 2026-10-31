@@ -30,7 +30,7 @@ extends Node
 ##                        storm     - surface + forced snowstorm
 ##                        volcano   - surface + forced volcano eruption
 ##                        custom:X:Y:Z - explicit camera focus (X, Y) and
-##                                      dolly Z (e.g. custom:0:-150:6)
+##                                      dolly Z (e.g. custom:0:-128:6)
 ##   --stress-units <n> spawn n extra units per team (surface) once the match
 ##                      is up — the 200-unit perf stress for BENCH runs
 ##   --bench <seconds>  run the match for this long (sim-seconds), then print

@@ -555,10 +555,9 @@ func _build_mine_entry() -> void:
 	var wood: Color = ArtStyle3D.PALETTE.wood
 	var wood_dark: Color = ArtStyle3D.PALETTE.wood_dark
 	var team := ArtStyle3D.team_color(_team)
-	# The node origin sits on a cell corner; the shaft column center is half a
-	# cell over, so the headframe straddles the hole.
-	var cx := CELL * 0.5
-	var cz := CELL * 0.5
+	# The entry node is centered on its surface cell and shaft column.
+	var cx := 0.0
+	var cz := 0.0
 
 	# Dark recessed shaft hole, sunk into the ground. Kept procedural in both
 	# recipes — it reads as the pit the headframe stands over.
@@ -566,11 +565,6 @@ func _build_mine_entry() -> void:
 		Vector3(cx, -0.015, cz)), ArtStyle3D.PALETTE.coal)
 
 	if _try_build_glb("mine_entry"):
-		# The imported headframe is authored origin-at-center; the sim node
-		# origin sits on a cell corner (manifest origin "corner"), so shift
-		# the model half a cell over to straddle the shaft.
-		if str(ModelManifest.entry_for("mine_entry").get("origin", "center")) == "corner":
-			_model_wrapper.position = Vector3(cx, 0.0, cz)
 		return
 	# A-frame legs leaning together over the hole.
 	for side in [-1.0, 1.0]:

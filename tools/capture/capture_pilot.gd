@@ -12,7 +12,7 @@ extends Node
 ## through the same public APIs, so every sim-wide unit scan sees a real Unit.
 
 const WEATHER_LEAD_SEC := 3.0
-const SURFACE_CAM_POS := Vector2(0.0, -150.0)
+const SURFACE_CAM_POS := Vector2(0.0, (GridWorld.SURFACE_TOP + GridWorld.SURFACE_ROWS * 0.5) * GridWorld.CELL_SIZE)
 const ZOOMOUT_FACTOR := 0.5
 const UNIT_IDS: Array[String] = [
 	"miner", "pigeon", "archer", "wizard", "engineer", "dragon", "swordsman", "crawler",
@@ -112,9 +112,9 @@ func _apply_pose(shot: Dictionary) -> void:
 			_pc.set_view(false)
 			if _shell != null:
 				if shot.pose == "surface":
-					_shell.pose_camera(Vector3(0.0, 0.0, -1.5), 12.0, _shell.SURFACE_PITCH_DEGREES)
+					_shell.pose_camera(Presentation3D.to_3d(SURFACE_CAM_POS), 12.0, _shell.SURFACE_PITCH_DEGREES)
 				else:
-					_shell.pose_camera(Vector3(-10.0, 0.0, -1.5), 10.5, _shell.SURFACE_PITCH_DEGREES)
+					_shell.pose_camera(Presentation3D.to_3d(SURFACE_CAM_POS + Vector2(-1000.0, 0.0)), 10.5, _shell.SURFACE_PITCH_DEGREES)
 		"zoomout":
 			_pc.set_view(false)
 			if _shell != null:
@@ -156,7 +156,7 @@ func _apply_pose(shot: Dictionary) -> void:
 				grid.set_reveal_all(GameManager.Team.PLAYER, true)
 				_dunes_revealed = true
 			if _shell != null:
-				_shell.pose_camera(Vector3(0.0, 0.0, -1.5), 10.5, _shell.SURFACE_PITCH_DEGREES)
+				_shell.pose_camera(Presentation3D.to_3d(SURFACE_CAM_POS), 10.5, _shell.SURFACE_PITCH_DEGREES)
 		"fortress":
 			_pc.set_view(false)
 			var building := _find_building(GameManager.Team.ENEMY)
@@ -277,7 +277,7 @@ func _spawn_stress_units() -> void:
 	while spawned < n * 2:
 		var team: GameManager.Team = GameManager.Team.PLAYER if spawned < n else GameManager.Team.ENEMY
 		var i := spawned if team == GameManager.Team.PLAYER else spawned - n
-		var row := GridWorld.SURFACE_TOP + 1 + (i / per_row) % 4
+		var row := GridWorld.SURFACE_TOP + 1 + (i / per_row) % maxi(1, GridWorld.SURFACE_ROWS - 2)
 		# Each team spawns on its own half so the bench load persists for the
 		# whole window instead of brawling to death at the midfield line.
 		var col := (-19 + (i % per_row)) if team == GameManager.Team.PLAYER else (1 + (i % per_row))

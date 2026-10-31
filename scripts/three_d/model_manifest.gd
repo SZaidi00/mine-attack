@@ -22,8 +22,8 @@
 ##   accents at load time ([] when the model ships no named accent material).
 ## - glow_slots: lowercase material-name substrings treated as emissive glow
 ##   ([] when window glow is baked into the albedo texture instead).
-## - origin: "center" (XZ center at the node origin) or "corner" (origin on a
-##   cell corner — mine entries; the loader adds the +CELL*0.5 shaft offset).
+## - origin: "center" (XZ center at the node origin) or "corner" (legacy
+##   corner-origin structures that need a +CELL*0.5 offset from their caller).
 ## - fallback_on_potato: keep the procedural recipe as the Potato fallback.
 ## - skeletal: opt into native Skeleton3D/AnimationPlayer loading.
 ## - skeletal_role/clips/loops: role and required in-place clip aliases.

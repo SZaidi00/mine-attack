@@ -339,8 +339,9 @@ func test_sieging_unit_retaliates_against_tower() -> void:
 
 func test_fighters_target_remembered_structure_through_fog() -> void:
 	# Static structures stay targetable on remembered intel — fog must not
-	# grant a tower free invulnerability once live vision moves on.
-	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0)))
+	# grant a tower free invulnerability once live vision moves on. This cell is
+	# beyond the centered mine entrance's vision, so the scout controls visibility.
+	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-5, 0)))
 	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
 	tower.team = ENEMY  # pretend the enemy built it
 	await _finish_construction(tower)

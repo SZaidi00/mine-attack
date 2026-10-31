@@ -240,8 +240,8 @@ func test_scatter_forms_clusters_and_preserves_the_front_lane() -> void:
 		else:
 			back += 1
 	assert_gt(back, 0, "clustered rows carry props")
-	assert_lt(float(front) / 2.0, float(back) / 4.0,
-		"the two front combat rows stay sparser than the four rear rows")
+	assert_lt(float(front) / 2.0, float(back) / float(GridWorld.SURFACE_ROWS - 2),
+		"the two front combat rows stay sparser than the rear rows")
 	var adjacent := false
 	for cell in cells:
 		if cells.has(cell + Vector2i.RIGHT) or cells.has(cell + Vector2i.DOWN):

@@ -5,7 +5,7 @@ extends GutTest
 # replacing the current order. Queued orders execute one per IDLE tick, before
 # any idle handler grabs the unit. Any plain explicit order, stop(), kill(),
 # or _clear_target() drops the whole queue.
-# NOTE: the player mine entry sits at (-480, 0) with a 64px pick radius, so
+# NOTE: the player mine entry sits at (-464, -144) with a 64px pick radius, so
 # right-click test points must stay at least ~80px away from it or the
 # mine-entry branch (deposit/enter) wins over the move default.
 

@@ -207,11 +207,12 @@ func test_storm_halves_unit_and_lantern_vision() -> void:
 func test_storm_damages_exposed_surface_units_only() -> void:
 	var exposed: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, _grid.grid_to_world(Vector2i(-20, 0)))
 	exposed.stop()
+	exposed.position = _grid.grid_to_world(Vector2i(-20, GridWorld.SURFACE_TOP))
 	var sheltered_miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _grid.grid_to_world(Vector2i(-5, 10)))
 	sheltered_miner.is_underground = true
 	WeatherManager.force_snowstorm_start()
 	await wait_seconds(1.5)
-	assert_lt(exposed.hp, exposed.data.max_hp, "exposed surface unit takes storm damage")
+	assert_lt(exposed.hp, exposed.data.max_hp, "top-row surface unit takes storm damage")
 	assert_gt(exposed.hp, exposed.data.max_hp - 6, "storm damage is ~2 HP/s, not a burst")
 	assert_true(exposed._frosted, "exposed unit shows the frost overlay")
 	assert_eq(sheltered_miner.hp, sheltered_miner.data.max_hp, "underground units are unaffected")

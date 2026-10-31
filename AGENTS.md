@@ -36,7 +36,8 @@ mine-attack/
 │                      # research_manager, debug_log, audio_manager, settings_manager,
 │                      # weather_manager, ai_belief_system, match_stats
 │   ├── controllers/   # ai_controller, player_controller + helper modules
-│   ├── resources/     # unit_data.gd, faction_data.gd, units/*.tres, factions/*.tres
+│   ├── resources/     # unit_data.gd, faction_data.gd, map_definition.gd,
+│   │                  # units/*.tres, factions/*.tres, maps/default.tres
 │   ├── ui/            # hud + helper modules, debug_overlay, layer_indicator,
 │                      # training_queue_panel, research_panel, unit_button, main_menu,
 │                      # match_graph, minimap, tutorial_hints, tutorial_panel,
@@ -267,7 +268,7 @@ mine-attack/
 > class. On `main`,
 > Play loads `scenes/main.tscn` directly.
 
-`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
+`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`. The root `scripts/world/main.gd` applies the base/mine markers from `MapDefinition` (`scripts/resources/maps/default.tres`) in `_enter_tree`, before child initialization. Bases retain their original cells; both mine entrances are centered on row `-5` of the expanded surface band. The scene contains:
 
 - `World/VolcanoBackground` — decorative volcano sprite.
 - `World/GridWorld` — procedural map, A*, fog of war, rendering.
@@ -319,8 +320,9 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 ### `scripts/world/`
 
-- `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers. The surface is a multi-row battlefield band, not a single row: `SURFACE_ROWS` (6) walkable rows span `y ∈ [SURFACE_TOP, Y_MIN]` = `[-5, 0]`; underground stays at `y >= 1`. `GridWorld.is_surface_row(y)` is the shared predicate — use it instead of `y == 0` checks. Base building footprints genuinely seal their band cells (`building.gd._mark_footprint_solid`), leaving row 0 in front of each base walkable.
-  - `grid_map_generation.gd` — map generation and A* initialization. Generates the 6-row surface band above row 0 and the underground layers; the A* region covers both. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
+- `main.gd` — root gameplay-scene setup; applies the `MapDefinition` base/mine markers before child `_ready` methods, so footprints, shafts, and ladders use the same layout.
+- `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers. The surface is a multi-row battlefield band, not a single row: `SURFACE_ROWS` (10) walkable rows span `y ∈ [SURFACE_TOP, Y_MIN]` = `[-9, 0]`; underground stays at `y >= 1`. `GridWorld.is_surface_row(y)` is the shared predicate — use it instead of `y == 0` checks. Base building footprints genuinely seal their five rows (`building.gd._mark_footprint_solid`), leaving row 0 in front of each base and the added lanes above it walkable.
+  - `grid_map_generation.gd` — map generation and A* initialization. Generates the 10-row surface band above row 0 and the underground layers; the A* region covers both. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
   - `grid_pathfinding.gd` — `find_path`, `find_path_underground` (crawler variant: seals the whole surface band for the query so underground raids can't bypass the central wall over the top), walkability helpers, wall cell sealing.
   - `grid_fog_of_war.gd` — vision maps, memory, ghost silhouettes, fog rendering.
   - `grid_drawing.gd` — surface/underground terrain drawing, effects, wall HP bar.

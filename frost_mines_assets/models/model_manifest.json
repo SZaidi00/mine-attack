@@ -51,7 +51,7 @@
 		"tri_gate": 12000,
 		"accent_slots": [],
 		"glow_slots": [],
-		"origin": "corner",
+		"origin": "center",
 		"fallback_on_potato": true
 	},
 	{

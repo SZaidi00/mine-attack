@@ -70,7 +70,7 @@ func _pick_enemy_target() -> Vector2:
 		# not behind it on the enemy's half.
 		base_x = enemy_building.global_position.x + team_dir * 80.0
 	var x: float = base_x + randf_range(-40.0, 40.0)
-	var y: float = randf_range(-24.0, 24.0)
+	var y: float = randf_range((GridWorld.SURFACE_TOP + 0.5) * GridWorld.CELL_SIZE, GridWorld.Y_MIN * GridWorld.CELL_SIZE + 16.0)
 	x = clampf(x, (GridWorld.X_MIN + 2) * GridWorld.CELL_SIZE, (GridWorld.X_MAX - 2) * GridWorld.CELL_SIZE)
 	return Vector2(x, y)
 

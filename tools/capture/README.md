@@ -46,7 +46,7 @@ and invisible to the GUT suite (parsing is covered by
 ## Flags and shot specs
 
 ```
-SHOTS="10:start;45:zoomout;80:underground;100:breach;120:storm;150:volcano;180:custom:0:-150:6" \
+SHOTS="10:start;45:zoomout;80:underground;100:breach;120:storm;150:volcano;180:custom:0:-128:6" \
 FACTION=brute DIFFICULTY=2 SEED=777 SPEED=2.0 \
 tools/capture/run_capture.sh /tmp/shots
 ```
