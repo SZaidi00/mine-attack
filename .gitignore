@@ -5,6 +5,9 @@
 # macOS Finder metadata
 .DS_Store
 
+# Python tooling caches (tools/*.py)
+__pycache__/
+
 # Export outputs (regenerable via tools/export_all.sh)
 build/
 

@@ -116,6 +116,23 @@ func test_camera_fov_is_narrowed_to_45_degrees() -> void:
 	assert_almost_eq(cam.fov, 45.0, 0.01, "Camera3D FOV is 45 (was Godot's 75 default)")
 
 
+func test_default_surface_bookmark_frames_the_expanded_band() -> void:
+	await _frames(30)
+	_shell.set_process(false)
+	var center_z: float = (GridWorld.SURFACE_TOP + GridWorld.SURFACE_ROWS * 0.5) * GridWorld.CELL_SIZE * Presentation3D.WORLD_SCALE
+	var surface_focus: Vector3 = _shell.get("_surface_focus")
+	assert_almost_eq(surface_focus.z, center_z, 0.001, "the 3D bookmark tracks the surface band center")
+	_shell.pose_camera(surface_focus, _start_dolly, _shell.SURFACE_PITCH_DEGREES)
+	var cam: Camera3D = _shell.get_node("CameraRig/Camera3D")
+	var view_size: Vector2 = get_viewport().get_visible_rect().size
+	for y in [GridWorld.SURFACE_TOP, GridWorld.Y_MIN + 1]:
+		var point := Vector3(0.0, 0.0, y * GridWorld.CELL_SIZE * Presentation3D.WORLD_SCALE)
+		assert_false(cam.is_position_behind(point), "surface edge y=%d is in front of the camera" % y)
+		var projected: Vector2 = cam.unproject_position(point)
+		assert_true(projected.y >= 0.0 and projected.y <= view_size.y,
+			"surface edge y=%d projects inside the default viewport (%.1f / %.1f)" % [y, projected.y, view_size.y])
+
+
 func test_dolly_constants_frame_units_and_the_half_map() -> void:
 	assert_almost_eq(_start_dolly, 12.0, 0.001, "rig boots at the retuned default dolly")
 	# Apparent-size contract: a 1.4x-scaled swordsman (0.36 units tall) fills
@@ -188,7 +205,7 @@ func test_keyboard_zoom_anchors_on_the_viewport_center() -> void:
 	var z_max := (GridWorld.Y_MAX + 4) * GridWorld.CELL_SIZE * Presentation3D.WORLD_SCALE
 	assert_gte(after.x, x_min, "focus stays inside the pan clamp (x min)")
 	assert_lte(after.x, x_max, "focus stays inside the pan clamp (x max)")
-	assert_gte(after.z, -3.0, "focus stays inside the pan clamp (z min)")
+	assert_gte(after.z, (GridWorld.SURFACE_TOP - 4) * GridWorld.CELL_SIZE * Presentation3D.WORLD_SCALE, "focus stays inside the pan clamp (z min)")
 	assert_lte(after.z, z_max, "focus stays inside the pan clamp (z max)")
 	var moved := Vector2(after.x - before.x, after.z - before.z).length()
 	assert_lt(moved, 2.0, "center-anchored zoom barely glides (got %.2f)" % moved)

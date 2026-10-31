@@ -36,7 +36,8 @@ mine-attack/
 │                      # research_manager, debug_log, audio_manager, settings_manager,
 │                      # weather_manager, ai_belief_system, match_stats
 │   ├── controllers/   # ai_controller, player_controller + helper modules
-│   ├── resources/     # unit_data.gd, faction_data.gd, units/*.tres, factions/*.tres
+│   ├── resources/     # unit_data.gd, faction_data.gd, map_definition.gd,
+│   │                  # units/*.tres, factions/*.tres, maps/default.tres
 │   ├── ui/            # hud + helper modules, debug_overlay, layer_indicator,
 │                      # training_queue_panel, research_panel, unit_button, main_menu,
 │                      # match_graph, minimap, tutorial_hints, tutorial_panel,
@@ -55,19 +56,37 @@ mine-attack/
 │   │                  # map-seeded value noise + ridged dune bands, structure
 │   │                  # clearances, storm flattening — plus a read-only
 │   │                  # world_height_at() ground query, emissive
-│   │                  # lava pass, storm snow cover; 3D-rework phase 3 relit the
-│   │                  # albedo pass so the ground receives mood light, sun shadows,
-│   │                  # and depth fog), terrain_detail_3d.gd (MultiMesh
-│   │                  # ore crystals / lava embers / snow drifts riding the
-│   │                  # dune surface), entity_proxies_3d.gd
+│   │                  # lava pass, storm snow cover, lit vertex-color albedo with
+│   │                  # smoothed surface normals and a Standard+ world-triplanar
+│   │                  # detail texture that preserves cell/fog colors),
+│   │                  # terrain_detail_3d.gd (MultiMesh ore crystals / lava embers /
+│   │                  # snow drifts plus plan-07/09 seeded surface scatter —
+│   │                  # generated + curated Quaternius GLBs, map-seeded cluster
+│   │                  # noise and zone-aware kinds, fog + structure-clearance gated,
+│   │                  # dune-grounded; scatter_log mirrors the instances for tests),
+│   │                  # backdrop_3d.gd (plan-09 seeded noninteractive ground skirt,
+│   │                  # three distant ridge layers and Standard+ pine silhouettes,
+│   │                  # all outside playable cells and hidden underground),
+│   │                  # entity_proxies_3d.gd
 │   │                  # (group reconcile), unit_proxy_3d.gd (1.4x proxy-root
 │   │                  # scale-up, counter-scaled HP bars, R3 dune ground-snap)
 │   │                  # + unit_model_3d.gd
-│   │                  # (R7: Standard/Fancy import sculpted textured GLBs via
-│   │                  # unit_model_loader.gd + the shared model manifest; named-pivot
-│   │                  # state-driven animation, team/accent/glow rebinds, sculpted
-│   │                  # faction variants hidden until enemy identification, undead
-│   │                  # tint; Potato keeps the procedural recipes), structure_proxy_3d.gd (1.08x
+│   │                  # (R7 + plan 10: Standard/Fancy import textured GLBs via
+│   │                  # unit_model_loader.gd + the shared model manifest. Five
+│   │                  # humanoids use curated matching-rig KayKit Skeleton3D /
+│   │                  # AnimationPlayer assets: native idle/walk/attack/death,
+│   │                  # real mining and engineer repair clips, in-place movement,
+│   │                  # cooldown-scaled actions, bone-mounted tools and badges.
+│   │                  # unit_skeletal_3d.gd validates clips/rigs and attachments;
+│   │                  # unit_palette_3d.gdshader recolors garment regions only.
+│   │                  # plan-08 unit_animation_clips.gd and procedural recipes
+│   │                  # remain the generated/Potato/incomplete-rig fallbacks;
+│   │                  # non-humanoids keep procedural motion. Visible proxy syncs
+│   │                  # advance clips manually; team/accent/glow, faction reveal,
+│   │                  # undead tint, hit flash, and death sink are preserved.
+│   │                  # tools/curate_skeletal_units.py documents the native-rig
+│   │                  # import and budget validation; sources live in packs/SOURCES.md),
+│   │                  # structure_proxy_3d.gd (1.08x
 │   │                  # wall-footprint-capped proxy-root scale — ladders stay 1x;
 │   │                  # keep/tower/wall damage states, lantern OmniLight tiers,
 │   │                  # counter-scaled range disc, faction-reveal
@@ -153,15 +172,24 @@ mine-attack/
 │   │                  # one-shot dust/crack feedback + minimal camera nudge)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
-├── tests/             # GUT test suite (~48 test scripts)
+├── tests/             # GUT test suite (77 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
 │                      # gen_crawler_sprites.gd, gen_unit_glbs.py (R7 deterministic
-│                      # sculpted/textured unit GLBs), check_model_budgets.sh
+│                      # sculpted/textured unit GLBs), gen_prop_glbs.py
+│                      # (plan 06 deterministic prop GLBs — boulder/pine/stump/crate,
+│                      # the surface-scatter dressing for plan 07),
+│                      # import_kit_props.py (plan 09 curated glTF/GLB -> embedded,
+│                      # ground-normalized kit props), curate_skeletal_units.py
+│                      # (plan 10 native KayKit rigs, clips, hand tools, in-place /
+│                      # triangle validation; models/packs/SOURCES.md holds exact
+│                      # licenses, source/final hashes, and clip provenance),
+│                      # check_model_budgets.sh
 │                      # (R4/R7 GLB tri/texture budget gate vs
 │                      # models/model_manifest.json), resize_glb_textures.py
 │                      # (downscales embedded GLB textures to the 2048² cap)
 ├── .githooks/         # pre-push release hook
-└── improvements/      # revamp.md + new sprites
+├── improvements/      # revamp.md + new sprites
+└── plans/             # Kimi Code implementation plans — see plans/README.md
 ```
 
 **Implemented revamp phases:** Phase 1 (Fog of War & lanterns), Phase 2 (factions), Phase 3 (towers & walls), Phase 4 (dynamic terrain: lava rising, cave-ins, ore depletion), Phase 5 (weather: snowstorms), Phase 6 (tech-tree overhaul: mutually-exclusive research branches, respec, traps, burning ground), Phase 7 (UI & menu updates: faction-select glow + themed particles, enemy-faction "???" top-bar indicator + identified popup, radial build menu, red weather warning), Phase 8 (AI refactor: AIBeliefSystem autoload, faction scouting, AI lantern placement, weather/lava responses, faction-specific strategies), Phase 9 (volcano weather event: background volcano, eruption warnings, meteors, burn patches, snowstorm extinguishing, lava-time acceleration).
@@ -169,8 +197,13 @@ mine-attack/
 ## Runtime architecture
 
 > **3D conversion branch (`feat/3d-conversion`):** the main menu's Play
-> flow loads `scenes/main_3d.tscn` instead of `main.tscn` (the only menu
-> change; `run/main_scene` stays `scenes/ui/main_menu.tscn`). The Node3D
+> flow loads `scenes/main_3d.tscn` by default (the only menu change;
+> `run/main_scene` stays `scenes/ui/main_menu.tscn`). The entry point is a
+> persisted user setting — `SettingsManager`'s `[video] play_mode`,
+> `"3d"` (default) or `"2d"` (legacy: Play loads `main.tscn` directly, and
+> since desktop rendering switched to `forward_plus` for the 3D port, a
+> 2D-legacy desktop run renders through `forward_plus`; the web/mobile
+> overrides keep `gl_compatibility`). The Node3D
 > shell mounts the untouched `scenes/main.tscn` sim at `/root/Main` (so
 > every hard-coded path keeps working), hides its CanvasItem layers, and
 > renders the 3D presentation in `scenes/world_3d.tscn` (chunked terrain
@@ -235,7 +268,7 @@ mine-attack/
 > class. On `main`,
 > Play loads `scenes/main.tscn` directly.
 
-`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`, which contains:
+`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`. The root `scripts/world/main.gd` applies the base/mine markers from `MapDefinition` (`scripts/resources/maps/default.tres`) in `_enter_tree`, before child initialization. Bases retain their original cells; both mine entrances are centered on row `-5` of the expanded surface band. The scene contains:
 
 - `World/VolcanoBackground` — decorative volcano sprite.
 - `World/GridWorld` — procedural map, A*, fog of war, rendering.
@@ -262,7 +295,7 @@ Global singletons. All hold per-match state that survives scene reloads; `hud.gd
 - `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Baseline income: both teams trickle `BASELINE_INCOME_COIN` every `BASELINE_INCOME_INTERVAL` from match start, no eligibility gates (AI scaled by the difficulty coin multiplier). Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (same AI scaling), so a wiped economy can always re-staff.
 - `research_manager.gd` — timed branch research tree: mutually-exclusive tiers, one-time 500g respec, active research slot with queue, Ore Sonar scan.
 - `audio_manager.gd` — synthesized SFX and ambience, plus dynamic music: a combat percussion loop fades in with `combat_intensity` (pulsed by `UnitCombat.take_damage` whenever the player team is involved; decays over ~4.5s) while the calm wind/drips layers thin under snowstorms and volcano eruptions. Weather state is polled (`WeatherManager.is_snowstorm_active()`/`is_volcano_active()`) because AudioManager's `_ready` runs before the WeatherManager singleton exists.
-- `settings_manager.gd` — window resolution persistence (desktop only), SFX bus volume (all platforms), graphics-quality override for the 3D presets (`[video] graphics_quality`: auto/potato/standard/fancy; the 3D shell applies it at startup and live via `setting_changed`), accessibility preferences (UI scale, colorblind palette, reduced motion/flash, tutorial-hint state), and remappable key bindings (`[input]` section), all in `user://settings.cfg`. Emits `setting_changed(what: StringName)` so live UI (HUD scale, camera shake, palettes) reacts without polling. `apply_saved_bindings()` rebuilds InputMap key events at startup (mouse buttons are never remapped).
+- `settings_manager.gd` — window resolution persistence (desktop only), SFX bus volume (all platforms), graphics-quality override for the 3D presets (`[video] graphics_quality`: auto/potato/standard/fancy; the 3D shell applies it at startup and live via `setting_changed`), play-mode pick (`[video] play_mode`: "3d" default / "2d" legacy, validated on read), accessibility preferences (UI scale, colorblind palette, reduced motion/flash, tutorial-hint state), and remappable key bindings (`[input]` section), all in `user://settings.cfg`. Emits `setting_changed(what: StringName)` so live UI (HUD scale, camera shake, palettes) reacts without polling. `apply_saved_bindings()` rebuilds InputMap key events at startup (mouse buttons are never remapped).
 - `weather_manager.gd` — snowstorms + volcano eruptions: independent game-time state machines, scheduling/damage/duration scaled by difficulty. Random scheduling can be disabled via `WeatherManager.set_weather_events_enabled(false)` and `WeatherManager.set_volcano_events_enabled(false)` (tests force events instead).
 - `ai_belief_system.gd` — per-team belief maps (cells/unit sightings/enemy-faction guess) built only from that team's vision; confidence decays on stale intel. Reset per match via `AIBeliefSystem.reset()`.
 - `match_stats.gd` — per-match stats recording: units lost (hooked from `Unit._die`), damage dealt (hooked from unit `take_damage`, credited to the attacker's team), and a 5s coin/population/base-HP timeline (relative to match start, with a t=0 baseline and a match-end point). `build_summary()` also records each team's max completed research tier (`player_max_tier`/`enemy_max_tier`) for post-game coaching hints. Reset per match from `hud._ready` (metadata: difficulty/factions/opener captured there); on `GameManager.game_over` it finalizes `last_summary` for the game-over panel and writes a JSON log to `user://match_logs/`.
@@ -287,8 +320,9 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 ### `scripts/world/`
 
-- `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers. The surface is a multi-row battlefield band, not a single row: `SURFACE_ROWS` (6) walkable rows span `y ∈ [SURFACE_TOP, Y_MIN]` = `[-5, 0]`; underground stays at `y >= 1`. `GridWorld.is_surface_row(y)` is the shared predicate — use it instead of `y == 0` checks. Base building footprints genuinely seal their band cells (`building.gd._mark_footprint_solid`), leaving row 0 in front of each base walkable.
-  - `grid_map_generation.gd` — map generation and A* initialization. Generates the 6-row surface band above row 0 and the underground layers; the A* region covers both. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
+- `main.gd` — root gameplay-scene setup; applies the `MapDefinition` base/mine markers before child `_ready` methods, so footprints, shafts, and ladders use the same layout.
+- `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers. The surface is a multi-row battlefield band, not a single row: `SURFACE_ROWS` (10) walkable rows span `y ∈ [SURFACE_TOP, Y_MIN]` = `[-9, 0]`; underground stays at `y >= 1`. `GridWorld.is_surface_row(y)` is the shared predicate — use it instead of `y == 0` checks. Base building footprints genuinely seal their five rows (`building.gd._mark_footprint_solid`), leaving row 0 in front of each base and the added lanes above it walkable.
+  - `grid_map_generation.gd` — map generation and A* initialization. Generates the 10-row surface band above row 0 and the underground layers; the A* region covers both. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
   - `grid_pathfinding.gd` — `find_path`, `find_path_underground` (crawler variant: seals the whole surface band for the query so underground raids can't bypass the central wall over the top), walkability helpers, wall cell sealing.
   - `grid_fog_of_war.gd` — vision maps, memory, ghost silhouettes, fog rendering.
   - `grid_drawing.gd` — surface/underground terrain drawing, effects, wall HP bar.
@@ -325,7 +359,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
   - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists). Picking a structure hides the tray while the placement ghost is armed — a visible tray would eat the confirming click — and reopening the menu mid-placement cancels the ghost.
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
-- `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system.
+- `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system. A persisted Mode dropdown (`[video] play_mode`, default `"3d"`) beside the Resolution row picks the Play target — the 3D shell or the legacy 2D `main.tscn` — via `_play_scene_path()`.
 - `settings_panel.gd` — shared settings popup opened from the main menu and pause menu Settings buttons; scrollable card with three groups — Display (map seed, UI scale slider, colorblind / reduced motion / reduced flash / tutorial checkboxes, tutorial reset), Audio (SFX volume slider on the SFX bus), Controls (capture-key rebinding rows for `Constants.REMAPPABLE_ACTIONS` with conflict rejection). Main menu and pause menu keep their own inline resolution rows (desktop only).
 - `tutorial_panel.gd` — paginated first-time-player tutorial (7 screens: goal, economy, units, structures, research, weather/terrain, controls/tips) opened from the main menu's Tutorial button; `create()` returns a hidden full-rect overlay like `SettingsPanel`, with Back/Next/Finish navigation and icon-illustrated entry rows built from `_PAGES` data.
 - `minimap.gd` — canvas-drawn minimap Control (terrain by `CellType`, 3-state fog overlay, team-colored unit/building dots, camera viewport rect, click/drag to move the camera; shape-coded ore/lava when colorblind mode is on).
@@ -453,7 +487,36 @@ or regenerated GLBs with textures over 2048² go through
 GLBs' actual textures to 1024² via `--max=1024 --only=/structures/`, cutting
 embedded textures 17.8 → 6.0 MB). R7
 unit GLBs are deterministically regenerated with `python3 tools/gen_unit_glbs.py`
-(Pillow, same as the texture-resize tool); re-run the budget gate afterward.
+(Pillow, same as the texture-resize tool); prop GLBs (plan 06, the surface
+props that plan 07 scatters) with `python3 tools/gen_prop_glbs.py [--validate-only]`
+(same conventions as the unit workshop: embedded 256² painted atlas, base
+min-y 0, metallic 0 / roughness 0.92; self-validates tri/height bands and
+rejects corrupted copies). Curated kit props use
+`python3 tools/import_kit_props.py --source /path/to/pack/glTF --prop Source.gltf=pack_key=0.30`
+(repeat `--prop` per model; `--validate-only` rechecks committed GLBs). Curated
+skeletal humanoids use `python3 tools/curate_skeletal_units.py --characters
+/path/to/KayKit_Adventurers_2.0_FREE --animations
+/path/to/KayKit_Character_Animations_1.1 --tools
+/path/to/KayKit_RPGToolsBits_1.0_FREE` (matching Rig_Medium sources only, then
+`python3 tools/resize_glb_textures.py --max=512 --only=unit_kaykit_`;
+`--validate-only` checks the curated skins, required clips, root motion, and
+triangles). Raw packs stay in `.gdignore`d staging; exact licenses/hashes belong
+in `frost_mines_assets/models/packs/SOURCES.md`. Re-run the budget gate afterward.
+
+### Run all repo checks
+
+```bash
+tools/run_checks.sh
+```
+
+Runs the health checks in order: the budget gate above, then the headless GUT
+suite (`godot --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests
+-gexit`) using the same Godot lookup as `tools/export_all.sh` (`godot` on
+PATH, then `~/Downloads/Godot.app`, then `/Applications/Godot.app`, then the
+`GODOT` env var). The wrapper only sequences the checks — the gate and the
+test command stay the single source of truth. If no Godot binary is found it
+runs only the budget gate, prints a prominent warning that tests were
+skipped, and still exits 0. This is what the pre-push hook runs.
 
 ### Export all presets
 
@@ -482,7 +545,7 @@ The script also packages `MineAttack-macOS.zip` (via `ditto`, preserving bundle 
 tools/capture/run_capture.sh /tmp/shots
 ```
 
-Launches `tools/capture/capture_driver.tscn` instead of the main menu, starts a seeded match (difficulty/faction/speed via env vars), and saves PNGs of named camera poses (`start`, `surface`, `zoomout`, `underground`, `breach`, `units`, `units_underground`, `base`, `dunes`, `fortress`, `storm`, `volcano`, `custom:X:Y:Z`) at fixed sim-seconds. Built for CI and AI-agent sandboxes: an agent can render, look, and iterate without a display or a human screenshot provider. Requires `xvfb-run`; downloads a Godot Linux binary on first run (`GODOT_BIN` to override). `RESOLUTION=3840x2160` selects 4K output (default 1920×1080); `tools/capture/run_showcase.sh roadmap/3d-visual-revamp/r8` captures the six R8 marketing poses at both sizes.
+Launches `tools/capture/capture_driver.tscn` instead of the main menu, starts a seeded match (difficulty/faction/speed via env vars), and saves PNGs of named camera poses (`start`, `surface`, `zoomout`, `underground`, `breach`, `units`, `units_underground`, `unit_actions`, `unit_actions_underground`, `base`, `dunes`, `fortress`, `storm`, `volcano`, `custom:X:Y:Z`) at fixed sim-seconds. Built for CI and AI-agent sandboxes: an agent can render, look, and iterate without a display or a human screenshot provider. Requires `xvfb-run`; downloads a Godot Linux binary on first run (`GODOT_BIN` to override). `RESOLUTION=3840x2160` selects 4K output (default 1920×1080); `tools/capture/run_showcase.sh roadmap/3d-visual-revamp/r8` captures the six R8 marketing poses at both sizes.
 
 Perf BENCH mode (3D perf pass): `STRESS_UNITS=100 BENCH=30 SHOTS="" tools/capture/run_capture.sh /tmp/bench` spawns 100 extra units per team (real, live units — the 200-unit ceiling both teams at cap) and, after 30 sim-seconds, prints the Probe3D per-section script-time averages (unit sync, terrain/fog rebuilds, sim fog recompute, ring hover scan). GPU frame times under software GL are meaningless (see below), but script milliseconds are comparable across runs — this is the regression-gate number. On macOS dev machines without xvfb, run the driver directly with the same flags, windowed.
 
@@ -507,9 +570,10 @@ Open `http://localhost:8080/MineAttack.html`. Web builds require cross-origin is
 
 This repository includes a pre-push hook in `.githooks/pre-push`. When enabled, pushes to `main` automatically:
 
-1. Run `tools/export_all.sh` to rebuild macOS, Windows, and Linux zips.
-2. Create a new GitHub release with an auto-incremented patch version (e.g. `v0.1.0` → `v0.1.1`).
-3. Attach `MineAttack-macOS.zip`, `MineAttack-Windows.zip`, and `MineAttack-Linux.zip` to the release.
+1. Run the repo health checks (`tools/run_checks.sh`: GLB budget gate + headless GUT suite). If any check fails, the push is aborted; bypass with `SKIP_CHECKS=1 git push origin main`.
+2. Run `tools/export_all.sh` to rebuild macOS, Windows, and Linux zips.
+3. Create a new GitHub release with an auto-incremented patch version (e.g. `v0.1.0` → `v0.1.1`).
+4. Attach `MineAttack-macOS.zip`, `MineAttack-Windows.zip`, and `MineAttack-Linux.zip` to the release.
 
 Enable the hook after cloning:
 
@@ -517,7 +581,7 @@ Enable the hook after cloning:
 git config core.hooksPath .githooks
 ```
 
-Skip the hook for a single push:
+Skip only the release for a single push:
 
 ```bash
 SKIP_RELEASE=1 git push origin main

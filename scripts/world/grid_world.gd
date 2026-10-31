@@ -11,6 +11,12 @@ signal cells_revealed(cells: Array)
 # per-frame push signals by design.
 var player_fog_revision: int = 0
 var _player_fog_changed_cells: Dictionary = {}  # Vector2i -> true, drained by consumers
+# Cap on the change accumulator above: bounds per-frame work for the
+# chunk-granular consumer. A diff pass that exceeds it drops the excess cells,
+# sets player_fog_overflow (logged, then drained by Fog3D's full-refresh
+# fallback) — overflow is observability + recovery, never silent staleness.
+const PLAYER_FOG_CHANGE_CAP: int = 512
+var player_fog_overflow: bool = false
 # Revamp Phase 4 dynamic-terrain events (HUD banners, VFX hooks).
 signal lava_warning_started(seconds: float, layers: int)
 signal lava_risen(layers: int)
@@ -415,6 +421,15 @@ func consume_player_fog_changes() -> Array:
 	var cells: Array = _player_fog_changed_cells.keys()
 	_player_fog_changed_cells.clear()
 	return cells
+
+
+## Drains the overflow flag set when a diff pass dropped changed cells past
+## PLAYER_FOG_CHANGE_CAP. Fog3D consumes it at its refresh cadence to fall back
+## to a full rebuild; the flag lives on the sim and is only ever cleared here.
+func consume_player_fog_overflow() -> bool:
+	var overflowed: bool = player_fog_overflow
+	player_fog_overflow = false
+	return overflowed
 
 
 func _get_vision_sources(team: GameManager.Team) -> Array:

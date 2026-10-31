@@ -148,3 +148,20 @@ func test_r2_dirt_layers_use_cooled_rock_palette() -> void:
 		"mid mine dirt uses the R2 rock token")
 	assert_eq(terrain._dirt_color(6), ArtStyle3D.PALETTE.rock_dark,
 		"deep mine dirt uses the R2 deep-rock token")
+
+
+func test_surface_detail_texture_preserves_vertex_colors_and_potato() -> void:
+	await _frames(10)
+	var terrain := _terrain()
+	var mat := terrain._mat as StandardMaterial3D
+	assert_not_null(mat, "terrain has its shared albedo material")
+	assert_true(mat.vertex_color_use_as_albedo, "cell palette and fog still multiply the texture")
+	assert_not_null(mat.albedo_texture, "Standard/Fancy add subtle terrain detail")
+	assert_true(mat.uv1_world_triplanar, "detail uses world-space mapping rather than cell UVs")
+	var saved := ArtStyle3D.quality
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.POTATO)
+	terrain.apply_quality()
+	assert_null(mat.albedo_texture, "Potato drops the additional terrain texture samples")
+	assert_false(mat.uv1_triplanar, "Potato disables triplanar mapping")
+	ArtStyle3D.apply_quality(saved)
+	terrain.apply_quality()

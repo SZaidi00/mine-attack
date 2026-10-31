@@ -49,9 +49,8 @@ func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
 
 func _spawn_ladder() -> void:
 	_ladder = _LADDER_SCENE.instantiate()
-	# Keep the ladder vertical: hang it from the shaft column's center, not the
-	# entry node's origin (which sits on a cell corner). Climbing units path to
-	# the ladder top and then descend straight down the carved shaft column.
+	# Keep the ladder vertical on the entry's cell-centered surface position.
+	# Climbing units path to the ladder top and then descend the carved shaft.
 	_ladder.top_position = Vector2(_underground_position.x, global_position.y)
 	_ladder.bottom_position = _underground_position
 	# Add the ladder to the dedicated Ladders container (or the World node as a

@@ -160,3 +160,73 @@ func test_reveal_all_hides_the_overlay() -> void:
 	grid.set_reveal_all(GameManager.Team.PLAYER, false)
 	fog._rebuild()
 	assert_not_null(fog.mesh, "overlay returns when reveal-all is lifted")
+
+
+# ─── Fog-diff-cap telemetry (plans/01) ───
+# A reveal burst past the sim's change-accumulator cap must set the overflow
+# flag (with a counted warning), and one Fog3D refresh must restore every
+# cell's visual state — no stale tint after an overflowed revision.
+
+## Two synchronous detection passes: first pins the underground half of the
+## player fog maps to a known hidden baseline (prev-state bookkeeping), then
+## flips it all visible — a reveal burst far past PLAYER_FOG_CHANGE_CAP, same
+## as a big lantern reveal or wall breach live. Deterministic regardless of
+## how many live frames ran before it (GUT can chain tests within one frame).
+func _force_fog_overflow(grid: GridWorld) -> void:
+	grid.consume_player_fog_changes()
+	grid.consume_player_fog_overflow()
+	var vision: Array = grid._vision_maps[GameManager.Team.PLAYER]
+	var memory: Array = grid._memory_maps[GameManager.Team.PLAYER]
+	for ix in range(vision.size()):
+		for iy in range(vision[ix].size()):
+			if iy + grid.SURFACE_TOP > grid.Y_MIN:
+				vision[ix][iy] = false
+				memory[ix][iy] = -1.0
+	grid._fog._detect_player_fog_changes()
+	grid.consume_player_fog_changes()
+	grid.consume_player_fog_overflow()
+	for ix in range(vision.size()):
+		for iy in range(vision[ix].size()):
+			if iy + grid.SURFACE_TOP > grid.Y_MIN:
+				vision[ix][iy] = true
+	grid._fog._detect_player_fog_changes()
+
+
+func test_change_burst_past_cap_sets_overflow_flag_and_caps_the_list() -> void:
+	var grid := _grid()
+	var revision: int = grid.player_fog_revision
+	_force_fog_overflow(grid)
+	assert_true(grid.player_fog_overflow, "burst past the cap sets the overflow flag")
+	assert_eq(grid._player_fog_changed_cells.size(), GridWorld.PLAYER_FOG_CHANGE_CAP,
+		"change list holds exactly the capped amount; the rest is dropped")
+	assert_gt(grid.player_fog_revision, revision, "the overflow pass still bumps the revision")
+	grid.consume_player_fog_changes()
+	grid.consume_player_fog_overflow()
+
+
+func test_overflow_recovers_with_one_full_fog_refresh() -> void:
+	var fog := _fog()
+	var grid := _grid()
+	_force_fog_overflow(grid)
+	assert_true(grid.player_fog_overflow)
+	# One refresh tick (0.5s cadence forced): drains the overflow flag and
+	# lands the full rebuild — the recovery path, not a silently stale board.
+	fog._process(Fog3D.REFRESH_INTERVAL)
+	assert_false(grid.player_fog_overflow, "Fog3D's refresh drains the overflow flag")
+	var checked: int = 0
+	for x in range(GridWorld.X_MIN, GridWorld.X_MAX + 1):
+		for y in range(GridWorld.SURFACE_TOP, GridWorld.Y_MAX + 1):
+			var cell := Vector2i(x, y)
+			var expected: Color
+			match grid.fog_state_at(GameManager.Team.PLAYER, cell):
+				2:
+					expected = Color(1.0, 1.0, 1.0, Fog3D.ALPHA_VISIBLE)
+				1:
+					expected = Color(Fog3D.SHADOW_COLOR, Fog3D.ALPHA_REMEMBERED)
+				_:
+					expected = Color(Fog3D.VOID_COLOR, Fog3D.ALPHA_HIDDEN)
+			assert_eq(fog.color_at_cell(cell), expected,
+				"cell %s matches fog_state_at after one refresh" % cell)
+			checked += 1
+	assert_gt(checked, GridWorld.PLAYER_FOG_CHANGE_CAP,
+		"samples well past the cap, including dropped cells")

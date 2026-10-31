@@ -22,13 +22,15 @@ extends Node
 ##                        underground - built mine lantern + local-area light pool
 ##                        breach    - underground + forced first wall breach
 ##                        units / units_underground - R7 eight-unit lineup
+##                        unit_actions / unit_actions_underground - native
+##                          mining, attacks, and engineer repair poses
 ##                        base      - R8 player keep + active production
 ##                        dunes     - R8 open snow-field composition
 ##                        fortress  - R8 revealed enemy citadel
 ##                        storm     - surface + forced snowstorm
 ##                        volcano   - surface + forced volcano eruption
 ##                        custom:X:Y:Z - explicit camera focus (X, Y) and
-##                                      dolly Z (e.g. custom:0:-150:6)
+##                                      dolly Z (e.g. custom:0:-128:6)
 ##   --stress-units <n> spawn n extra units per team (surface) once the match
 ##                      is up — the 200-unit perf stress for BENCH runs
 ##   --bench <seconds>  run the match for this long (sim-seconds), then print
@@ -57,7 +59,7 @@ const DEFAULT_SEED := 12345
 const VALID_FACTIONS: Array[String] = ["arcane", "brute", "industrial"]
 const VALID_POSES: Array[String] = [
 	"start", "surface", "zoomout", "underground", "breach", "storm", "volcano",
-	"units", "units_underground", "base", "dunes", "fortress",
+	"units", "units_underground", "unit_actions", "unit_actions_underground", "base", "dunes", "fortress",
 ]
 
 

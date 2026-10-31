@@ -425,6 +425,22 @@ func _build_card() -> void:
 		res_row.add_child(res_option)
 		vbox.add_child(res_row)
 
+	var mode_row := HBoxContainer.new()
+	mode_row.add_theme_constant_override("separation", 8)
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	var mode_label := Label.new()
+	mode_label.text = "Mode:"
+	mode_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+	mode_row.add_child(mode_label)
+	var mode_option := OptionButton.new()
+	mode_option.custom_minimum_size = Vector2(160, 0)
+	mode_option.add_item("3D (recommended)")
+	mode_option.add_item("2D legacy")
+	mode_option.selected = 0 if SettingsManager.get_play_mode() == "3d" else 1
+	mode_option.item_selected.connect(func(index: int): SettingsManager.set_play_mode("3d" if index == 0 else "2d"))
+	mode_row.add_child(mode_option)
+	vbox.add_child(mode_row)
+
 	_add_menu_button(vbox, "Next", _show_faction_select, true)
 	_add_menu_button(vbox, "Tutorial", func(): _tutorial_panel.visible = true, false)
 	_add_menu_button(vbox, "Settings", func(): _settings_panel.visible = true, false)
@@ -751,9 +767,17 @@ func _on_play() -> void:
 	FactionManager.set_player_faction(_selected_faction_id)
 	FactionManager.pick_random_enemy_faction()
 	GameManager.roll_ai_opener()
-	# 3D conversion branch: Play enters the main_3d shell, which mounts the
-	# untouched main.tscn sim itself (on main this loads main.tscn directly).
-	get_tree().change_scene_to_file("res://scenes/main_3d.tscn")
+	# The Play target comes from the persisted Mode setting: "3d" enters the
+	# main_3d shell, which mounts the untouched main.tscn sim itself; "2d"
+	# loads main.tscn directly (the legacy 2D presentation).
+	get_tree().change_scene_to_file(_play_scene_path())
+
+
+## Scene the Play button loads, from the persisted play-mode setting: the 3D
+## shell by default, the standalone 2D sim for the legacy mode.
+func _play_scene_path() -> String:
+	return "res://scenes/main_3d.tscn" if SettingsManager.get_play_mode() == "3d" \
+			else "res://scenes/main.tscn"
 
 
 ## Empty or non-numeric seed field = fresh random map every match; a parsed

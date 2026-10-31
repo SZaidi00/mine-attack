@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="MapDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/map_definition.gd" id="1_map"]
+
+[resource]
+script = ExtResource("1_map")
+player_building_cell = Vector2i(-30, 0)
+enemy_building_cell = Vector2i(30, 0)
+player_mine_cell = Vector2i(-15, -5)
+enemy_mine_cell = Vector2i(15, -5)
