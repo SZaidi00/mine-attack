@@ -79,3 +79,11 @@ func test_parse_shots_accepts_r8_showcase_poses() -> void:
 	assert_eq(shots[0].pose, "base")
 	assert_eq(shots[1].pose, "dunes")
 	assert_eq(shots[2].pose, "fortress")
+
+
+func test_parse_shots_accepts_skeletal_action_lineups() -> void:
+	var shots := CaptureDriver.parse_shots("4:unit_actions;8:unit_actions;12:unit_actions_underground")
+	assert_eq(shots.size(), 3)
+	assert_eq(shots[0].pose, "unit_actions")
+	assert_eq(shots[1].t, 8.0)
+	assert_eq(shots[2].pose, "unit_actions_underground")

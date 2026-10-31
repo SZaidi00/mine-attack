@@ -10,12 +10,12 @@
 ## ArtStyle3D.UNDEAD_TINT.
 ##
 ## Pure presentation: `sync_animation` reads the live unit's state/timers
-## and poses the rig; it never writes sim state. Miner/swordsman use original
-## UnitAnimationClips on their named pivots at every quality tier, manually
-## advanced here so hidden proxies do no player processing. Mining, other unit
-## kinds, and incomplete rigs keep the procedural fallback. The rig faces -Z
-## (Godot forward); yaw is derived from the sim's actual movement (or its attack
-## target), falling back to the team march direction.
+## and poses the rig; it never writes sim state. Five humanoids use optional
+## matching-rig KayKit Skeleton3D/AnimationPlayer assets on Standard/Fancy.
+## Generated models, original named-pivot clips, and procedural motion remain
+## available for Potato, non-humanoids, and incomplete rigs. Playback advances
+## manually from visible proxy syncs. The rig faces -Z (Godot forward); yaw is
+## derived from actual movement or the current work/attack target.
 
 class_name UnitModel3D
 extends Node3D
@@ -39,12 +39,17 @@ var _flyer: bool = false
 var _team: int = GameManager.Team.PLAYER
 var _undead: bool = false
 var _using_imported: bool = false
+var _skeletal: bool = false
 var _imported_instance: Node3D = null
-var _accent_mats: Array[StandardMaterial3D] = []
+var _skeleton: Skeleton3D = null
+var _accent_mats: Array[Material] = []
 var _animation_player: AnimationPlayer = null
 var _current_clip: StringName = &""
 var _clip_base_rotations: Dictionary = {}  # Node3D -> Quaternion
 var _last_attack_timer: float = -1.0
+
+const MINE_CLIP: StringName = &"mine"
+const REPAIR_CLIP: StringName = &"repair"
 
 var _rig: Node3D    # yaw facing
 var _body: Node3D   # death topple pivot + idle bob
@@ -75,7 +80,7 @@ var _dead: bool = false
 var _dead_t: float = 0.0
 
 
-static func create(u: Node2D) -> UnitModel3D:
+static func create(u: Node2D, prefer_skeletal := true) -> UnitModel3D:
 	var m := UnitModel3D.new()
 	var data: UnitData = u.data
 	m._kind = _resolve_kind(data)
@@ -94,10 +99,13 @@ static func create(u: Node2D) -> UnitModel3D:
 
 	var imported: Dictionary = {}
 	if ArtStyle3D.detail_enabled():
-		imported = UnitModelLoader.instantiate("unit_" + String(m._kind), team)
+		imported = UnitModelLoader.instantiate("unit_" + String(m._kind), team, prefer_skeletal)
 	if not imported.is_empty():
 		m._using_imported = true
+		m._skeletal = bool(imported["skeletal"])
 		m._imported_instance = imported["instance"] as Node3D
+		m._skeleton = imported["skeleton"] as Skeleton3D
+		m._animation_player = imported["animation_player"] as AnimationPlayer
 		m._accent_mats = imported["accent_mats"]
 		m.model_height = float(imported["model_height"])
 		m._body.add_child(imported["root"] as Node3D)
@@ -129,15 +137,16 @@ static func create(u: Node2D) -> UnitModel3D:
 				m._build_crawler(body, accent)
 			_:
 				m._build_swordsman(body, accent)
-	var clip_pivots: Dictionary = {
-		&"ArmL": m._arm_l, &"ArmR": m._arm_r,
-		&"LegL": m._leg_l, &"LegR": m._leg_r, &"Tool": m._tool,
-	}
-	m._animation_player = UnitAnimationClips.attach(m, m._kind, clip_pivots)
-	if m._animation_player != null:
-		for pivot_name in UnitAnimationClips.HUMANOID_PIVOTS:
-			var pivot := clip_pivots[pivot_name] as Node3D
-			m._clip_base_rotations[pivot] = pivot.quaternion
+	if m._animation_player == null:
+		var clip_pivots: Dictionary = {
+			&"ArmL": m._arm_l, &"ArmR": m._arm_r,
+			&"LegL": m._leg_l, &"LegR": m._leg_r, &"Tool": m._tool,
+		}
+		m._animation_player = UnitAnimationClips.attach(m, m._kind, clip_pivots)
+		if m._animation_player != null:
+			for pivot_name in UnitAnimationClips.HUMANOID_PIVOTS:
+				var pivot := clip_pivots[pivot_name] as Node3D
+				m._clip_base_rotations[pivot] = pivot.quaternion
 	m._collect_meshes()
 	if m._undead:
 		m._apply_undead_tint()
@@ -404,15 +413,26 @@ func _apply_undead_tint() -> void:
 	for mi in _meshes:
 		var replacements: Array = []
 		for surface in range(mi.mesh.get_surface_count()):
-			var mat := mi.get_active_material(surface) as StandardMaterial3D
-			if mat == null:
+			var mat := mi.get_active_material(surface)
+			if mat is ShaderMaterial:
+				var shader_copy := (mat as ShaderMaterial).duplicate() as ShaderMaterial
+				shader_copy.set_shader_parameter("tint_color", ArtStyle3D.UNDEAD_TINT)
+				shader_copy.set_shader_parameter("tint_weight", 0.55)
+				var accent_index := _accent_mats.find(mat)
+				if accent_index >= 0:
+					_accent_mats[accent_index] = shader_copy
+				mi.set_surface_override_material(surface, shader_copy)
+				replacements.append(shader_copy)
+				continue
+			var standard := mat as StandardMaterial3D
+			if standard == null:
 				replacements.append(null)
 				continue
-			var replacement := mat.duplicate() as StandardMaterial3D
-			replacement.albedo_color = mat.albedo_color.lerp(ArtStyle3D.UNDEAD_TINT, 0.55)
-			if mat.emission_enabled:
+			var replacement := standard.duplicate() as StandardMaterial3D
+			replacement.albedo_color = standard.albedo_color.lerp(ArtStyle3D.UNDEAD_TINT, 0.55)
+			if standard.emission_enabled:
 				ArtStyle3D.apply_emission(replacement,
-					mat.emission.lerp(ArtStyle3D.UNDEAD_TINT, 0.55), mat.emission_energy_multiplier)
+					standard.emission.lerp(ArtStyle3D.UNDEAD_TINT, 0.55), standard.emission_energy_multiplier)
 			mi.set_surface_override_material(surface, replacement)
 			replacements.append(replacement)
 		_orig_materials[mi] = replacements
@@ -471,30 +491,31 @@ func sync_animation(unit: Node2D, delta: float, pos := Vector2(1e18, 1e18)) -> v
 		_play_clip(UnitAnimationClips.DEATH)
 		_advance_death(delta)
 		return
-	# Hit flash: shared emissive white override while the sim's flash runs.
 	var want_flash: bool = float(unit.get("_hit_flash_timer")) > 0.0
 	if want_flash != _flashing:
 		_set_flashing(want_flash)
-	# Facing: actual movement wins; an attack target steers a stationary unit.
 	if pos.x > 9e17:
 		pos = unit.global_position
 	var moved: float = pos.distance_to(_last_pos)
+	var traveling := _has_travel_path(unit)
 	if moved > 0.4:
 		_last_dir = (pos - _last_pos) / moved
 		_last_pos = pos
 		_target_yaw = atan2(-_last_dir.x, -_last_dir.y)
-	elif state == Unit.State.ATTACK:
+	elif state == Unit.State.MINE and not traveling:
+		var angle := float(unit.get("_mine_target_angle"))
+		_target_yaw = atan2(-cos(angle), -sin(angle))
+	elif state == Unit.State.ATTACK or (state == Unit.State.REPAIR and not traveling):
 		var aim := _attack_aim(unit, pos)
 		if aim.length_squared() > 0.001:
 			var n := aim.normalized()
 			_target_yaw = atan2(-n.x, -n.y)
 	_rig.rotation.y = lerp_angle(_rig.rotation.y, _target_yaw, minf(delta * 10.0, 1.0))
 	_idle_time += delta
-	# Wings: flap while airborne, glide-still on the ground.
 	if _flyer:
 		_animate_flight(unit, delta, state)
 	var use_clips := _animation_player != null
-	if MOVE_STATES.has(state):
+	if MOVE_STATES.has(state) or (traveling and [Unit.State.MINE, Unit.State.REPAIR, Unit.State.DEPOSIT].has(state)):
 		_last_attack_timer = -1.0
 		_walk_phase += moved * 0.11
 		if use_clips:
@@ -507,13 +528,26 @@ func sync_animation(unit: Node2D, delta: float, pos := Vector2(1e18, 1e18)) -> v
 				or (_last_attack_timer >= 0.0 and attack_timer > _last_attack_timer + 0.001)
 			_play_clip(UnitAnimationClips.ATTACK, restart)
 			var cooldown := maxf(float(unit.data.attack_cooldown), 0.05)
-			_animation_player.speed_scale = UnitAnimationClips.ATTACK_DURATION / cooldown
+			var duration := UnitAnimationClips.ATTACK_DURATION
+			if _skeletal:
+				duration = _animation_player.get_animation(UnitAnimationClips.ATTACK).length
+			_animation_player.speed_scale = duration / cooldown
 		_last_attack_timer = attack_timer
 		_animate_attack(unit, not use_clips)
+	elif state == Unit.State.MINE and use_clips and _animation_player.has_animation(MINE_CLIP):
+		_last_attack_timer = -1.0
+		_play_clip(MINE_CLIP)
+		var period := 1.0 / maxf(float(unit.data.mining_swings_per_sec), 0.1)
+		_animation_player.speed_scale = _animation_player.get_animation(MINE_CLIP).length / period
+		_animate_mine(unit)
 	elif state == Unit.State.MINE:
 		_last_attack_timer = -1.0
 		_stop_clips()
 		_animate_mine(unit)
+	elif state == Unit.State.REPAIR and use_clips and _animation_player.has_animation(REPAIR_CLIP) and _repair_active(unit):
+		_last_attack_timer = -1.0
+		_play_clip(REPAIR_CLIP)
+		_animate_idle(false)
 	else:
 		_last_attack_timer = -1.0
 		if use_clips:
@@ -522,12 +556,20 @@ func sync_animation(unit: Node2D, delta: float, pos := Vector2(1e18, 1e18)) -> v
 	_advance_clip(delta)
 
 
+func _has_travel_path(unit: Node2D) -> bool:
+	var path: Variant = unit.get("_path")
+	return path is PackedVector2Array and int(unit.get("_path_index")) < path.size()
+
+
 func _play_clip(clip: StringName, restart := false) -> void:
-	if _animation_player == null or (_current_clip == clip and not restart):
+	if _animation_player == null or not _animation_player.has_animation(clip) \
+			or (_current_clip == clip and not restart):
 		return
+	if restart and _current_clip == clip:
+		_animation_player.stop()
 	_current_clip = clip
 	_animation_player.speed_scale = 1.0
-	_animation_player.play(clip)
+	_animation_player.play(clip, 0.08 if _skeletal else 0.0)
 
 
 func _stop_clips() -> void:
@@ -546,6 +588,21 @@ func _advance_clip(delta: float) -> void:
 		_animation_player.advance(delta)
 
 
+func _repair_active(unit: Node2D) -> bool:
+	var target: Variant = unit.get("_repair_target")
+	if target == null:
+		return true
+	if not target is Node2D or not is_instance_valid(target) or not target.has_method("can_be_repaired"):
+		return false
+	if not target.call("can_be_repaired"):
+		return false
+	var repair: Variant = unit.get("_repair")
+	if repair != null and repair.get("_coin_owed") != null:
+		var due := float(repair.get("_coin_owed")) + Constants.ENGINEER_REPAIR_COIN_PER_HP
+		return EconomyManager.get_coin(int(unit.get("team"))) >= ceili(due)
+	return true
+
+
 func _attack_aim(unit: Node2D, pos: Vector2) -> Vector2:
 	var t: Variant = unit.get("_target_unit")
 	if t is Node2D and is_instance_valid(t) and t.global_position.distance_squared_to(pos) > 0.01:
@@ -553,8 +610,11 @@ func _attack_aim(unit: Node2D, pos: Vector2) -> Vector2:
 	var b: Variant = unit.get("_target_building")
 	if b is Node2D and is_instance_valid(b) and b.global_position.distance_squared_to(pos) > 0.01:
 		return b.global_position - pos
-	var tp: Vector2 = unit.get("_target_position")
-	if tp.length_squared() > 0.01:
+	var repair: Variant = unit.get("_repair_target")
+	if repair is Node2D and is_instance_valid(repair) and repair.global_position.distance_squared_to(pos) > 0.01:
+		return repair.global_position - pos
+	var tp: Variant = unit.get("_target_position")
+	if tp is Vector2 and tp.length_squared() > 0.01:
 		return tp - pos
 	return Vector2.ZERO
 
@@ -592,6 +652,8 @@ func _animate_move(_state: int, animate_pivots := true) -> void:
 		_swing(_leg_r, _walk_phase, 0.5)
 		if _tool != null:
 			_tool.rotation.x = sin(_walk_phase) * 0.15
+	if _skeletal:
+		return
 	if _kind == &"crawler":
 		_body.rotation.z = sin(_walk_phase) * 0.07
 	else:
@@ -604,6 +666,8 @@ func _animate_attack(unit: Node2D, animate_pivots := true) -> void:
 	# struck, phase 1 = next strike about to land.
 	var phase := 1.0 - clampf(float(unit.get("_attack_timer")) / cooldown, 0.0, 1.0)
 	var strike := sin(phase * PI)
+	if _skeletal:
+		return
 	if animate_pivots:
 		if _tool != null:
 			# Chop/thrust forward (-Z is the facing axis).
@@ -629,6 +693,8 @@ func _animate_mine(unit: Node2D) -> void:
 	var angle: float = float(unit.get("_mine_target_angle"))
 	_target_yaw = atan2(-cos(angle), -sin(angle))
 	_rig.rotation.y = _target_yaw
+	if _skeletal:
+		return
 	if _tool != null:
 		_tool.rotation.x = -1.3 * swing
 	if _arm_r != null:
@@ -636,10 +702,11 @@ func _animate_mine(unit: Node2D) -> void:
 
 
 func _animate_idle(animate_pivots := true) -> void:
-	var breathe := sin(_idle_time * 2.2) * 0.008
-	_body.position.y = _body_base_y + breathe
-	_body.position.z = lerpf(_body.position.z, 0.0, 0.2)
-	_body.rotation.z = lerpf(_body.rotation.z, 0.0, 0.2)
+	if not _skeletal:
+		var breathe := sin(_idle_time * 2.2) * 0.008
+		_body.position.y = _body_base_y + breathe
+		_body.position.z = lerpf(_body.position.z, 0.0, 0.2)
+		_body.rotation.z = lerpf(_body.rotation.z, 0.0, 0.2)
 	if animate_pivots:
 		_swing(_arm_l, _idle_time * 2.2, 0.06)
 		_swing(_arm_r, _idle_time * 2.2 + PI, 0.06)
@@ -651,8 +718,9 @@ func _animate_idle(animate_pivots := true) -> void:
 
 func _advance_death(delta: float) -> void:
 	_dead_t += delta
-	var k := minf(_dead_t / TOPPLE_TIME, 1.0)
-	_body.rotation.x = -PI * 0.5 * k
+	if not _skeletal:
+		var k := minf(_dead_t / TOPPLE_TIME, 1.0)
+		_body.rotation.x = -PI * 0.5 * k
 	if _dead_t > TOPPLE_TIME:
 		_body.position.y = _body_base_y - 0.06 * minf((_dead_t - TOPPLE_TIME) / SINK_TIME, 1.0)
 	_advance_clip(delta)

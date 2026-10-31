@@ -91,6 +91,7 @@ to `main` only (plan 03 wired the checks in).
 | 07 | Seeded surface prop scattering | M | 06 |
 | 08 | Unit animation clips on R7 pivots | L | 06 |
 | 09 | Environment visual vertical slice | M | 06, 07 |
+| 10 | Skeletal humanoid animation | L | 08, 09 |
 
 Sizes: S ≈ a focused day, M ≈ 2–4 days, L ≈ a week+. "Depends on" is a soft
 ordering for humans; each plan is still self-contained for the agent.

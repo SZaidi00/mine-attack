@@ -70,16 +70,22 @@ mine-attack/
 │   │                  # (group reconcile), unit_proxy_3d.gd (1.4x proxy-root
 │   │                  # scale-up, counter-scaled HP bars, R3 dune ground-snap)
 │   │                  # + unit_model_3d.gd
-│   │                  # (R7: Standard/Fancy import sculpted textured GLBs via
-│   │                  # unit_model_loader.gd + the shared model manifest; named-pivot
-│   │                  # state-driven animation, with plan-08 unit_animation_clips.gd
-│   │                  # authoring original idle/walk/attack/death clips for miner +
-│   │                  # swordsman on imported and Potato rigs; visible proxy syncs
-│   │                  # advance them manually, while mining, other kinds, and
-│   │                  # incomplete rigs keep procedural motion; team/accent/glow
-│   │                  # rebinds, sculpted faction variants hidden until enemy
-│   │                  # identification, undead tint; Potato keeps procedural model
-│   │                  # recipes), structure_proxy_3d.gd (1.08x
+│   │                  # (R7 + plan 10: Standard/Fancy import textured GLBs via
+│   │                  # unit_model_loader.gd + the shared model manifest. Five
+│   │                  # humanoids use curated matching-rig KayKit Skeleton3D /
+│   │                  # AnimationPlayer assets: native idle/walk/attack/death,
+│   │                  # real mining and engineer repair clips, in-place movement,
+│   │                  # cooldown-scaled actions, bone-mounted tools and badges.
+│   │                  # unit_skeletal_3d.gd validates clips/rigs and attachments;
+│   │                  # unit_palette_3d.gdshader recolors garment regions only.
+│   │                  # plan-08 unit_animation_clips.gd and procedural recipes
+│   │                  # remain the generated/Potato/incomplete-rig fallbacks;
+│   │                  # non-humanoids keep procedural motion. Visible proxy syncs
+│   │                  # advance clips manually; team/accent/glow, faction reveal,
+│   │                  # undead tint, hit flash, and death sink are preserved.
+│   │                  # tools/curate_skeletal_units.py documents the native-rig
+│   │                  # import and budget validation; sources live in packs/SOURCES.md),
+│   │                  # structure_proxy_3d.gd (1.08x
 │   │                  # wall-footprint-capped proxy-root scale — ladders stay 1x;
 │   │                  # keep/tower/wall damage states, lantern OmniLight tiers,
 │   │                  # counter-scaled range disc, faction-reveal
@@ -165,15 +171,17 @@ mine-attack/
 │   │                  # one-shot dust/crack feedback + minimal camera nudge)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
-├── tests/             # GUT test suite (76 test scripts)
+├── tests/             # GUT test suite (77 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
 │                      # gen_crawler_sprites.gd, gen_unit_glbs.py (R7 deterministic
 │                      # sculpted/textured unit GLBs), gen_prop_glbs.py
 │                      # (plan 06 deterministic prop GLBs — boulder/pine/stump/crate,
 │                      # the surface-scatter dressing for plan 07),
 │                      # import_kit_props.py (plan 09 curated glTF/GLB -> embedded,
-│                      # ground-normalized kit props; models/packs/SOURCES.md holds
-│                      # exact provenance and hashes),
+│                      # ground-normalized kit props), curate_skeletal_units.py
+│                      # (plan 10 native KayKit rigs, clips, hand tools, in-place /
+│                      # triangle validation; models/packs/SOURCES.md holds exact
+│                      # licenses, source/final hashes, and clip provenance),
 │                      # check_model_budgets.sh
 │                      # (R4/R7 GLB tri/texture budget gate vs
 │                      # models/model_manifest.json), resize_glb_textures.py
@@ -483,9 +491,15 @@ props that plan 07 scatters) with `python3 tools/gen_prop_glbs.py [--validate-on
 min-y 0, metallic 0 / roughness 0.92; self-validates tri/height bands and
 rejects corrupted copies). Curated kit props use
 `python3 tools/import_kit_props.py --source /path/to/pack/glTF --prop Source.gltf=pack_key=0.30`
-(repeat `--prop` per model; `--validate-only` rechecks committed GLBs). Raw packs
-stay in `.gdignore`d staging; exact licenses/hashes belong in
-`frost_mines_assets/models/packs/SOURCES.md`. Re-run the budget gate afterward.
+(repeat `--prop` per model; `--validate-only` rechecks committed GLBs). Curated
+skeletal humanoids use `python3 tools/curate_skeletal_units.py --characters
+/path/to/KayKit_Adventurers_2.0_FREE --animations
+/path/to/KayKit_Character_Animations_1.1 --tools
+/path/to/KayKit_RPGToolsBits_1.0_FREE` (matching Rig_Medium sources only, then
+`python3 tools/resize_glb_textures.py --max=512 --only=unit_kaykit_`;
+`--validate-only` checks the curated skins, required clips, root motion, and
+triangles). Raw packs stay in `.gdignore`d staging; exact licenses/hashes belong
+in `frost_mines_assets/models/packs/SOURCES.md`. Re-run the budget gate afterward.
 
 ### Run all repo checks
 
@@ -529,7 +543,7 @@ The script also packages `MineAttack-macOS.zip` (via `ditto`, preserving bundle 
 tools/capture/run_capture.sh /tmp/shots
 ```
 
-Launches `tools/capture/capture_driver.tscn` instead of the main menu, starts a seeded match (difficulty/faction/speed via env vars), and saves PNGs of named camera poses (`start`, `surface`, `zoomout`, `underground`, `breach`, `units`, `units_underground`, `base`, `dunes`, `fortress`, `storm`, `volcano`, `custom:X:Y:Z`) at fixed sim-seconds. Built for CI and AI-agent sandboxes: an agent can render, look, and iterate without a display or a human screenshot provider. Requires `xvfb-run`; downloads a Godot Linux binary on first run (`GODOT_BIN` to override). `RESOLUTION=3840x2160` selects 4K output (default 1920×1080); `tools/capture/run_showcase.sh roadmap/3d-visual-revamp/r8` captures the six R8 marketing poses at both sizes.
+Launches `tools/capture/capture_driver.tscn` instead of the main menu, starts a seeded match (difficulty/faction/speed via env vars), and saves PNGs of named camera poses (`start`, `surface`, `zoomout`, `underground`, `breach`, `units`, `units_underground`, `unit_actions`, `unit_actions_underground`, `base`, `dunes`, `fortress`, `storm`, `volcano`, `custom:X:Y:Z`) at fixed sim-seconds. Built for CI and AI-agent sandboxes: an agent can render, look, and iterate without a display or a human screenshot provider. Requires `xvfb-run`; downloads a Godot Linux binary on first run (`GODOT_BIN` to override). `RESOLUTION=3840x2160` selects 4K output (default 1920×1080); `tools/capture/run_showcase.sh roadmap/3d-visual-revamp/r8` captures the six R8 marketing poses at both sizes.
 
 Perf BENCH mode (3D perf pass): `STRESS_UNITS=100 BENCH=30 SHOTS="" tools/capture/run_capture.sh /tmp/bench` spawns 100 extra units per team (real, live units — the 200-unit ceiling both teams at cap) and, after 30 sim-seconds, prints the Probe3D per-section script-time averages (unit sync, terrain/fog rebuilds, sim fog recompute, ring hover scan). GPU frame times under software GL are meaningless (see below), but script milliseconds are comparable across runs — this is the regression-gate number. On macOS dev machines without xvfb, run the driver directly with the same flags, windowed.
 

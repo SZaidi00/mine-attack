@@ -51,11 +51,14 @@ detach from dark ground even on Potato, where no shadows/SSAO exist.
 
 ## Silhouette rules (must read at max zoom-out)
 
-R7 supersedes the original primitive-rig implementation below: Standard/Fancy
-use sculpted, textured GLBs on shared named-pivot rigs with geometric faction
-variants; Potato retains the procedural fallback. See
-`roadmap/3d-visual-revamp/05-r7-unit-workshop.md`. The signature silhouettes
-remain the readability contract.
+R7 and plan 10 supersede the original primitive-rig implementation below:
+Standard/Fancy use curated KayKit skeletal humanoids with native clips and
+bone-mounted equipment; generated models remain available as fallbacks and for
+non-humanoids. Potato retains the procedural fallback. Team/accent colors use
+atlas garment regions, preserving skin and equipment. See
+`roadmap/3d-visual-revamp/05-r7-unit-workshop.md` and
+`frost_mines_assets/models/packs/SOURCES.md`. The signature silhouettes remain
+the readability contract.
 
 | Unit | Signature shape |
 |---|---|
@@ -75,9 +78,10 @@ are thin posts with a warm glowing head — the dynamic-light heroes.
 
 ## Texel density / poly budget
 
-- R7 units: small painted atlases on sculpted GLBs, ≤8k tris per model
-  including faction attachments; team/accent/glow material slots are rebound
-  per proxy. Potato uses the old <1k-tri primitive recipes.
+- Units: small painted atlases (512² for KayKit) on sculpted GLBs, ≤8k tris
+  per model including hand tools and faction attachments. Team/accent/glow
+  slots or garment-region shader parameters are rebound per proxy. Potato
+  uses the old <1k-tri primitive recipes.
 - Terrain: chunked mesh, one draw per chunk + one emissive pass for lava;
   subtle world-triplanar detail on Standard+, smooth surface normals, and
   MultiMesh ore/clustered prop detail. Distant backdrop geometry stays cheap.
@@ -102,8 +106,11 @@ the ground.
 
 ## Animation
 
-Driven by sim state (never writes sim). Miner and swordsman use original
-idle/walk/attack/death `AnimationPlayer` clips on the named-pivot rigs;
-mining, other unit kinds, incomplete rigs, body motion, and death sink retain
-procedural behavior. Playback advances from visible proxy syncs. Juice (§2.5):
-camera shake on cave-ins, hit-stop, dust motes, storm drift, volcano embers.
+Driven by sim state (never writes sim). Five humanoids use matching-rig
+KayKit `Skeleton3D` / `AnimationPlayer` clips for idle, walking, role-specific
+attacks, mining, repair, and death. Actions stay in place and scale to sim
+cooldowns; visible proxy syncs advance playback manually. Generated models and
+original named-pivot clips remain fallbacks, while non-humanoids retain
+procedural motion. Death sink, hit flash, undead tint, and faction reveal work
+across both paths. Juice (§2.5): camera shake on cave-ins, hit-stop, dust
+motes, storm drift, volcano embers.

@@ -25,6 +25,11 @@
 ## - origin: "center" (XZ center at the node origin) or "corner" (origin on a
 ##   cell corner — mine entries; the loader adds the +CELL*0.5 shaft offset).
 ## - fallback_on_potato: keep the procedural recipe as the Potato fallback.
+## - skeletal: opt into native Skeleton3D/AnimationPlayer loading.
+## - skeletal_role/clips/loops: role and required in-place clip aliases.
+## - palette: optional shader path, source material names, and garment UV
+##   rectangles for team/accent colors without tinting the whole atlas.
+## - yaw: optional forward-facing correction in radians (defaults to zero).
 ##
 ## Starter-set note (R4): every starter GLB ships exactly ONE material named
 ## "material_<uuid>" (Tripo API export) with the window/lamp glow baked into
@@ -110,4 +115,18 @@ static func validate() -> PackedStringArray:
 		for slot_key in ["team_slots", "accent_slots", "glow_slots"]:
 			if not e.get(slot_key, []) is Array:
 				problems.append("%s: %s must be an array" % [key, slot_key])
+		if bool(e.get("skeletal", false)):
+			if not e.get("skeletal_clips", []) is Array or (e["skeletal_clips"] as Array).is_empty():
+				problems.append("%s: skeletal_clips must be a non-empty array" % key)
+			if not e.get("skeletal_loops", []) is Array:
+				problems.append("%s: skeletal_loops must be an array" % key)
+			var palette: Variant = e.get("palette", {})
+			if not palette is Dictionary:
+				problems.append("%s: palette must be a dictionary" % key)
+			elif not palette.is_empty():
+				if not FileAccess.file_exists(str(palette.get("shader", ""))):
+					problems.append("%s: palette shader missing" % key)
+				for regions_key in ["team_regions", "accent_regions"]:
+					if not palette.get(regions_key, []) is Array:
+						problems.append("%s: palette %s must be an array" % [key, regions_key])
 	return problems

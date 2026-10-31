@@ -16,7 +16,7 @@ func _prop_keys() -> Array[String]:
 	var out: Array[String] = []
 	for key in ModelManifest.keys():
 		var path := str(ModelManifest.entry_for(key).get("path", ""))
-		if path.contains("/models/props/") or path.contains("/models/packs/"):
+		if (path.contains("/models/props/") or path.contains("/models/packs/")) and not key.begins_with("unit_"):
 			out.append(key)
 	return out
 
