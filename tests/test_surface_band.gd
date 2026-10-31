@@ -62,18 +62,20 @@ func _finish_construction(structure: Node2D) -> void:
 # ─── Map generation ───
 
 func test_surface_band_is_generated_and_walkable() -> void:
-	assert_eq(GridWorld.SURFACE_ROWS, 10, "the battlefield expands to ten rows")
+	assert_eq(GridWorld.SURFACE_ROWS, 10, "the battlefield keeps ten rows")
 	assert_eq(GridWorld.SURFACE_TOP, -9, "ten rows end at y=-9 above row 0")
+	assert_eq(GridWorld.X_MIN, -50, "the battlefield widens to fifty columns left")
+	assert_eq(GridWorld.X_MAX, 50, "the battlefield widens to fifty columns right")
 	var surface_cells := 0
 	for pos: Vector2i in _grid._cells:
 		if _grid.is_surface_row(pos.y) and pos.x >= GridWorld.X_MIN and pos.x <= GridWorld.X_MAX:
 			surface_cells += 1
-	assert_eq(surface_cells, 81 * GridWorld.SURFACE_ROWS, "the full grid width exists on every surface row")
-	for y in range(GridWorld.SURFACE_TOP, 1):
-		var cell: GridWorld.Cell = _grid.get_cell(Vector2i(-20, y))
-		assert_not_null(cell, "band cell y=%d exists" % y)
-		assert_eq(cell.type, GridWorld.CellType.SURFACE_GROUND, "band cell y=%d is open ground" % y)
-		assert_true(_grid.is_walkable(Vector2i(-20, y)), "band cell y=%d is walkable" % y)
+	assert_eq(surface_cells, 101 * GridWorld.SURFACE_ROWS, "the full grid width exists on every surface row")
+	for x in [GridWorld.X_MIN, GridWorld.X_MAX]:
+		for y in range(GridWorld.SURFACE_TOP, 1):
+			assert_true(_grid.is_walkable(Vector2i(x, y)), "new edge column x=%d is walkable at y=%d" % [x, y])
+	for x in [GridWorld.X_MIN - 1, GridWorld.X_MAX + 1]:
+		assert_true(_grid.is_wall(Vector2i(x, 0)), "border wall sits outside playable column x=%d" % x)
 	assert_false(_grid.has_cell(Vector2i(-20, GridWorld.SURFACE_TOP - 1)), "no cells generate above the band")
 	assert_false(_grid.is_surface_row(1), "y=1 is the mine, not the surface")
 	assert_true(_grid.is_surface_row(GridWorld.SURFACE_TOP), "band top row counts as surface")
@@ -118,8 +120,22 @@ func test_mine_entries_use_centered_surface_cells() -> void:
 		assert_true(_grid.is_walkable(actual), "centered surface cell remains walkable")
 
 
+func test_generation_carves_only_layout_shafts() -> void:
+	var scene: Node = load("res://scenes/main.tscn").instantiate()
+	var grid: GridWorld = scene.get_node("World/GridWorld")
+	grid.map_seed = 7
+	grid._map_gen._generate_map()
+	var layout: MapDefinition = scene.get("map_definition")
+	for y in range(1, 7):
+		for x in range(GridWorld.X_MIN, GridWorld.X_MAX + 1):
+			var is_shaft: bool = x == layout.player_mine_cell.x or x == layout.enemy_mine_cell.x
+			assert_eq(not grid.has_cell(Vector2i(x, y)), is_shaft, "only layout shafts are carved at %s" % Vector2i(x, y))
+	scene.free()
+
+
 func test_miner_climbs_down_and_up_from_centered_entry() -> void:
-	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _grid.grid_to_world(Vector2i(-15, -3)))
+	var layout: MapDefinition = _main.get("map_definition")
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _grid.grid_to_world(layout.player_mine_cell + Vector2i(0, 2)))
 	var entry: Node2D = _main.get_node("World/PlayerMineEntry")
 	miner.climb_down_ladder()
 	var reached_mine := false
@@ -157,13 +173,14 @@ func test_snow_emitters_cover_the_surface_band() -> void:
 func test_find_path_uses_the_band() -> void:
 	# The base footprint blocks the direct line; either the front lane or the
 	# added lanes above the base are valid detours.
-	var from: Vector2 = _grid.grid_to_world(Vector2i(-38, -3))
-	var to: Vector2 = _grid.grid_to_world(Vector2i(-22, -3))
+	var base_x: int = _main.get("map_definition").player_building_cell.x
+	var from: Vector2 = _grid.grid_to_world(Vector2i(base_x - 8, -3))
+	var to: Vector2 = _grid.grid_to_world(Vector2i(base_x + 8, -3))
 	var path: PackedVector2Array = _grid.find_path(from, to, PLAYER)
 	assert_gt(path.size(), 0, "a path exists around the base")
 	if path.is_empty():
 		return
-	assert_eq(_grid.world_to_grid(path[path.size() - 1]), Vector2i(-22, -3), "path reaches the far side of the base")
+	assert_eq(_grid.world_to_grid(path[path.size() - 1]), Vector2i(base_x + 8, -3), "path reaches the far side of the base")
 	var footprint: Rect2i = _main.get_node("World/PlayerBuilding").get_footprint_cell_rect()
 	for p in path:
 		assert_false(footprint.has_point(_grid.world_to_grid(p)), "path never crosses the solid base footprint")
@@ -171,7 +188,8 @@ func test_find_path_uses_the_band() -> void:
 
 func test_find_path_above_the_base() -> void:
 	var top := GridWorld.SURFACE_TOP
-	var path: PackedVector2Array = _grid.find_path(_grid.grid_to_world(Vector2i(-38, top)), _grid.grid_to_world(Vector2i(-22, top)), PLAYER)
+	var base_x: int = _main.get("map_definition").player_building_cell.x
+	var path: PackedVector2Array = _grid.find_path(_grid.grid_to_world(Vector2i(base_x - 8, top)), _grid.grid_to_world(Vector2i(base_x + 8, top)), PLAYER)
 	assert_gt(path.size(), 0, "the new top lane connects across the base")
 	for p in path:
 		assert_eq(_grid.world_to_grid(p).y, top, "above-base route stays in the top lane")
@@ -187,8 +205,9 @@ func test_underground_path_cannot_cross_the_band() -> void:
 	# The only route between the two mine shafts would be up and across the
 	# surface band (the central wall blocks underground). Band sealing must
 	# keep that impossible for crawlers.
-	var from: Vector2 = _grid.grid_to_world(Vector2i(-15, 3))
-	var to: Vector2 = _grid.grid_to_world(Vector2i(15, 3))
+	var layout: MapDefinition = _main.get("map_definition")
+	var from: Vector2 = _grid.grid_to_world(layout.player_mine_cell + Vector2i(0, 8))
+	var to: Vector2 = _grid.grid_to_world(layout.enemy_mine_cell + Vector2i(0, 8))
 	var path: PackedVector2Array = _grid.find_path_underground(from, to, ENEMY)
 	assert_eq(path.size(), 0, "no underground route crosses the surface band")
 

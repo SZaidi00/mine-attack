@@ -256,5 +256,76 @@ func test_scatter_forms_clusters_and_preserves_the_front_lane() -> void:
 	assert_true(pack_found, "curated Quaternius props participate in the live scatter")
 
 
+func test_roads_have_no_scatter() -> void:
+	await _boot(7)
+	_grid().set_reveal_all(GameManager.Team.PLAYER, true)
+	_terrain().force_full_rebuild()
+	await _frames(45)
+	var map: MapDefinition = _main.get("map_definition")
+	for xf in _collect_prop_transforms():
+		assert_false(map.is_road(_cell_of(xf)), "roads and mine spurs stay clear of decorative props")
+
+
+func test_authored_regions_use_their_prop_families() -> void:
+	await _boot(7)
+	_grid().set_reveal_all(GameManager.Team.PLAYER, true)
+	_terrain().force_full_rebuild()
+	await _frames(45)
+	var map: MapDefinition = _main.get("map_definition")
+	for region in map.surface_regions:
+		var expected: Array = ["prop_pine", "pack_dead_tree_3", "pack_dead_tree_5"] if region.recipe == "trees" else ["prop_boulder", "pack_rock_medium_1", "pack_rock_medium_2", "pack_rock_medium_3"]
+		var count := 0
+		for chunk in detail_as_terrain_detail().scatter_log.values():
+			for kind in chunk:
+				for xf in chunk[kind]:
+					if (region.rect as Rect2i).has_point(_cell_of(xf)):
+						count += 1
+						assert_true(expected.has(kind), "%s uses only %s props, found %s" % [region.id, region.recipe, kind])
+		assert_gt(count, 0, "%s contains seeded prop instances" % region.id)
+
+
+func test_unauthored_cells_keep_legacy_scatter() -> void:
+	await _boot(7)
+	var detail := detail_as_terrain_detail()
+	var reference := TerrainDetail3D.new()
+	reference.setup(_grid(), null)
+	var map: MapDefinition = _main.get("map_definition")
+	for pos in [Vector2i(-10, -4), Vector2i(-5, -6), Vector2i(10, -7), Vector2i(24, -4)]:
+		assert_true(map.region_at(pos).is_empty() and not map.is_road(pos), "fixture is outside authored metadata")
+		var center: Vector2 = _grid().grid_to_world(pos)
+		var actual := _empty_prop_buckets()
+		var expected := _empty_prop_buckets()
+		detail._add_prop(pos, center.x * 0.01, center.y * 0.01, _terrain().height_field, actual)
+		reference._add_prop(pos, center.x * 0.01, center.y * 0.01, _terrain().height_field, expected)
+		for kind in range(TerrainDetail3D.PROP_KEYS.size()):
+			assert_eq(actual[kind].size(), expected[kind].size(), "legacy prop count matches at %s" % pos)
+			for i in range(actual[kind].size()):
+				assert_true(actual[kind][i].is_equal_approx(expected[kind][i]), "legacy prop transform matches at %s" % pos)
+	reference.free()
+
+
+func test_region_rebuild_does_not_mutate_sim() -> void:
+	await _boot(7)
+	var before := _sim_signature()
+	_terrain().force_full_rebuild()
+	await _frames(30)
+	assert_eq(_sim_signature(), before, "road/region rendering leaves cells and A* unchanged")
+
+
+func _empty_prop_buckets() -> Array:
+	var buckets: Array = []
+	for i in range(TerrainDetail3D.PROP_KEYS.size()):
+		buckets.append([] as Array[Transform3D])
+	return buckets
+
+
+func _sim_signature() -> Dictionary:
+	var signature: Dictionary = {}
+	for pos: Vector2i in _grid()._cells:
+		var cell: GridWorld.Cell = _grid()._cells[pos]
+		signature[pos] = [cell.type, cell.hp, cell.coin_remaining, _grid()._astar.is_point_solid(pos)]
+	return signature
+
+
 func detail_as_terrain_detail() -> TerrainDetail3D:
 	return _terrain().get_node("TerrainDetail") as TerrainDetail3D

@@ -28,12 +28,13 @@ misreading the architecture — find the sim-side hook instead.
 ### Contracts you must not break
 - `/root/Main/...` hard-coded paths: 86 references across 57 files resolve the
   live sim. Never rename `Main` or its children.
-- Surface band: the walkable surface is 10 rows, `y ∈ [GridWorld.SURFACE_TOP,
-  GridWorld.Y_MIN]` = `[-9, 0]`; underground is `y >= 1`. Use
-  `GridWorld.is_surface_row(y)` — never `y == 0` checks. Base/mine layout
-  markers live in `scripts/resources/maps/default.tres` (`MapDefinition`) and
-  are applied by `scripts/world/main.gd` before child initialization; both
-  mine entrances are cell-centered on row `-5`.
+- Surface band: the walkable surface is 101 columns × 10 rows, `x ∈ [-50,50]`,
+  `y ∈ [GridWorld.SURFACE_TOP, GridWorld.Y_MIN]` = `[-9, 0]`; underground is
+  `y >= 1`. Use `GridWorld.is_surface_row(y)` — never `y == 0` checks.
+  Base/mine layout markers live in `scripts/resources/maps/default.tres`
+  (`MapDefinition`) and are applied by `scripts/world/main.gd` before child
+  initialization: bases at `±40`, cell-centered mine entrances at `(±20,-5)`.
+  The resource also authors visual road rectangles and prop regions.
 - Quality tiers: `ArtStyle3D` POTATO / STANDARD / FANCY. New visual work must
   degrade (fewer instances, no shadows, skipped effects on Potato). Check
   `ArtStyle3D.detail_enabled()` / `particle_mult()` patterns.
@@ -96,6 +97,7 @@ to `main` only (plan 03 wired the checks in).
 | 09 | Environment visual vertical slice | M | 06, 07 |
 | 10 | Skeletal humanoid animation | L | 08, 09 |
 | 11 | Expanded surface battlefield | M | 10 |
+| 12 | Wider map and authored surface regions | M | 11 |
 
 Sizes: S ≈ a focused day, M ≈ 2–4 days, L ≈ a week+. "Depends on" is a soft
 ordering for humans; each plan is still self-contained for the agent.

@@ -396,7 +396,7 @@ func test_sentry_network_extends_tower_range_and_max_count() -> void:
 	ResearchManager.research_changed.emit(PLAYER)
 	assert_almost_eq(tower.attack_range, base_range * (1.0 + Constants.SENTRY_NETWORK_TOWER_RANGE_MULT), 0.001, "sentry_network extends tower range")
 	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-22, 0))), "tower 2 places")
-	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-38, 0))), "tower 3 places with +1 max count")
+	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-32, 0))), "tower 3 places with +1 max count")
 
 
 # ─── Dragon Mastery discipline ───
@@ -475,7 +475,7 @@ func test_total_war_raises_fighter_damage_and_structure_counts() -> void:
 	# Default max is 2; Total War grants +1 tower and +1 wall.
 	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0))), "tower 1")
 	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-22, 0))), "tower 2")
-	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-38, 0))), "tower 3 with total_war bonus")
+	assert_true(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-32, 0))), "tower 3 with total_war bonus")
 	EconomyManager.add_coin(PLAYER, 1000)
 	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-24, 0))), "wall 1")
 	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-26, 0))), "wall 2")
@@ -484,14 +484,15 @@ func test_total_war_raises_fighter_damage_and_structure_counts() -> void:
 
 func test_deep_fortress_extends_underground_lantern_vision() -> void:
 	EconomyManager.add_coin(PLAYER, 1000)
-	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-15, 3))), "underground lantern places")
+	var source_cell: Vector2i = _main.get("map_definition").player_mine_cell + Vector2i(0, 8)
+	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(source_cell)), "underground lantern places")
 	var lantern: Node2D = get_tree().get_nodes_in_group("lanterns")[0]
 	lantern._build_progress = 999.0
 	lantern._process(0.1)
 	ResearchManager._levels[PLAYER]["deep_fortress"] = 1
 	var found: bool = false
 	for source in _grid._get_vision_sources(PLAYER):
-		if source[0] == Vector2i(-15, 3):
+		if source[0] == source_cell:
 			found = true
 			assert_eq(source[1], Constants.UNDERGROUND_LANTERN_VISION + Constants.DEEP_FORTRESS_LANTERN_VISION_BONUS)
 	assert_true(found, "underground lantern is a vision source")

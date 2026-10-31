@@ -31,6 +31,7 @@ extends Node
 ##                        volcano   - surface + forced volcano eruption
 ##                        custom:X:Y:Z - explicit camera focus (X, Y) and
 ##                                      dolly Z (e.g. custom:0:-128:6)
+##                        survey:X:Y:Z - custom framing + reveal-all for the shot
 ##   --stress-units <n> spawn n extra units per team (surface) once the match
 ##                      is up — the 200-unit perf stress for BENCH runs
 ##   --bench <seconds>  run the match for this long (sim-seconds), then print
@@ -160,7 +161,7 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 
 ## Parse a "--shots" spec into an ordered Array of shot Dictionaries:
 ## {"t": float, "pose": String, "pos": Vector2, "zoom": float}.
-## pos/zoom are only set for "custom" poses. Pure/static for tests.
+## pos/zoom are only set for "custom" and "survey" poses. Pure/static for tests.
 static func parse_shots(spec: String) -> Array:
 	var shots: Array = []
 	for raw in spec.split(";", false):
@@ -170,7 +171,7 @@ static func parse_shots(spec: String) -> Array:
 		var t := parts[0].to_float()
 		var pose := parts[1].strip_edges()
 		var shot := {"t": t, "pose": pose, "pos": Vector2.ZERO, "zoom": 0.0}
-		if pose == "custom":
+		if pose == "custom" or pose == "survey":
 			# Malformed entries are skipped silently so CI runs stay clean;
 			# the produced PNG count reveals a typo'd spec.
 			if parts.size() < 5:

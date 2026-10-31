@@ -91,14 +91,17 @@ func _place_built_lantern(kind: String, cell: Vector2i) -> Node2D:
 
 func test_player_base_area_visible_at_match_start() -> void:
 	await wait_seconds(0.1)
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-30, 0)), 2, "own building must light its surroundings")
+	var base_cell: Vector2i = _main.get("map_definition").player_building_cell
+	assert_eq(_grid.fog_state_at(PLAYER, base_cell), 2, "own building must light its surroundings")
 
 
 func test_enemy_base_area_fogged_at_match_start() -> void:
 	await wait_seconds(0.1)
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(30, 0)), 0, "enemy base must start in full fog")
-	assert_false(_grid.is_visible_to(PLAYER, Vector2(960, 16)), "enemy base not visible")
-	assert_false(_grid.is_remembered_by(PLAYER, Vector2(960, 16)), "never-seen cells are not remembered")
+	var base_cell: Vector2i = _main.get("map_definition").enemy_building_cell
+	var base_pos: Vector2 = _grid.grid_to_world(base_cell)
+	assert_eq(_grid.fog_state_at(PLAYER, base_cell), 0, "enemy base must start in full fog")
+	assert_false(_grid.is_visible_to(PLAYER, base_pos), "enemy base not visible")
+	assert_false(_grid.is_remembered_by(PLAYER, base_pos), "never-seen cells are not remembered")
 
 
 func test_vision_remembers_then_fades_to_fog() -> void:
@@ -238,31 +241,36 @@ func test_lantern_destruction_drops_salvage_and_loses_vision() -> void:
 # ─── Underground lanterns ───
 
 func test_underground_lantern_placement_rules() -> void:
-	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-15, 3))), "dug shaft cell is valid")
-	assert_false(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-20, 3))), "solid dirt is not a tunnel")
-	assert_false(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-15, 0))), "not on the surface")
-	assert_false(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(15, 3))), "not on the enemy half")
+	var mine_x: int = _main.get("map_definition").player_mine_cell.x
+	var enemy_x: int = _main.get("map_definition").enemy_mine_cell.x
+	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(mine_x, 3))), "dug shaft cell is valid")
+	assert_false(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(mine_x - 5, 3))), "solid dirt is not a tunnel")
+	assert_false(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(mine_x, 0))), "not on the surface")
+	assert_false(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(enemy_x, 3))), "not on the enemy half")
 
 
 func test_underground_lantern_max_count() -> void:
 	EconomyManager.add_coin(PLAYER, 10000)
-	_grid.carve_shaft(-20)  # second dug corridor for more valid cells
-	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-15, 1))))
-	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-15, 3))))
-	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-15, 5))))
-	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-20, 1))))
-	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-20, 3))))
-	assert_false(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(-20, 5))), "6th mine lantern exceeds the max of 5")
+	var mine_x: int = _main.get("map_definition").player_mine_cell.x
+	var other_x: int = mine_x + 5
+	_grid.carve_shaft(other_x)  # second dug corridor for more valid cells
+	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(mine_x, 1))))
+	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(mine_x, 3))))
+	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(mine_x, 5))))
+	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(other_x, 1))))
+	assert_true(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(other_x, 3))))
+	assert_false(_pc.try_place_lantern("underground_lantern", _grid.grid_to_world(Vector2i(other_x, 5))), "6th mine lantern exceeds the max of 5")
 
 
 func test_underground_lantern_reveals_exposed_ore_only() -> void:
 	# Place an ore vein directly next to the empty shaft so it is exposed.
-	var ore_pos: Vector2i = Vector2i(-16, 3)
+	var mine_x: int = _main.get("map_definition").player_mine_cell.x
+	var ore_pos: Vector2i = Vector2i(mine_x + 1, 3)
 	_grid._cells[ore_pos] = GridWorld.Cell.new(GridWorld.CellType.ORE, 1, 1, Constants.LAYER_TILE_HP[1], 50)
 	_grid._astar.set_point_solid(ore_pos, true)
 
 	# Place a fully buried ore vein with solid dirt on all sides.
-	var buried_pos: Vector2i = Vector2i(-22, 3)
+	var buried_pos: Vector2i = Vector2i(mine_x - 2, 3)
 	_grid._cells[buried_pos] = GridWorld.Cell.new(GridWorld.CellType.ORE, 1, 1, Constants.LAYER_TILE_HP[1], 50)
 	_grid._astar.set_point_solid(buried_pos, true)
 	for off in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
@@ -271,7 +279,7 @@ func test_underground_lantern_reveals_exposed_ore_only() -> void:
 			_grid._cells[n] = GridWorld.Cell.new(GridWorld.CellType.DIRT, 1, 1, Constants.LAYER_TILE_HP[1], 0)
 			_grid._astar.set_point_solid(n, true)
 
-	_place_built_lantern("underground_lantern", Vector2i(-15, 3))
+	_place_built_lantern("underground_lantern", Vector2i(mine_x, 3))
 	assert_true(_grid.is_ore_revealed(ore_pos, PLAYER), "a built mine lantern must reveal exposed ore in its radius")
 	assert_false(_grid.is_ore_revealed(buried_pos, PLAYER), "a built mine lantern must NOT reveal fully buried ore")
 
@@ -279,10 +287,11 @@ func test_underground_lantern_reveals_exposed_ore_only() -> void:
 # ─── Layer-locked vision ───
 
 func test_underground_lantern_lights_only_underground() -> void:
-	_place_built_lantern("underground_lantern", Vector2i(-15, 3))
+	var mine_x: int = _main.get("map_definition").player_mine_cell.x
+	_place_built_lantern("underground_lantern", Vector2i(mine_x, 3))
 	await wait_seconds(0.1)
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-10, 3)), 2, "mine lantern must light its tunnel radius")
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-10, 0)), 0, "mine lantern must NOT light the surface above")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(mine_x + 5, 3)), 2, "mine lantern must light its tunnel radius")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(mine_x + 5, 0)), 0, "mine lantern must NOT light the surface above")
 
 
 func test_surface_lantern_lights_only_surface() -> void:

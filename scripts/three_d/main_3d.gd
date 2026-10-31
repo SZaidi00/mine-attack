@@ -19,7 +19,7 @@ extends Node3D
 const SIM_SCENE: PackedScene = preload("res://scenes/main.tscn")
 const EFFECTS_3D_SCRIPT: GDScript = preload("res://scripts/three_d/effects_3d.gd")
 
-## 3D units per 2D pixel. The map is ~2560x1000 px, i.e. ~26x10 units.
+## 3D units per 2D pixel. The map is ~3232x1000 px, i.e. ~32x10 units.
 const WORLD_SCALE: float = 0.01
 const SURFACE_PITCH_DEGREES: float = 55.0
 const UNDERGROUND_PITCH_DEGREES: float = 82.5
@@ -30,7 +30,7 @@ const UNDERGROUND_PITCH_DEGREES: float = 82.5
 const CAMERA_FOV: float = 45.0
 ## Dolly retuned for the narrow FOV: DOLLY_START puts a 1.4x-scaled humanoid
 ## at ~31 px on a 1080p frame, DOLLY_MAX still covers a player's half
-## (~13 units of ground width need dolly ~5.2; 16 shows the whole map).
+## (~16.3 units of ground width need dolly ~6.4; 16 shows a wide overview).
 const DOLLY_MIN: float = 3.0
 const DOLLY_MAX: float = 16.0
 const UNDERGROUND_DOLLY_MAX: float = 10.0
@@ -122,7 +122,7 @@ func _ready() -> void:
 	var grid: GridWorld = _sim.get_node("World/GridWorld") as GridWorld
 	_backdrop = $World3D/Backdrop3D
 	_backdrop.setup(grid)
-	_terrain.setup(grid)
+	_terrain.setup(grid, _sim.get("map_definition") as MapDefinition)
 	# Structure proxies arriving/leaving re-stamp the dune clearances.
 	_proxies.structure_set_changed.connect(_terrain.notify_structures_changed)
 	# §2.5: art-directed effects attach the stub script onto the existing

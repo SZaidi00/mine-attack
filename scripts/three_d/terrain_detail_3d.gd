@@ -6,7 +6,8 @@
 ## snow-drift mounds on the surface while _snow_level accumulates. Plan 07
 ## (plans/07-surface-prop-scattering.md) adds the seeded surface prop scatter;
 ## plan 09 composes generated + curated pack GLBs into map-seeded cluster
-## noise and zone-aware kinds on visible SURFACE_GROUND cells. Every instance
+## noise and zone-aware kinds on visible SURFACE_GROUND cells. Plan 12 adds
+## MapDefinition-authored road exclusion and tree/rock region recipes. Every instance
 ## is dune-grounded and skipped inside structure clearances. Multi-node kit
 ## meshes bake node transforms into merged surfaces, including normal-map
 ## tangents. Pure sim -> render (the grid is read, never written); densities
@@ -21,7 +22,7 @@ class_name TerrainDetail3D
 extends MeshInstance3D
 
 const WORLD_SCALE: float = 0.01
-const CHUNK_COLS: int = 21
+const CHUNK_COLS: int = 26
 const CHUNK_ROWS: int = 8
 
 const PROP_KEYS: Array[String] = [
@@ -51,6 +52,7 @@ const PROP_SCALE_MAX := 1.1
 static var scatter_enabled: bool = true
 
 var _grid: GridWorld
+var map_definition: MapDefinition
 var _containers: Dictionary = {}  # Vector2i chunk key -> Node3D holder
 ## Plan 07 scatter manifest: chunk key -> {prop kind key: Array[Transform3D]}
 ## of the current rebuild — the same arrays the prop MultiMeshes are built
@@ -62,8 +64,9 @@ var _seed: int = 0
 var _cluster_noise := FastNoiseLite.new()
 
 
-func setup(grid: GridWorld) -> void:
+func setup(grid: GridWorld, definition: MapDefinition = null) -> void:
 	_grid = grid
+	map_definition = definition
 	# Same contract as HeightField3D.setup: GridWorld resolves the effective
 	# map seed in _ready (runs before the 3D shell sets up), so a pinned seed
 	# replays the identical scatter.
@@ -208,8 +211,12 @@ func _add_embers(pos: Vector2i, cx: float, cz: float, xforms: Array[Transform3D]
 
 
 func _add_prop(pos: Vector2i, cx: float, cz: float, ground: HeightField3D, xfs: Array) -> void:
+	if map_definition != null and map_definition.is_road(pos):
+		return
 	var cluster := _cluster_noise.get_noise_2d(pos.x, pos.y)
-	if ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_KIND)) >= _prop_density(pos, cluster):
+	var region: Dictionary = map_definition.region_at(pos) if map_definition != null else {}
+	var density: float = _prop_density(pos, cluster) * float(region.get("density", 1.0))
+	if ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_KIND)) >= density:
 		return
 	var ox := (ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_OFFSET_X)) - 0.5) * 0.18
 	var oz := (ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_OFFSET_Z)) - 0.5) * 0.18
@@ -218,7 +225,7 @@ func _add_prop(pos: Vector2i, cx: float, cz: float, ground: HeightField3D, xfs: 
 	if ground != null and ground.clearance_at_cell(wx / HeightField3D.CELL_WORLD, wz / HeightField3D.CELL_WORLD) > 0.0:
 		return
 	var band := ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_BAND))
-	var kind := _pick_kind(pos, band, cluster)
+	var kind := _pick_kind(pos, band, cluster, str(region.get("recipe", "")))
 	var source := _prop_source(PROP_KEYS[kind])
 	if source.is_empty():
 		return
@@ -238,12 +245,20 @@ func _prop_density(pos: Vector2i, cluster: float) -> float:
 	return density
 
 
-func _pick_kind(pos: Vector2i, band: float, cluster: float) -> int:
+func _pick_kind(pos: Vector2i, band: float, cluster: float, recipe: String = "") -> int:
 	var choices := ROCK_KINDS
-	if abs(pos.x) > 10 and cluster > 0.05 and pos.y < 0 and band < 0.34:
-		choices = TREE_KINDS
-	elif band >= 0.68:
-		choices = LOW_KINDS
+	match recipe:
+		"trees":
+			choices = TREE_KINDS
+		"rocks":
+			choices = ROCK_KINDS
+		"low":
+			choices = LOW_KINDS
+		_:
+			if abs(pos.x) > 10 and cluster > 0.05 and pos.y < 0 and band < 0.34:
+				choices = TREE_KINDS
+			elif band >= 0.68:
+				choices = LOW_KINDS
 	var index := mini(int(ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_KIND + 17)) * choices.size()), choices.size() - 1)
 	return choices[index]
 

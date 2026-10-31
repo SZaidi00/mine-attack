@@ -28,6 +28,7 @@ var _weather_active := ""
 var _breach_revealed := false
 var _dunes_revealed := false
 var _fortress_revealed := false
+var _survey_revealed := false
 var _ui_prepared := false
 var _lineup_units: Array[Node2D] = []
 var _lineup_revealed := false
@@ -121,7 +122,7 @@ func _apply_pose(shot: Dictionary) -> void:
 				_shell.pose_camera(Vector3.ZERO, 16.0, _shell.SURFACE_PITCH_DEGREES)
 		"underground":
 			_pc.set_view(true)
-			var lantern_cell := Vector2i(-15, 3)
+			var lantern_cell := Vector2i(get_node("/root/Main").get("map_definition").player_mine_cell.x, 3)
 			_ensure_underground_lantern(lantern_cell)
 			var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
 			if grid != null and _shell != null:
@@ -179,8 +180,16 @@ func _apply_pose(shot: Dictionary) -> void:
 				var pitch: float = _shell.UNDERGROUND_PITCH_DEGREES if underground else _shell.SURFACE_PITCH_DEGREES
 				var dolly := 3.5 if underground or actions else 6.0
 				_shell.pose_camera(Presentation3D.to_3d(focus), dolly, pitch)
-		"custom":
-			# 3D branch: custom:X:Y:Z = focus (X, Y world units) + dolly Z.
+		"custom", "survey":
+			# 3D branch: custom/survey:X:Y:Z = focus (X, Y world units) + dolly Z.
+			if shot.pose == "survey":
+				var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+				if grid != null:
+					grid.set_reveal_all(GameManager.Team.PLAYER, true)
+					_survey_revealed = true
+				if _shell != null:
+					_shell.get_node("World3D/Terrain3D").force_full_rebuild()
+					_shell.get_node("World3D/Fog3D")._rebuild()
 			if _shell != null:
 				var pitch: float = _shell.UNDERGROUND_PITCH_DEGREES \
 					if _pc.get_current_view_mode() == PlayerController.ViewMode.UNDERGROUND \
@@ -358,7 +367,7 @@ func _capture(shot: Dictionary) -> void:
 	var name: String = "%03d_%s.png" % [_shot_idx + 1, shot.pose]
 	if _shell != null and ["underground", "breach", "storm", "volcano", "units_underground", "unit_actions_underground"].has(shot.pose):
 		await get_tree().create_timer(_shell.VIEW_TWEEN_DURATION).timeout
-	if ["underground", "breach", "units_underground", "unit_actions_underground", "dunes", "fortress"].has(shot.pose):
+	if ["underground", "breach", "units_underground", "unit_actions_underground", "dunes", "fortress", "survey"].has(shot.pose):
 		await get_tree().create_timer(Fog3D.REFRESH_INTERVAL).timeout
 	if ["units", "unit_actions"].has(shot.pose):
 		await get_tree().create_timer(0.3).timeout
@@ -373,13 +382,14 @@ func _capture(shot: Dictionary) -> void:
 		print("Capture: %s at t=%.2fs" % [name, _elapsed])
 	if shot.pose == "storm" or shot.pose == "volcano":
 		_end_forced_weather()
-	elif (shot.pose == "breach" and _breach_revealed) or (shot.pose == "dunes" and _dunes_revealed) or (shot.pose == "fortress" and _fortress_revealed):
+	elif (shot.pose == "breach" and _breach_revealed) or (shot.pose == "dunes" and _dunes_revealed) or (shot.pose == "fortress" and _fortress_revealed) or (shot.pose == "survey" and _survey_revealed):
 		var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
 		if grid != null:
 			grid.set_reveal_all(GameManager.Team.PLAYER, false)
 		_breach_revealed = false
 		_dunes_revealed = false
 		_fortress_revealed = false
+		_survey_revealed = false
 	elif shot.pose in ["units", "units_underground", "unit_actions", "unit_actions_underground"]:
 		var next_same: bool = _shot_idx < _config.shots.size() and _config.shots[_shot_idx].pose == shot.pose
 		if not next_same:

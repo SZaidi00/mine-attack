@@ -11,7 +11,7 @@ func _init(p: PlayerController) -> void:
 ## Resolution-adaptive base zoom: the stretch setup (canvas_items/expand +
 ## stretch/scale) keeps the UI at a fixed logical 1920x1080, but the world
 ## should use every pixel the window offers — a 2560x1440 window shows a
-## 2560x1440 world area (nearly the whole map), a 1280x720 window a
+## 2560x1440 world area (a large portion of the map), a 1280x720 window a
 ## 1280x720 area. Note `content_scale_factor` does NOT track window size in
 ## canvas_items mode (it only carries the stretch scale), so the ratio is
 ## computed from the visible rect vs. the actual window size instead.

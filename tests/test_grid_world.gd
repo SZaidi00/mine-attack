@@ -27,7 +27,7 @@ func after_all() -> void:
 	_main.free()
 
 
-func _find_cell_of_type(type: int, x_from: int = -40, x_to: int = -2) -> Vector2i:
+func _find_cell_of_type(type: int, x_from: int = GridWorld.X_MIN, x_to: int = -2) -> Vector2i:
 	for x in range(x_from, x_to):
 		for y in range(1, 22):
 			var cell = _grid.get_cell(Vector2i(x, y))
@@ -69,7 +69,7 @@ func test_dirt_pays_nothing_but_becomes_walkable() -> void:
 func test_miner_level_gate_blocks_damage() -> void:
 	# Find a layer-3+ tile (requires miner level 2).
 	var pos: Vector2i = Vector2i(-9999, -9999)
-	for x in range(-40, -2):
+	for x in range(GridWorld.X_MIN, -2):
 		for y in range(1, 22):
 			var cell = _grid.get_cell(Vector2i(x, y))
 			if cell != null and cell.type == 2 and cell.miner_level_required >= 2:

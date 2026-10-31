@@ -16,6 +16,14 @@ Mood: cold, post-apocalyptic, Frostpunk-adjacent. Overcast base light;
 weather is the drama. Distant ground, ridges, and pine silhouettes frame the
 battlefield without entering playable cells; backdrop detail stays subdued.
 
+Roads use compacted cold-gray snow (`ArtStyle3D.PALETTE.compacted_snow`), never
+brown dirt. `MapDefinition.surface_roads` and `surface_regions` author the
+front road, mine spurs, western pinewood, and eastern rockfield. Roads suppress
+scatter; region recipes restrict existing tree/rock families without changing
+collision. Region/road vertex tints apply before fog, so hidden cells remain
+opaque void and remembered cells keep their shadow treatment. Potato keeps the
+color composition while dropping decorative props.
+
 ## Palette
 
 3D rework phase 4 tuned this onto a luminance ladder — terrain darkest,

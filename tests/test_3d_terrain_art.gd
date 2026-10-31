@@ -150,6 +150,27 @@ func test_r2_dirt_layers_use_cooled_rock_palette() -> void:
 		"deep mine dirt uses the R2 deep-rock token")
 
 
+func test_roads_and_regions_use_cold_palette_on_every_quality() -> void:
+	await _frames(10)
+	var terrain := _terrain()
+	var cell := GridWorld.Cell.new(GridWorld.CellType.SURFACE_GROUND)
+	var saved := ArtStyle3D.quality
+	for quality in [ArtStyle3D.Quality.POTATO, ArtStyle3D.Quality.STANDARD, ArtStyle3D.Quality.FANCY]:
+		ArtStyle3D.apply_quality(quality)
+		var ordinary: Color = terrain._cell_color(cell, Vector2i(0, -5), 0)
+		var road: Color = terrain._cell_color(cell, Vector2i(0, 0), 0)
+		var pinewood: Color = terrain._cell_color(cell, Vector2i(-32, -5), 0)
+		var rockfield: Color = terrain._cell_color(cell, Vector2i(32, -5), 0)
+		assert_eq(road, ordinary.lerp(ArtStyle3D.PALETTE.compacted_snow, 0.6), "road uses compacted snow on every tier")
+		assert_eq(pinewood, ordinary.lerp(ArtStyle3D.PALETTE.pine, 0.12), "pinewood uses a cold region tint")
+		assert_eq(rockfield, ordinary.lerp(ArtStyle3D.PALETTE.rock, 0.12), "rockfield uses a cold region tint")
+		assert_ne(road, ordinary, "road is distinguishable from open ground")
+		assert_ne(pinewood, rockfield, "authored regions have distinct reads")
+	assert_eq(terrain._chunk_x_starts.size(), 4, "26-column chunks keep four horizontal batches")
+	ArtStyle3D.apply_quality(saved)
+	terrain.apply_quality()
+
+
 func test_surface_detail_texture_preserves_vertex_colors_and_potato() -> void:
 	await _frames(10)
 	var terrain := _terrain()

@@ -4,7 +4,19 @@
 
 [resource]
 script = ExtResource("1_map")
-player_building_cell = Vector2i(-30, 0)
-enemy_building_cell = Vector2i(30, 0)
-player_mine_cell = Vector2i(-15, -5)
-enemy_mine_cell = Vector2i(15, -5)
+player_building_cell = Vector2i(-40, 0)
+enemy_building_cell = Vector2i(40, 0)
+player_mine_cell = Vector2i(-20, -5)
+enemy_mine_cell = Vector2i(20, -5)
+surface_regions = Array[Dictionary]([{
+"id": "west_pinewood",
+"recipe": "trees",
+"rect": Rect2i(-36, -9, 8, 7),
+"density": 1.25
+}, {
+"id": "east_rockfield",
+"recipe": "rocks",
+"rect": Rect2i(29, -9, 8, 7),
+"density": 1.15
+}])
+surface_roads = Array[Rect2i]([Rect2i(-50, 0, 101, 1), Rect2i(-20, -5, 1, 6), Rect2i(20, -5, 1, 6)])

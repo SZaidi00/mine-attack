@@ -36,6 +36,8 @@ const PALETTE := {
 	"lamp_warm": Color("#FFB85C"),
 	"witch_light": Color("#A8E6C8"),
 	"storm_gloom": Color("#B9C6D4"),
+	"compacted_snow": Color("#7E8B98"),
+	"pine": Color("#2D4746"),
 }
 
 const TEAM_PLAYER := Color("#4A90F5")

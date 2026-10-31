@@ -61,8 +61,10 @@ repair; repeating the same action shot preserves playback so poses differ),
 `base` (R8 player keep and an
 active production dial), `dunes` (R8 snow-field composition), `fortress`
 (R8 revealed enemy citadel), `storm` / `volcano` (surface + forced weather),
-and `custom:X:Y:Z` (explicit camera position and dolly). Times are sim-seconds;
-keep the list ordered.
+`custom:X:Y:Z` (explicit camera position and dolly), and `survey:X:Y:Z`
+(custom framing plus reveal-all and forced terrain/fog rebuilds for the shot).
+Survey restores the prior fog state after saving. Times are sim-seconds; keep
+the list ordered.
 
 `RESOLUTION=3840x2160` changes the capture size (default `1920x1080`). The R8
 showcase runner captures all six marketing poses at 1080p and 4K:
@@ -113,6 +115,8 @@ the sim), and the pilot poses the 3D camera rig instead of the 2D camera:
 - `custom:X:Y:Z` — rig focus at world (X, Y) (2D px × 0.01) with dolly Z
   (3.0–16.0 on the surface, 3.0–10.0 underground). Example:
   `60:custom:-800:-100:6`.
+- `survey:X:Y:Z` — custom framing plus reveal-all and forced terrain/fog
+  rebuilds for reliable region shots; restores the reveal override afterward.
 
 The rig is reached at `/root/Main3D`; the pilot uses its public
 `pose_camera(focus, dolly, pitch)` API. Posing cancels any active view tween

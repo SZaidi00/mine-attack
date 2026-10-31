@@ -6,7 +6,8 @@
 ## revamp) displaces the surface quads onto the HeightField3D dune field —
 ## corners sampled from the shared field so seams stay watertight, with shared
 ## surface corners smoothed into continuous normals. Standard+ multiplies the
-## cell/fog vertex colors by a subtle world-triplanar detail texture.
+## cell/fog vertex colors by a subtle world-triplanar detail texture. Plan 12
+## applies MapDefinition compacted-road and authored-region tints before fog.
 ## The grid is only read, never written.
 extends Node3D
 
@@ -19,7 +20,7 @@ const FOG_REFRESH_INTERVAL: float = 0.5
 ## Slow full-sweep backstop for the signal-less cell mutations (cave-in
 ## restore, ore respawn, depletion tint) the fog diff can't see.
 const BACKSTOP_INTERVAL: float = 5.0
-const CHUNK_COLS: int = 21
+const CHUNK_COLS: int = 26
 const CHUNK_ROWS: int = 8
 const SNOW_RATE: float = 0.1
 ## Snow-dirty quantization: the cover tween marks chunks dirty only when the
@@ -43,6 +44,7 @@ const FOG_VOID_TINT := ArtStyle3D.PALETTE.fog_void
 const FOG_SHADOW_TINT := ArtStyle3D.PALETTE.rock_dark
 
 var _grid: GridWorld
+var _map_definition: MapDefinition
 var _mat: StandardMaterial3D
 var _glow_mat: StandardMaterial3D
 var _chunks: Dictionary = {}  # Vector2i chunk coord -> MeshInstance3D
@@ -73,8 +75,9 @@ var detail: TerrainDetail3D
 var height_field: HeightField3D
 
 
-func setup(grid: GridWorld) -> void:
+func setup(grid: GridWorld, map_definition: MapDefinition = null) -> void:
 	_grid = grid
+	_map_definition = map_definition
 	height_field = HeightField3D.new()
 	height_field.setup(grid)
 	_mat = StandardMaterial3D.new()
@@ -90,7 +93,7 @@ func setup(grid: GridWorld) -> void:
 	# One shared emissive material for every glow chunk; _process pulses its
 	# emission_energy_multiplier (ArtStyle3D's cache makes it shared state).
 	_glow_mat = ArtStyle3D.get_material(ArtStyle3D.PALETTE.lava, ArtStyle3D.PALETTE.lava, 1.0)
-	# Chunk starts cover the full cell range (incl. border walls at x=+-41,
+	# Chunk starts cover the full cell range (incl. border walls at x=+-51,
 	# the surface band above row 0, and the y=22 floor row); posmod keeps them
 	# aligned to CHUNK_* sizes.
 	var x0: int = GridWorld.X_MIN - 1 - int(posmod(GridWorld.X_MIN - 1, CHUNK_COLS))
@@ -113,7 +116,7 @@ func setup(grid: GridWorld) -> void:
 	detail = TerrainDetail3D.new()
 	detail.name = "TerrainDetail"
 	add_child(detail)
-	detail.setup(grid)
+	detail.setup(grid, map_definition)
 	# Snow cover follows the storm state: init from the live flag (a storm
 	# may already be raging when the shell sets up) and track the signals.
 	if is_instance_valid(WeatherManager):
@@ -459,8 +462,7 @@ func _add_flat_quad(st: SurfaceTool, cx: float, cz: float, y: float) -> void:
 func _cell_color(cell: GridWorld.Cell, pos: Vector2i, max_ore: int) -> Color:
 	match cell.type:
 		GridWorld.CellType.SURFACE_GROUND:
-			var snow_mix := lerpf(0.45, 1.0, _snow_level)
-			return ArtStyle3D.PALETTE.snow_shadow.lerp(ArtStyle3D.PALETTE.snow, snow_mix)
+			return _surface_color(pos, lerpf(0.45, 1.0, _snow_level))
 		GridWorld.CellType.DIRT:
 			return _dirt_color(cell.layer)
 		GridWorld.CellType.ORE:
@@ -484,6 +486,24 @@ func _cell_color(cell: GridWorld.Cell, pos: Vector2i, max_ore: int) -> Color:
 		GridWorld.CellType.SOLID_ROCK:
 			return SOLID_ROCK_COLOR
 	return ArtStyle3D.PALETTE.night
+
+
+func _surface_color(pos: Vector2i, snow_mix: float) -> Color:
+	var color := ArtStyle3D.PALETTE.snow_shadow.lerp(ArtStyle3D.PALETTE.snow, snow_mix)
+	if _map_definition == null:
+		return color
+	if _map_definition.is_road(pos):
+		return color.lerp(ArtStyle3D.PALETTE.compacted_snow, 0.6)
+	var region := _map_definition.region_at(pos)
+	if region.is_empty():
+		return color
+	var tint: Color = ArtStyle3D.PALETTE.rock
+	match str(region.get("recipe", "")):
+		"trees":
+			tint = ArtStyle3D.PALETTE.pine
+		"low":
+			tint = ArtStyle3D.PALETTE.wood_dark
+	return color.lerp(tint, 0.12)
 
 
 func _dirt_color(layer: int) -> Color:

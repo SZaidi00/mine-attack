@@ -888,8 +888,8 @@ const LAYER_TILE_HP: Dictionary = {
 }
 
 # ─── MAP / GRID ───
-const GRID_X_MIN: int = -40
-const GRID_X_MAX: int = 40
+const GRID_X_MIN: int = -50
+const GRID_X_MAX: int = 50
 const GRID_Y_MIN: int = 0
 const GRID_Y_MAX: int = 21
 

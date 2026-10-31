@@ -144,10 +144,10 @@ func test_dolly_constants_frame_units_and_the_half_map() -> void:
 	var px := 1080.0 * unit_h / (2.0 * slant * tan(fov_half))
 	assert_gte(px, 24.0, "swordsman is >= 24 px tall at 1080p/default dolly (got %.1f)" % px)
 	assert_lte(px, 40.0, "swordsman is not grotesquely huge at default dolly (got %.1f)" % px)
-	# Max zoom-out (dolly 16) still shows the full width of a player's half
-	# (~13.1 world units at the 55deg pitch).
+	# Max zoom-out (dolly 16) still shows the full width of a player's half.
+	var half_map: float = (GridWorld.X_MAX - GridWorld.X_MIN + 1) * GridWorld.CELL_SIZE * Presentation3D.WORLD_SCALE * 0.5
 	var ground_width := 2.0 * (16.0 / cos(pitch)) * tan(fov_half) * (1920.0 / 1080.0)
-	assert_gte(ground_width, 13.1, "max zoom-out covers a player's half width (got %.1f)" % ground_width)
+	assert_gte(ground_width, half_map, "max zoom-out covers a player's half width (got %.1f)" % ground_width)
 
 
 func test_zoom_clamps_to_the_dolly_range() -> void:

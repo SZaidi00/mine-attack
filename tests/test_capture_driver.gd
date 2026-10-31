@@ -53,6 +53,14 @@ func test_parse_shots_orders_by_time_and_parses_fields() -> void:
 	assert_eq(shots[2].pose, "zoomout")
 
 
+func test_parse_shots_accepts_survey_pose() -> void:
+	var shots := CaptureDriver.parse_shots("8:survey:-1120:-192:6")
+	assert_eq(shots.size(), 1)
+	assert_eq(shots[0].pose, "survey")
+	assert_eq(shots[0].pos, Vector2(-1120, -192))
+	assert_eq(shots[0].zoom, 6.0)
+
+
 func test_parse_shots_skips_garbage() -> void:
 	var shots := CaptureDriver.parse_shots("bogus;;10:start;custom:1:2")
 	assert_eq(shots.size(), 1)
