@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/three_d/entity_proxies_3d.gd" id="1_proxies"]
 [ext_resource type="Script" path="res://scripts/three_d/terrain_3d.gd" id="2_terrain"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/three_d/projectile_proxies_3d.gd" id="4_projectiles"]
 [ext_resource type="Script" path="res://scripts/three_d/event_proxies_3d.gd" id="5_events"]
 [ext_resource type="Script" path="res://scripts/three_d/fog_3d.gd" id="6_fog"]
+[ext_resource type="Script" path="res://scripts/three_d/backdrop_3d.gd" id="7_backdrop"]
 
 [sub_resource type="Environment" id="Environment_world3d"]
 background_mode = 1
@@ -40,6 +41,9 @@ light_energy = 1.0
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="Lights"]
 environment = SubResource("Environment_world3d")
+
+[node name="Backdrop3D" type="Node3D" parent="."]
+script = ExtResource("7_backdrop")
 
 [node name="Terrain3D" type="Node3D" parent="."]
 script = ExtResource("2_terrain")

@@ -4,12 +4,13 @@
 ## MultiMeshInstance3D per decoration type per chunk: low-poly ore crystals
 ## underground (tinted by richness), ember spikes on visible lava, and
 ## snow-drift mounds on the surface while _snow_level accumulates. Plan 07
-## (plans/07-surface-prop-scattering.md) adds the seeded surface prop scatter:
-## the plan-06 prop GLBs (boulder/pine/stump/crate) instanced on visible
-## SURFACE_GROUND cells, deterministic per (cell, map seed) hash, dune-grounded
-## like the drifts, and skipped inside structure clearances. Pure
-## sim -> render (the grid is read, never written); densities are
-## quality-aware so Potato stays cheap.
+## (plans/07-surface-prop-scattering.md) adds the seeded surface prop scatter;
+## plan 09 composes generated + curated pack GLBs into map-seeded cluster
+## noise and zone-aware kinds on visible SURFACE_GROUND cells. Every instance
+## is dune-grounded and skipped inside structure clearances. Multi-node kit
+## meshes bake node transforms into merged surfaces, including normal-map
+## tangents. Pure sim -> render (the grid is read, never written); densities
+## are quality-aware so Potato stays cheap.
 ##
 ## NOTE: extends MeshInstance3D (with mesh left null) rather than Node3D so a
 ## direct child of Terrain3D survives the Phase 1 port test's child loop,
@@ -23,11 +24,16 @@ const WORLD_SCALE: float = 0.01
 const CHUNK_COLS: int = 21
 const CHUNK_ROWS: int = 8
 
-## Plan 06 prop kinds, in scatter-band order (boulder is the most common
-## read on a snow field, crate the rarest).
-const PROP_KEYS: Array[String] = ["prop_boulder", "prop_pine", "prop_stump", "prop_crate"]
-## Fraction of visible surface cells that grow a prop (~1 per 8 cells).
-const PROP_DENSITY: float = 0.12
+const PROP_KEYS: Array[String] = [
+	"prop_boulder", "prop_pine", "prop_stump", "prop_crate",
+	"pack_rock_medium_1", "pack_rock_medium_2", "pack_rock_medium_3",
+	"pack_dead_tree_3", "pack_dead_tree_5", "pack_grass_wispy", "pack_bush_common",
+]
+const ROCK_KINDS: Array[int] = [0, 4, 5, 6]
+const TREE_KINDS: Array[int] = [1, 7, 8]
+const LOW_KINDS: Array[int] = [2, 3, 9, 10]
+const BASE_PROP_DENSITY: float = 0.12
+const CLUSTER_PROP_DENSITY: float = 0.42
 ## Scatter hash salts — distinct from the drift/crystal/ember salts (7..99)
 ## and mixed with the map seed so a pinned seed replays the same board.
 const SALT_KIND := 500
@@ -53,6 +59,7 @@ var _containers: Dictionary = {}  # Vector2i chunk key -> Node3D holder
 ## GUT suite and the F3 probe read for counts/verification.
 var scatter_log: Dictionary = {}
 var _seed: int = 0
+var _cluster_noise := FastNoiseLite.new()
 
 
 func setup(grid: GridWorld) -> void:
@@ -61,6 +68,10 @@ func setup(grid: GridWorld) -> void:
 	# map seed in _ready (runs before the 3D shell sets up), so a pinned seed
 	# replays the identical scatter.
 	_seed = maxi(grid.map_seed, 0)
+	_cluster_noise.seed = _seed * 31 + 503
+	_cluster_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	_cluster_noise.frequency = 0.16
+	_cluster_noise.fractal_octaves = 2
 
 
 ## Rebuild the decorations for one terrain chunk right after the chunk's own
@@ -196,29 +207,18 @@ func _add_embers(pos: Vector2i, cx: float, cz: float, xforms: Array[Transform3D]
 		colors.append(Color.WHITE)
 
 
-## Plan 07 surface scatter. One candidate per visible SURFACE_GROUND cell:
-## the map-seed-mixed cell hash decides presence (PROP_DENSITY), sub-cell
-## offset, prop kind band (boulder/pine/stump/crate), rotation, and scale.
-## Candidates inside a structure clearance stamp are dropped (the same stamp
-## set that flattens the dunes), and survivors ground-snap to the dune field
-## exactly like the drifts. Never randf()/randi() — determinism is the
-## Play Again promise (GameManager.map_seed).
 func _add_prop(pos: Vector2i, cx: float, cz: float, ground: HeightField3D, xfs: Array) -> void:
-	if ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_KIND)) >= PROP_DENSITY:
+	var cluster := _cluster_noise.get_noise_2d(pos.x, pos.y)
+	if ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_KIND)) >= _prop_density(pos, cluster):
 		return
 	var ox := (ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_OFFSET_X)) - 0.5) * 0.18
 	var oz := (ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_OFFSET_Z)) - 0.5) * 0.18
 	var wx := cx + ox
 	var wz := cz + oz
-	# Clearance: the field flattens to trampled ground within CLEAR_RADIUS of
-	# structures; props stay out of that whole disc (ground is null only in
-	# legacy test call-sites, where clearance filtering has no meaning).
 	if ground != null and ground.clearance_at_cell(wx / HeightField3D.CELL_WORLD, wz / HeightField3D.CELL_WORLD) > 0.0:
 		return
 	var band := ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_BAND))
-	var kind := 0
-	if band >= 0.38:
-		kind = 1 if band < 0.68 else (2 if band < 0.84 else 3)
+	var kind := _pick_kind(pos, band, cluster)
 	var source := _prop_source(PROP_KEYS[kind])
 	if source.is_empty():
 		return
@@ -226,9 +226,26 @@ func _add_prop(pos: Vector2i, cx: float, cz: float, ground: HeightField3D, xfs: 
 	var s := lerpf(PROP_SCALE_MIN, PROP_SCALE_MAX, ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_SCALE)))
 	var gy := 0.0 if ground == null else ground.height_at(wx, wz)
 	var place := Transform3D(Basis.from_euler(Vector3(0.0, rot, 0.0)).scaled(Vector3(s, s, s)), Vector3(wx, gy, wz))
-	# Per-instance transform = placement * the loader-style normalization
-	# (footprint scale, min-y at 0, XZ centered) baked once per prop kind.
 	(xfs[kind] as Array[Transform3D]).append(place * (source["norm"] as Transform3D))
+
+
+func _prop_density(pos: Vector2i, cluster: float) -> float:
+	var density := lerpf(BASE_PROP_DENSITY, CLUSTER_PROP_DENSITY, smoothstep(-0.35, 0.65, cluster))
+	if pos.y >= -1:
+		density *= 0.65
+	if abs(pos.x) <= 6:
+		density *= 0.55
+	return density
+
+
+func _pick_kind(pos: Vector2i, band: float, cluster: float) -> int:
+	var choices := ROCK_KINDS
+	if abs(pos.x) > 10 and cluster > 0.05 and pos.y < 0 and band < 0.34:
+		choices = TREE_KINDS
+	elif band >= 0.68:
+		choices = LOW_KINDS
+	var index := mini(int(ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_KIND + 17)) * choices.size()), choices.size() - 1)
+	return choices[index]
 
 
 func _scatter_salt(base: int) -> int:
@@ -299,14 +316,20 @@ static func _scan_meshes(node: Node3D, parent_xform: Transform3D, scan: _MeshSca
 				var arrays := (mi.mesh.surface_get_arrays(s) as Array).duplicate()
 				var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 				var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+				var tangents: PackedFloat32Array = arrays[Mesh.ARRAY_TANGENT]
 				var normal_xform := xform.basis.inverse().transposed()
 				for i in range(verts.size()):
 					verts[i] = xform * verts[i]
 					if i < normals.size():
 						normals[i] = (normal_xform * normals[i]).normalized()
+					if tangents.size() == verts.size() * 4:
+						var tangent := (normal_xform * Vector3(tangents[i * 4], tangents[i * 4 + 1], tangents[i * 4 + 2])).normalized()
+						tangents[i * 4] = tangent.x
+						tangents[i * 4 + 1] = tangent.y
+						tangents[i * 4 + 2] = tangent.z
 				arrays[Mesh.ARRAY_VERTEX] = verts
 				arrays[Mesh.ARRAY_NORMAL] = normals
-				arrays[Mesh.ARRAY_TANGENT] = PackedFloat32Array()
+				arrays[Mesh.ARRAY_TANGENT] = tangents if tangents.size() == verts.size() * 4 else null
 				scan.surfaces.append({"arrays": arrays, "material": mi.mesh.surface_get_material(s)})
 		else:
 			for s in range(mi.mesh.get_surface_count()):

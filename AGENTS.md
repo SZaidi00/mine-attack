@@ -55,17 +55,18 @@ mine-attack/
 │   │                  # map-seeded value noise + ridged dune bands, structure
 │   │                  # clearances, storm flattening — plus a read-only
 │   │                  # world_height_at() ground query, emissive
-│   │                  # lava pass, storm snow cover; 3D-rework phase 3 relit the
-│   │                  # albedo pass so the ground receives mood light, sun shadows,
-│   │                  # and depth fog), terrain_detail_3d.gd (MultiMesh
-│   │                  # ore crystals / lava embers / snow drifts riding the
-│   │                  # dune surface; plan 07 adds the seeded surface prop
-│   │                  # scatter — plan-06 prop GLBs instanced per visible
-│   │                  # surface cell, map-seed-mixed cell hashes, fog +
-│   │                  # structure-clearance gated, dune-grounded; the
-│   │                  # scatter_log manifest mirrors the MultiMesh instances
-│   │                  # for tests because headless servers can't read
-│   │                  # multimesh data back), entity_proxies_3d.gd
+│   │                  # lava pass, storm snow cover, lit vertex-color albedo with
+│   │                  # smoothed surface normals and a Standard+ world-triplanar
+│   │                  # detail texture that preserves cell/fog colors),
+│   │                  # terrain_detail_3d.gd (MultiMesh ore crystals / lava embers /
+│   │                  # snow drifts plus plan-07/09 seeded surface scatter —
+│   │                  # generated + curated Quaternius GLBs, map-seeded cluster
+│   │                  # noise and zone-aware kinds, fog + structure-clearance gated,
+│   │                  # dune-grounded; scatter_log mirrors the instances for tests),
+│   │                  # backdrop_3d.gd (plan-09 seeded noninteractive ground skirt,
+│   │                  # three distant ridge layers and Standard+ pine silhouettes,
+│   │                  # all outside playable cells and hidden underground),
+│   │                  # entity_proxies_3d.gd
 │   │                  # (group reconcile), unit_proxy_3d.gd (1.4x proxy-root
 │   │                  # scale-up, counter-scaled HP bars, R3 dune ground-snap)
 │   │                  # + unit_model_3d.gd
@@ -164,12 +165,15 @@ mine-attack/
 │   │                  # one-shot dust/crack feedback + minimal camera nudge)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
-├── tests/             # GUT test suite (~48 test scripts)
+├── tests/             # GUT test suite (76 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
 │                      # gen_crawler_sprites.gd, gen_unit_glbs.py (R7 deterministic
 │                      # sculpted/textured unit GLBs), gen_prop_glbs.py
 │                      # (plan 06 deterministic prop GLBs — boulder/pine/stump/crate,
 │                      # the surface-scatter dressing for plan 07),
+│                      # import_kit_props.py (plan 09 curated glTF/GLB -> embedded,
+│                      # ground-normalized kit props; models/packs/SOURCES.md holds
+│                      # exact provenance and hashes),
 │                      # check_model_budgets.sh
 │                      # (R4/R7 GLB tri/texture budget gate vs
 │                      # models/model_manifest.json), resize_glb_textures.py
@@ -477,7 +481,11 @@ unit GLBs are deterministically regenerated with `python3 tools/gen_unit_glbs.py
 props that plan 07 scatters) with `python3 tools/gen_prop_glbs.py [--validate-only]`
 (same conventions as the unit workshop: embedded 256² painted atlas, base
 min-y 0, metallic 0 / roughness 0.92; self-validates tri/height bands and
-rejects corrupted copies); re-run the budget gate afterward.
+rejects corrupted copies). Curated kit props use
+`python3 tools/import_kit_props.py --source /path/to/pack/glTF --prop Source.gltf=pack_key=0.30`
+(repeat `--prop` per model; `--validate-only` rechecks committed GLBs). Raw packs
+stay in `.gdignore`d staging; exact licenses/hashes belong in
+`frost_mines_assets/models/packs/SOURCES.md`. Re-run the budget gate afterward.
 
 ### Run all repo checks
 

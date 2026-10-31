@@ -193,5 +193,82 @@
 		"glow_slots": [],
 		"origin": "center",
 		"fallback_on_potato": false
+	},
+	{
+		"key": "pack_rock_medium_1",
+		"path": "res://frost_mines_assets/models/packs/pack_rock_medium_1.glb",
+		"footprint": [1.0704, 0.9921],
+		"height": 0.24,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "pack_rock_medium_2",
+		"path": "res://frost_mines_assets/models/packs/pack_rock_medium_2.glb",
+		"footprint": [1.4048, 1.1423],
+		"height": 0.28,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "pack_rock_medium_3",
+		"path": "res://frost_mines_assets/models/packs/pack_rock_medium_3.glb",
+		"footprint": [1.4765, 1.5007],
+		"height": 0.32,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "pack_dead_tree_3",
+		"path": "res://frost_mines_assets/models/packs/pack_dead_tree_3.glb",
+		"footprint": [0.6463, 0.6506],
+		"height": 0.43,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "pack_dead_tree_5",
+		"path": "res://frost_mines_assets/models/packs/pack_dead_tree_5.glb",
+		"footprint": [0.6514, 0.6558],
+		"height": 0.41,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "pack_grass_wispy",
+		"path": "res://frost_mines_assets/models/packs/pack_grass_wispy.glb",
+		"footprint": [0.6168, 0.5643],
+		"height": 0.16,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "pack_bush_common",
+		"path": "res://frost_mines_assets/models/packs/pack_bush_common.glb",
+		"footprint": [0.8323, 0.8541],
+		"height": 0.22,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
 	}
 ]

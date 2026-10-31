@@ -52,6 +52,7 @@ var _selection_rings: SelectionRings3D
 var _projectile_proxies: ProjectileProxies3D
 var _event_proxies: EventProxies3D
 var _fog: Fog3D
+var _backdrop: Backdrop3D
 var _focus: Vector3 = Vector3.ZERO
 var _surface_focus: Vector3
 var _underground_focus: Vector3
@@ -119,6 +120,8 @@ func _ready() -> void:
 	_focus = _surface_focus
 
 	var grid: GridWorld = _sim.get_node("World/GridWorld") as GridWorld
+	_backdrop = $World3D/Backdrop3D
+	_backdrop.setup(grid)
 	_terrain.setup(grid)
 	# Structure proxies arriving/leaving re-stamp the dune clearances.
 	_proxies.structure_set_changed.connect(_terrain.notify_structures_changed)
@@ -184,9 +187,12 @@ func _apply_quality_live(q: ArtStyle3D.Quality) -> void:
 	if _proxies != null:
 		_proxies.rebuild_all()
 	if _terrain != null:
+		_terrain.apply_quality()
 		_terrain.force_full_rebuild()
 	if _fog != null:
 		_fog.apply_quality()
+	if _backdrop != null:
+		_backdrop.apply_quality()
 
 
 func _to_ground(pos2d: Vector2) -> Vector3:
@@ -416,6 +422,8 @@ func _apply_view(underground: bool, initial: bool) -> void:
 		_view_tween.tween_property(self, "_dolly", target_dolly, VIEW_TWEEN_DURATION)
 		_view_tween.tween_property(self, "_pitch_degrees", target_pitch, VIEW_TWEEN_DURATION)
 	_terrain.set_underground_view(underground)
+	if _backdrop != null:
+		_backdrop.set_underground_view(underground)
 	_proxies.set_underground_view(underground)
 	_selection_rings.set_underground_view(underground)
 	_projectile_proxies.set_underground_view(underground)

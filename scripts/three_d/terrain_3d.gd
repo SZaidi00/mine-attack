@@ -4,8 +4,9 @@
 ## R2 replaces the inherited 2D browns/ice with the revamp's shadow-snow,
 ## indigo rock, cooled dirt, tiered ore, and warm lava tokens. R3 (visual
 ## revamp) displaces the surface quads onto the HeightField3D dune field —
-## same chunk path and vertex count, corners sampled from the shared field so
-## seams stay watertight and proxies/camera ground-snap read the same ground.
+## corners sampled from the shared field so seams stay watertight, with shared
+## surface corners smoothed into continuous normals. Standard+ multiplies the
+## cell/fog vertex colors by a subtle world-triplanar detail texture.
 ## The grid is only read, never written.
 extends Node3D
 
@@ -79,6 +80,11 @@ func setup(grid: GridWorld) -> void:
 	_mat = StandardMaterial3D.new()
 	_mat.vertex_color_use_as_albedo = true
 	_mat.roughness = ArtStyle3D.MATERIAL_ROUGHNESS
+	_mat.uv1_triplanar = true
+	_mat.uv1_world_triplanar = true
+	_mat.uv1_scale = Vector3(2.0, 2.0, 2.0)
+	_mat.albedo_texture = _make_detail_texture()
+	apply_quality()
 	if not LIT_TERRAIN:
 		_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	# One shared emissive material for every glow chunk; _process pulses its
@@ -123,6 +129,37 @@ func setup(grid: GridWorld) -> void:
 	_grid.cave_in_occurred.connect(_on_cave_in)
 	_mark_all_dirty()
 	_seen_fog_revision = _grid.player_fog_revision
+
+
+func _make_detail_texture() -> NoiseTexture2D:
+	var noise := FastNoiseLite.new()
+	noise.seed = 9401
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.055
+	noise.fractal_octaves = 3
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.84, 0.87, 0.90))
+	ramp.set_color(1, Color.WHITE)
+	var texture := NoiseTexture2D.new()
+	texture.width = 128
+	texture.height = 128
+	texture.generate_mipmaps = true
+	texture.seamless = true
+	texture.noise = noise
+	texture.color_ramp = ramp
+	return texture
+
+
+func apply_quality() -> void:
+	if _mat == null:
+		return
+	var detailed := ArtStyle3D.detail_enabled()
+	_mat.uv1_triplanar = detailed
+	_mat.uv1_world_triplanar = detailed
+	if detailed and _mat.albedo_texture == null:
+		_mat.albedo_texture = _make_detail_texture()
+	elif not detailed:
+		_mat.albedo_texture = null
 
 
 func get_snow_level() -> float:
@@ -332,8 +369,10 @@ func _rebuild_chunk(key: Vector2i) -> void:
 					color = color.lerp(FOG_SHADOW_TINT, 0.8)
 			_add_quad(st, cx, cz, color, heights[0], heights[1], heights[2], heights[3])
 	if LIT_TERRAIN:
-		# Flat per-face normals off the sculpted corner heights; the glow
-		# pass is unshaded/emissive and needs none.
+		# Shared surface corners smooth into continuous dunes; differing cell
+		# colors keep fog/material boundaries hard. Underground stays faceted.
+		if not _underground_view:
+			st.index()
 		st.generate_normals()
 	chunk.mesh = st.commit()
 	if chunk.mesh != null:

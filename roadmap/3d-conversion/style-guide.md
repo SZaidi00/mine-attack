@@ -5,13 +5,16 @@ code: `scripts/three_d/art_style_3d.gd`.
 
 ## Look
 
-**Flat-shaded stylized low-poly.** Untextured primitives with flat albedo
-colors, roughness 1.0, lambert shading. No texture maps, no PBR maps, no
-real-time GI (SSAO + tuned ambient only, Fancy preset). This reads cleanly at
-RTS zoom distances and keeps the web build cheap.
+**Flat-shaded stylized low-poly.** Procedural fallbacks use flat albedo
+colors; imported units, structures, and curated props use small painted
+atlases with metallic 0 / roughness 0.92. Terrain combines lit vertex-color
+cell/fog grading with a subtle world-triplanar detail texture on Standard+.
+No real-time GI (SSAO + tuned ambient only, Fancy preset). This reads cleanly
+at RTS zoom distances and keeps the web build cheap.
 
 Mood: cold, post-apocalyptic, Frostpunk-adjacent. Overcast base light;
-weather is the drama.
+weather is the drama. Distant ground, ridges, and pine silhouettes frame the
+battlefield without entering playable cells; backdrop detail stays subdued.
 
 ## Palette
 
@@ -76,7 +79,8 @@ are thin posts with a warm glowing head — the dynamic-light heroes.
   including faction attachments; team/accent/glow material slots are rebound
   per proxy. Potato uses the old <1k-tri primitive recipes.
 - Terrain: chunked mesh, one draw per chunk + one emissive pass for lava;
-  ore crystals via `MultiMeshInstance3D`.
+  subtle world-triplanar detail on Standard+, smooth surface normals, and
+  MultiMesh ore/clustered prop detail. Distant backdrop geometry stays cheap.
 - Budget: 60 fps desktop with 200+ units; LOD = decorative detail off +
   limb-swing amplitude reduction at far dolly, not mesh swapping.
 
@@ -98,8 +102,8 @@ the ground.
 
 ## Animation
 
-Procedural, driven by sim state (never writes sim): idle breathing bob, walk
-limb-swing phased by actual movement, attack lunge keyed on the sim's attack
-cooldown timer, mine swing on the sim's swing timer, death topple on `died`.
-Juice (§2.5): camera shake on cave-ins, hit-stop already exists, dust motes
-underground, storm snow drift, volcano embers.
+Driven by sim state (never writes sim). Miner and swordsman use original
+idle/walk/attack/death `AnimationPlayer` clips on the named-pivot rigs;
+mining, other unit kinds, incomplete rigs, body motion, and death sink retain
+procedural behavior. Playback advances from visible proxy syncs. Juice (§2.5):
+camera shake on cave-ins, hit-stop, dust motes, storm drift, volcano embers.

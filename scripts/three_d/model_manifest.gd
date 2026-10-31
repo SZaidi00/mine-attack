@@ -8,8 +8,8 @@
 ##
 ## Entry fields:
 ## - key: structure id used by StructureProxy3D, unit_* id used by UnitModel3D,
-##   or prop_* id for neutral surface dressing (plan 06; loaded through the
-##   structure-style path, no gameplay wiring until the scatter plan).
+##   or prop_*/pack_* id for neutral surface dressing (generated or curated
+##   kit imports, loaded through the structure-style path and scatter).
 ## - path: res:// path of the imported .glb.
 ## - footprint: [w, h] target size in cells (CELL = 32 px of sim space); the
 ##   structure loader binds an XZ axis, while the unit loader treats it as a cap.
