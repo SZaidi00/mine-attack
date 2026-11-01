@@ -13,8 +13,8 @@ extends Resource
 @export var mine_entries_centered: bool = true
 # Authored starting bookmark for the player Camera2D.
 @export var camera_start: Vector2 = Vector2(0, -128)
-@export var player_building_cell: Vector2i = Vector2i(-40, 0)
-@export var enemy_building_cell: Vector2i = Vector2i(40, 0)
+@export var player_building_cell: Vector2i = Vector2i(-40, -2)
+@export var enemy_building_cell: Vector2i = Vector2i(40, -2)
 @export var player_mine_cell: Vector2i = Vector2i(-20, -5)
 @export var enemy_mine_cell: Vector2i = Vector2i(20, -5)
 @export var surface_regions: Array[Dictionary] = []

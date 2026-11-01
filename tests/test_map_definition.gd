@@ -10,8 +10,8 @@ func before_each() -> void:
 
 
 func test_default_layout_uses_wider_markers() -> void:
-	assert_eq(_map.player_building_cell, Vector2i(-40, 0))
-	assert_eq(_map.enemy_building_cell, Vector2i(40, 0))
+	assert_eq(_map.player_building_cell, Vector2i(-40, -2))
+	assert_eq(_map.enemy_building_cell, Vector2i(40, -2))
 	assert_eq(_map.player_mine_cell, Vector2i(-20, -5))
 	assert_eq(_map.enemy_mine_cell, Vector2i(20, -5))
 

@@ -185,7 +185,7 @@ mine-attack/
 │   │                  # one-shot dust/crack feedback + minimal camera nudge)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
-├── tests/             # GUT test suite (82 test scripts)
+├── tests/             # GUT test suite (83 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
 │                      # gen_crawler_sprites.gd, gen_unit_glbs.py (R7 deterministic
 │                      # sculpted/textured unit GLBs), gen_prop_glbs.py
@@ -294,7 +294,7 @@ mine-attack/
 > class. On `main`,
 > Play loads `scenes/main.tscn` directly.
 
-`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`. The root `scripts/world/main.gd` resolves the world profile from `GameManager.world_profile_request` (`"legacy"` → `scripts/resources/maps/legacy.tres`, otherwise the exported/default wide resource), applies it via `GridWorld.apply_world_profile()`, applies the resource's `camera_start` to the Camera2D, and applies the base/mine markers from that `MapDefinition` in `_enter_tree`, before child initialization. On the wide board bases sit at `x=±40` with cell-centered mine entrances at `(±20,-5)`; the legacy profile uses bases at `x=±30` with corner-origin mines at `x=±15` on row 0. The wide resource also carries visual-only front-road/mine-spur rectangles and the western-pinewood/eastern-rockfield prop regions (the legacy resource carries none). The scene contains:
+`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`. The root `scripts/world/main.gd` resolves the world profile from `GameManager.world_profile_request` (`"legacy"` → `scripts/resources/maps/legacy.tres`, otherwise the exported/default wide resource), applies it via `GridWorld.apply_world_profile()`, applies the resource's `camera_start` to the Camera2D, and applies the base/mine markers from that `MapDefinition` in `_enter_tree`, before child initialization. On the wide board bases sit at `(±40,-2)` (plan 17 centered the 5-row body in the 10-row band; corner-origin placement, so the body seals rows −7..−3 with rows −2..0 walkable in front) with cell-centered mine entrances at `(±20,-5)`; the legacy profile uses bases at `x=±30` with corner-origin mines at `x=±15` on row 0. The wide resource also carries visual-only front-road/mine-spur rectangles and the western-pinewood/eastern-rockfield prop regions (the legacy resource carries none). The scene contains:
 
 - `World/VolcanoBackground` — decorative volcano sprite.
 - `World/GridWorld` — procedural map, A*, fog of war, rendering.
@@ -359,7 +359,7 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 - `mine_entry.gd` — ladder teleport positions.
 - `ladder.gd` — ladder visuals/positioning.
 - `corpse.gd` — raisable corpse marker (Necromancy): spawned where a surface swordsman/archer/dragon dies, self-expires after `NECRO_CORPSE_DURATION`, code-drawn with a necromantic shimmer; group `corpses`.
-- `lantern.gd` / `tower.gd` / `wall_segment.gd` / `trap.gd` — placeable structures; a selected tower shows its attack range as a gold disc.
+- `lantern.gd` / `tower.gd` / `wall_segment.gd` / `trap.gd` — placeable structures; a selected tower shows its attack range as a gold disc. Walls track chain links to 4-adjacent same-team walls (`_connections`, refreshed group-wide on spawn/destroy) that drive the post-and-rails look (plan 16).
 
 ### `scripts/units/`
 
@@ -433,7 +433,7 @@ Placeable from the radial build menu:
 
 - **Lanterns** — surface and underground variants provide vision and upgrade T1→T2→T3.
 - **Towers** — static surface defenses; auto-attack and vision.
-- **Walls** — single-cell surface barriers (placeable on any row of the surface band) that block movement and projectiles by sealing their entire column through the band plus dug cells below.
+- **Walls** — single-cell surface barriers (placeable on any row of the surface band) that block movement and projectiles by sealing their entire column through the band plus dug cells below. Cap 8 (Industrial 10, +1 each from Stone Masonry/Total War research). Adjacent same-team walls link into a **chain** (plan 16): a post at each cell with shorter rails to the neighboring posts, in 2D and 3D; mixed teams never link, and the chain updates as walls are destroyed or demolished.
 - **Traps** — hidden area damage triggered by enemy units (miner-placed with Guerrilla research).
 
 ### Research

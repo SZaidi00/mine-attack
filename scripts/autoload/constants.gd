@@ -176,13 +176,14 @@ const TOWER_MAX_COUNT: int = 2
 const TOWER_VISION: int = 10  # surface only
 const TOWER_MIN_BUILDING_DISTANCE: int = 2  # cells from any building/mine entry
 # Placeable walls: single-cell surface barriers that block movement (A* solid
-# once built) and projectiles. Destroyed by fighter attacks. Factions override
-# cost and max count (Industrial: 30g, 3).
+# once built) and projectiles. Destroyed by fighter attacks. Adjacent same-team
+# walls link into a chain (posts + rails — see WallSegment). Factions override
+# cost and max count (Industrial: 30g, 10).
 # (PLACED_ prefix: WALL_HP/WALL_* already name the central wall's constants.)
 const PLACED_WALL_COST: int = 50
 const PLACED_WALL_HP: int = 400
 const PLACED_WALL_BUILD_TIME: float = 3.0
-const PLACED_WALL_MAX_COUNT: int = 2
+const PLACED_WALL_MAX_COUNT: int = 8
 # Destroyed towers/walls drop this share of their build cost (as lanterns do).
 const STRUCTURE_SALVAGE_RATIO: float = 0.5
 # Player-initiated demolition of own towers/walls/lanterns/traps refunds this

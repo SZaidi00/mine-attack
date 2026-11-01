@@ -366,10 +366,14 @@ func _add_deposit_point() -> void:
 	_deposit_point = Marker2D.new()
 	_deposit_point.name = "DepositPoint"
 	var dir: float = 1.0 if team == GameManager.Team.PLAYER else -1.0
-	# On the walkable surface row, just outside the front edge facing the mine.
+	# On the walkable front surface row (row 0), just outside the front edge
+	# facing the mine — whatever row the building body itself sits on (the
+	# wide profile centers the base in the band; legacy sits it on row 0, and
+	# the formula below then yields the same 32px offset as before).
+	var front_row_local_y: float = (GridWorld.Y_MIN + 0.5) * GridWorld.CELL_SIZE - global_position.y
 	_deposit_point.position = Vector2(
 		dir * (width_cells * GridWorld.CELL_SIZE / 2.0 + GridWorld.CELL_SIZE * 0.5),
-		GridWorld.CELL_SIZE * 0.5
+		front_row_local_y
 	)
 	add_child(_deposit_point)
 

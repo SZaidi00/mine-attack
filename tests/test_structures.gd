@@ -103,7 +103,10 @@ func test_tower_placement_rejects_bad_cells() -> void:
 	assert_false(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 4))), "no underground towers")
 	assert_false(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(8, 0))), "own half only")
 	var rect: Rect2i = _player_building().get_footprint_cell_rect()
-	assert_false(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(rect.position.x - 1, 0))), "not within 2 cells of a building")
+	# One cell out from the footprint's left edge, on the base's own row —
+	# inside the grow(TOWER_MIN_BUILDING_DISTANCE) no-build zone (plan 17
+	# centered the base in the band, so row 0 in front of it is legal now).
+	assert_false(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(rect.position.x - 1, rect.position.y + 2))), "not within 2 cells of a building")
 	assert_eq(get_tree().get_nodes_in_group("towers").size(), 0, "rejections must not spawn anything")
 
 
@@ -201,9 +204,13 @@ func test_wall_placement_rules() -> void:
 
 
 func test_wall_max_count() -> void:
-	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-20, 0))))
-	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-22, 0))))
-	assert_false(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-24, 0))), "3rd wall exceeds the neutral cap of 2")
+	# Neutral cap is 8 (plan 16 raised it from 2 so walls can form lines);
+	# consecutive cells so the row chains, which must not affect the count.
+	for i in range(Constants.PLACED_WALL_MAX_COUNT):
+		assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-20 - i, 0))),
+			"wall %d of %d places" % [i + 1, Constants.PLACED_WALL_MAX_COUNT])
+	assert_false(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-29, 0))),
+		"the wall after the cap is rejected")
 
 
 func test_wall_blocks_and_frees_astar_cell() -> void:

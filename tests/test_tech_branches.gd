@@ -193,9 +193,10 @@ func test_rapid_fire_raises_swordsman_speed() -> void:
 
 func test_siege_master_swordsman_bonus_damage_vs_building() -> void:
 	var building: Node2D = _building_for(ENEMY)
-	var rect: Rect2 = building.call("get_bounds_rect")
-	# Stand one cell left of the footprint, on the surface row.
-	var stand: Vector2 = _grid.grid_to_world(_grid.world_to_grid(Vector2(rect.position.x - 1.0, 0.0)))
+	# Stand one cell left of the footprint, on its bottom body row (plan 17
+	# centered the base in the band, so row 0 no longer touches the rect).
+	var rect_cell: Rect2i = building.call("get_footprint_cell_rect")
+	var stand: Vector2 = _grid.grid_to_world(Vector2i(rect_cell.position.x - 1, rect_cell.end.y - 1))
 	var swordsman: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, stand)
 	swordsman.attack_building(building)
 	swordsman.set("_attack_timer", 0.0)
