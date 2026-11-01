@@ -1,5 +1,7 @@
 extends GutTest
 
+const LEGACY_MAP_RES: String = "res://scripts/resources/maps/legacy.tres"
+
 var _map: MapDefinition
 
 
@@ -12,6 +14,31 @@ func test_default_layout_uses_wider_markers() -> void:
 	assert_eq(_map.enemy_building_cell, Vector2i(40, 0))
 	assert_eq(_map.player_mine_cell, Vector2i(-20, -5))
 	assert_eq(_map.enemy_mine_cell, Vector2i(20, -5))
+
+
+func test_default_resource_carries_wide_world_profile() -> void:
+	assert_eq(_map.grid_x_min, -50)
+	assert_eq(_map.grid_x_max, 50)
+	assert_eq(_map.grid_x_max - _map.grid_x_min + 1, 101)
+	assert_eq(_map.surface_rows, 10)
+	assert_true(_map.mine_entries_centered, "wide mines are cell-centered on the surface band")
+	assert_eq(_map.camera_start, Vector2(0, -128))
+
+
+func test_legacy_resource_matches_main_branch_layout() -> void:
+	var legacy: MapDefinition = load(LEGACY_MAP_RES)
+	assert_eq(legacy.grid_x_min, -40)
+	assert_eq(legacy.grid_x_max, 40)
+	assert_eq(legacy.grid_x_max - legacy.grid_x_min + 1, 81, "the legacy board is 81 columns")
+	assert_eq(legacy.surface_rows, 1, "one walkable surface row")
+	assert_false(legacy.mine_entries_centered, "legacy mines are corner-origin on row 0")
+	assert_eq(legacy.camera_start, Vector2(0, -150))
+	assert_eq(legacy.player_building_cell, Vector2i(-30, 0))
+	assert_eq(legacy.enemy_building_cell, Vector2i(30, 0))
+	assert_eq(legacy.player_mine_cell, Vector2i(-15, 0))
+	assert_eq(legacy.enemy_mine_cell, Vector2i(15, 0))
+	assert_true(legacy.surface_roads.is_empty(), "no authored road dressing")
+	assert_true(legacy.surface_regions.is_empty(), "no authored prop regions")
 
 
 func test_front_road_and_mine_spurs_cover_their_cells() -> void:

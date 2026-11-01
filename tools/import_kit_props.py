@@ -10,6 +10,12 @@ The source pack is never required at runtime. Each --prop is
 SOURCE=KEY=TARGET_HEIGHT; uniform scale preserves the authored proportions and
 the resulting footprint is reported in MineAttack cells (0.32 world units).
 Only Python's standard library is required.
+
+--validate-only strictly re-checks every committed static kit prop (embedded
+textures, PBR convention, ground/height normalization). GLBs registered as
+"skeletal" in frost_mines_assets/models/model_manifest.json are skipped with
+a notice — their skins, clips, and root motion are owned and validated by
+`python3 tools/curate_skeletal_units.py --validate-only`.
 """
 
 from __future__ import annotations
@@ -26,6 +32,7 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "frost_mines_assets" / "models" / "packs"
+MANIFEST = ROOT / "frost_mines_assets" / "models" / "model_manifest.json"
 CELL_WORLD = 0.32
 Mat4 = tuple[float, ...]
 Vec3 = tuple[float, float, float]
@@ -242,6 +249,21 @@ def embed_and_normalize(source: Path, key: str, target_height: float) -> tuple[d
     return document, bytes(binary), report
 
 
+def skeletal_filenames() -> set[str]:
+    """Basenames of pack GLBs the shared manifest registers as skeletal rigs.
+
+    Those files are curated and validated by tools/curate_skeletal_units.py,
+    so this tool's --validate-only delegates them instead of applying the
+    static kit-prop normalization checks.
+    """
+    try:
+        entries = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise SystemExit(f"cannot read model manifest {MANIFEST}: {exc}") from exc
+    return {Path(entry["path"]).name for entry in entries
+            if entry.get("skeletal") and entry.get("path")}
+
+
 def validate(path: Path) -> dict:
     document, buffers = read_glb(path)
     if any("uri" in image for image in document.get("images", [])):
@@ -271,11 +293,22 @@ def main() -> None:
         paths = sorted(args.output.glob("*.glb"))
         if not paths:
             raise SystemExit(f"no curated GLBs found in {args.output}")
+        skeletal = skeletal_filenames()
+        skipped = 0
+        validated = 0
         for path in paths:
+            if path.name in skeletal:
+                print(f"Skipping {path.name}: skeletal rig in model_manifest.json "
+                      "(validated by tools/curate_skeletal_units.py --validate-only)")
+                skipped += 1
+                continue
             report = validate(path)
             report["output_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
             print(json.dumps(report, sort_keys=True))
-        print(f"Validated {len(paths)} curated props")
+            validated += 1
+        print(f"Validated {validated} curated props")
+        if skipped:
+            print(f"Delegated {skipped} skeletal rig(s) to tools/curate_skeletal_units.py --validate-only")
         return
     if args.source is None or not args.prop:
         parser.error("--source and at least one --prop are required unless --validate-only is used")

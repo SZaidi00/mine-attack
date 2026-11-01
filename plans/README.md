@@ -28,9 +28,14 @@ misreading the architecture — find the sim-side hook instead.
 ### Contracts you must not break
 - `/root/Main/...` hard-coded paths: 86 references across 57 files resolve the
   live sim. Never rename `Main` or its children.
-- Surface band: the walkable surface is 101 columns × 10 rows, `x ∈ [-50,50]`,
+- Surface band: on the wide 3D/test default the walkable surface is
+  101 columns × 10 rows, `x ∈ [-50,50]`,
   `y ∈ [GridWorld.SURFACE_TOP, GridWorld.Y_MIN]` = `[-9, 0]`; underground is
-  `y >= 1`. Use `GridWorld.is_surface_row(y)` — never `y == 0` checks.
+  `y >= 1`. The bounds are match-scoped statics applied by
+  `GridWorld.apply_world_profile()` from the active `MapDefinition`; only an
+  explicit `"legacy"` request (main-menu 2D Play) boots the 81×1 main-style
+  board instead (plan 14). Use `GridWorld.is_surface_row(y)` — never `y == 0`
+  checks.
   Base/mine layout markers live in `scripts/resources/maps/default.tres`
   (`MapDefinition`) and are applied by `scripts/world/main.gd` before child
   initialization: bases at `±40`, cell-centered mine entrances at `(±20,-5)`.
@@ -98,6 +103,8 @@ to `main` only (plan 03 wired the checks in).
 | 10 | Skeletal humanoid animation | L | 08, 09 |
 | 11 | Expanded surface battlefield | M | 10 |
 | 12 | Wider map and authored surface regions | M | 11 |
+| 13 | Underground mine visual slice and sentry fog vision | M | 12 |
+| 14 | Mode-specific world profiles (legacy 2D / expanded 3D) | M | 13 |
 
 Sizes: S ≈ a focused day, M ≈ 2–4 days, L ≈ a week+. "Depends on" is a soft
 ordering for humans; each plan is still self-contained for the agent.

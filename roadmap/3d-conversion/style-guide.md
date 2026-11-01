@@ -24,6 +24,31 @@ collision. Region/road vertex tints apply before fog, so hidden cells remain
 opaque void and remembered cells keep their shadow treatment. Potato keeps the
 color composition while dropping decorative props.
 
+## Underground & mine (Plan 13)
+
+The underground reads as a flat X-Y plane, never vertical 3D — excavated
+space is a readable floor, tunnels stay top-down, and presentation never
+writes the sim grid.
+
+- **Excavated floors** — mined-out cells get presentation-only floors in the
+  cold shallow/mid/deep depth-strata tokens, with sparse deterministic seam
+  décor (lifts stay under the lava glow pass and the fog overlay).
+- **Fog is authoritative** — floors inherit normal-cell fog tint semantics;
+  unexplored cells stay the opaque void and remembered cells keep their
+  deep-rock shadow regardless of dressing.
+- **Supports & rubble** — timber frames on DIRT cells bordering an excavated
+  floor and sparse dark pebble rubble (`pack_pebble_*`) on cave-in/magma rock
+  and depleted ore are seed-deterministic decorative MultiMeshes: no
+  collision, no support mechanic, no sim writes, fog-visible cells only.
+- **Warm light has owners** — lanterns and lava stay the only warm
+  underground sources (see the warm-emission policy above); supports and
+  rubble never carry light. The cool underground ambient is a readability
+  floor for visible strata only — never daylight, and never strong enough to
+  dilute the opaque unexplored void.
+- **Quality tiers** — Potato drops supports, rubble, and the mining-dust
+  burst while keeping floors, fog, and lava; Standard/Fancy run the full
+  detail pass.
+
 ## Palette
 
 3D rework phase 4 tuned this onto a luminance ladder — terrain darkest,

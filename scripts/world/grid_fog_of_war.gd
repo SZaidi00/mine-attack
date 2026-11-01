@@ -136,10 +136,10 @@ func _detect_player_fog_changes() -> void:
 
 
 ## Every vision source for a team as [center_cell, radius_cells, layer_mask]
-## triples: living units (per-type radii), the team's building, and built
-## lanterns. Sentry towers no longer provide vision — only lanterns light the
-## fog. A raging snowstorm (Revamp Phase 5) halves unit and lantern radius;
-## buildings keep their full radius.
+## triples: living units (per-type radii), the team's building, built
+## lanterns, and built sentry towers (surface only). A raging snowstorm
+## (Revamp Phase 5) scales unit, lantern, and tower radius; buildings keep
+## their full radius.
 func _get_vision_sources(team: GameManager.Team) -> Array:
 	var sources: Array = []
 	for unit in grid.get_tree().get_nodes_in_group("units"):
@@ -161,6 +161,14 @@ func _get_vision_sources(team: GameManager.Team) -> Array:
 			if lantern.is_underground_lantern and ResearchManager.has_branch(team, "deep_fortress"):
 				radius_cells += grid._Constants.DEEP_FORTRESS_LANTERN_VISION_BONUS
 			sources.append([grid.world_to_grid(lantern.global_position), maxi(1, roundi(radius_cells * weather_mult)), layer])
+	for tower in grid.get_tree().get_nodes_in_group("towers"):
+		# Built towers lift surface fog within their dedicated vision radius
+		# (TOWER_VISION, larger than attack range — range research never
+		# widens vision). Under-construction towers reveal nothing, and the
+		# surface layer lock keeps underground cells dark. Storms scale tower
+		# vision with the same global multiplier buildings use.
+		if tower.team == team and tower.is_built():
+			sources.append([grid.world_to_grid(tower.global_position), maxi(1, roundi(tower.vision_radius * WeatherManager.get_vision_multiplier())), GridWorld.VISION_LAYER_SURFACE])
 	return sources
 
 
@@ -174,8 +182,9 @@ func _reveal_circle(team: GameManager.Team, center: Vector2i, radius: int, layer
 			var y: int = center.y + dy
 			if x < grid.X_MIN or x > grid.X_MAX or y < grid.SURFACE_TOP or y > grid.Y_MAX:
 				continue
-			# Layer-locked sources (lanterns, miners, dragons) only light
-			# their own layer: the surface band, or everything below it.
+			# Layer-locked sources (lanterns, built towers, miners, dragons)
+			# only light their own layer: the surface band, or everything
+			# below it.
 			if layer_mask == GridWorld.VISION_LAYER_SURFACE and not grid.is_surface_row(y):
 				continue
 			if layer_mask == GridWorld.VISION_LAYER_UNDERGROUND and y <= grid.Y_MIN:

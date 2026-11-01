@@ -12,7 +12,8 @@
   archive's `License_Standard.txt`
 - Selected on: 2026-10-30
 
-Only the seven source models below were curated. The complete archive, engine
+Only the ten source models below were curated: seven on 2026-10-30 and the
+three pebbles on 2026-10-31. The complete archive, engine
 projects, and raw downloads are not included in the repository or exports.
 `tools/import_kit_props.py` embedded external buffers/images, retained source
 geometry/materials, uniformly scaled each model to the listed height, centered
@@ -28,6 +29,16 @@ resize tool then downscaled atlases to a maximum of 512x512.
 | `pack_dead_tree_5` | `glTF/DeadTree_5.gltf` | `8502cb23774f8771b047053bef8a4a25fbcb30340a160c4b00c0af6ba614284f` | `e7ebba50884e0a6f793ea2e22542a9d8e72d4d209e2fe12b28c4d273776bf8cb` |
 | `pack_grass_wispy` | `glTF/Grass_Wispy_Short.gltf` | `3c1d3bdd332420e070abde72d73611d1f13acfbe027e26b2fb943f9bcbd6b1c5` | `5307f92af8c8961870a2b5f842f6a6fd7cd88e04aeb00f33f33e2027fbcc7204` |
 | `pack_bush_common` | `glTF/Bush_Common.gltf` | `77811fca92610cb254713d3d49d5029ab6cf13050c3afb61aa942786a7b2ca90` | `442948f59691b14525c080c1797c5b37b107dab9e7279ecf028b976d5b903ce6` |
+| `pack_pebble_round_1` | `glTF/Pebble_Round_1.gltf` | `9f6261c81134915e73cf35eb4e37076238fd1e79434515ac686d15cbd1f779ab` | `26a722aca766695f18c50fcde940bc554bdf75d1dd429d26ee127708361ca459` |
+| `pack_pebble_round_3` | `glTF/Pebble_Round_3.gltf` | `d50c99d98abd4db9bc37a454a764b8c19256c889dc90f902ac3d923ca07fe9a3` | `77026845953227b413d70b0e3192e07bf73242c08063087d0eefbeed32ed191a` |
+| `pack_pebble_square_2` | `glTF/Pebble_Square_2.gltf` | `cf3d0970b924f59d56555a47407aa222afed7bf1f8957035d5b062866b7e251c` | `9d103914c5ebbc123db85e99b40fb03c543fc706abc344534d40b355e2257110` |
+
+The three `pack_pebble_*` models (selected 2026-10-31, target height 0.12
+world units) are curated as sparse underground-rubble dressing for the plan-13
+mine visual slice — debris accents near excavated cell edges, deliberately not
+surface road/path pieces despite the source pack's shared `PathRocks` material
+and `PathRocks_Diffuse.png` atlas (embedded per GLB, resized to 512x512). They
+stay out of the plan-07 surface scatter.
 
 External images referenced by the source glTF files are embedded in each final
 GLB. Godot's normal import also writes extracted PNG sidecars and their

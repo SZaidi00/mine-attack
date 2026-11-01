@@ -348,6 +348,32 @@ func test_surface_war_extends_tower_range() -> void:
 	assert_almost_eq(tower.attack_range, base, 0.001, "losing the branch reverts the range")
 
 
+func test_tower_range_research_leaves_vision_radius_untouched() -> void:
+	# Surface War + Sentry Network widen attack range only; the fog-of-war
+	# source keeps the dedicated TOWER_VISION radius (and stays surface-only).
+	var tower: Node2D = load("res://scenes/tower.tscn").instantiate()
+	tower.team = PLAYER
+	_main.get_node("Structures").add_child(tower)
+	autofree(tower)
+	tower._build_progress = 999.0
+	tower._process(0.1)
+	assert_true(tower.is_built(), "setup: tower is built")
+	var base_range: float = tower.attack_range
+	ResearchManager._levels[PLAYER]["surface_war"] = 1
+	ResearchManager._levels[PLAYER]["sentry_network"] = 1
+	ResearchManager.research_changed.emit(PLAYER)
+	assert_almost_eq(tower.attack_range,
+		base_range * Constants.SURFACE_WAR_TOWER_RANGE_MULT * (1.0 + Constants.SENTRY_NETWORK_TOWER_RANGE_MULT),
+		0.001, "both branches widen attack range")
+	var found: bool = false
+	for source in _grid._get_vision_sources(PLAYER):
+		if source[0] == _grid.world_to_grid(tower.global_position) \
+				and source[1] == Constants.TOWER_VISION \
+				and source[2] == GridWorld.VISION_LAYER_SURFACE:
+			found = true
+	assert_true(found, "fog-source radius stays TOWER_VISION on the surface layer")
+
+
 # ─── Fortification discipline ───
 
 func test_fortification_raises_building_hp() -> void:

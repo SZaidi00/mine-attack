@@ -4,6 +4,11 @@
 
 [resource]
 script = ExtResource("1_map")
+grid_x_min = -50
+grid_x_max = 50
+surface_rows = 10
+mine_entries_centered = true
+camera_start = Vector2(0, -128)
 player_building_cell = Vector2i(-40, 0)
 enemy_building_cell = Vector2i(40, 0)
 player_mine_cell = Vector2i(-20, -5)

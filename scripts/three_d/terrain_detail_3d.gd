@@ -7,7 +7,11 @@
 ## (plans/07-surface-prop-scattering.md) adds the seeded surface prop scatter;
 ## plan 09 composes generated + curated pack GLBs into map-seeded cluster
 ## noise and zone-aware kinds on visible SURFACE_GROUND cells. Plan 12 adds
-## MapDefinition-authored road exclusion and tree/rock region recipes. Every instance
+## MapDefinition-authored road exclusion and tree/rock region recipes. Plan 13
+## adds the underground decoration pass: timber support frames on DIRT cells
+## bordering excavated floors and sparse curated pebble rubble on solid rock /
+## depleted ore, logged to underground_log (never scatter_log) and probed as
+## underground_detail. Every instance
 ## is dune-grounded and skipped inside structure clearances. Multi-node kit
 ## meshes bake node transforms into merged surfaces, including normal-map
 ## tangents. Pure sim -> render (the grid is read, never written); densities
@@ -47,6 +51,33 @@ const SALT_SCALE := 505
 const PROP_SCALE_MIN := 0.7
 const PROP_SCALE_MAX := 1.1
 
+## Plan 13 underground decoration: the only curated rubble keys (already
+## imported kit pebbles). Their authored footprints span up to ~2 cells, so
+## instances are squashed flat against the host cell's edge — never placed in
+## missing tunnel-floor cells, never blocking walkable centers.
+const UNDERGROUND_PEBBLE_KEYS: Array[String] = [
+	"pack_pebble_round_1", "pack_pebble_round_3", "pack_pebble_square_2",
+]
+## Salt family 1200..1299 — distinct from drift/crystal/ember (7..99) and
+## scatter (500..505); seed-mixed via _scatter_salt so a pinned seed replays
+## the same decoration.
+const SALT_SUPPORT := 1200
+const SALT_SUPPORT_HEIGHT := 1201
+const SALT_PEBBLE := 1210
+const SALT_PEBBLE_KIND := 1211
+const SALT_PEBBLE_SIDE := 1212
+const SUPPORT_CHANCE: float = 0.16
+const ROCK_PEBBLE_CHANCE: float = 0.3
+const DEPLETED_ORE_PEBBLE_CHANCE: float = 0.24
+## Timber frame dims (world units): small doorframe silhouettes that stay
+## below unit height and well inside their host cell.
+const SUPPORT_POST_W: float = 0.036
+const SUPPORT_LINTEL_L: float = 0.30
+const SUPPORT_LINTEL_H: float = 0.05
+const SUPPORT_LINTEL_D: float = 0.045
+const SUPPORT_EDGE_INSET: float = 0.035
+const PEBBLE_MARGIN: float = 0.008
+
 ## BENCH toggle (plan 07 verification): false measures the terrain section
 ## without the scatter pass for the overhead comparison.
 static var scatter_enabled: bool = true
@@ -60,6 +91,12 @@ var _containers: Dictionary = {}  # Vector2i chunk key -> Node3D holder
 ## headless read-back (the dummy/opengl3 servers serve identity), which the
 ## GUT suite and the F3 probe read for counts/verification.
 var scatter_log: Dictionary = {}
+## Plan 13 underground manifest: chunk key -> {entry kind: Array[Transform3D]}
+## of the current rebuild — kinds are "support_post", "support_lintel", and the
+## UNDERGROUND_PEBBLE_KEYS. Kept separate from scatter_log, which the surface
+## region tests interpret as surface props; MultiMesh data itself has no
+## reliable headless read-back, so the arrays are stored alongside.
+var underground_log: Dictionary = {}
 var _seed: int = 0
 var _cluster_noise := FastNoiseLite.new()
 
@@ -85,6 +122,7 @@ func setup(grid: GridWorld, definition: MapDefinition = null) -> void:
 ## ground (when given) lifts surface drifts onto the R3 dune field.
 func rebuild_chunk(key: Vector2i, x_start: int, y_start: int, underground_view: bool, snow_level: float, ground: HeightField3D = null) -> void:
 	scatter_log.erase(key)
+	underground_log.erase(key)
 	var holder: Node3D
 	if _containers.has(key):
 		holder = _containers[key]
@@ -130,7 +168,7 @@ func rebuild_chunk(key: Vector2i, x_start: int, y_start: int, underground_view: 
 			var cz := center.y * WORLD_SCALE
 			if underground_view:
 				match cell.type:
-					GridWorld.CellType.ORE:
+					GridWorld.CellType.ORE, GridWorld.CellType.FRESH_ORE:
 						_add_crystals(pos, cx, cz, cell, crystals_xf, crystals_col)
 					GridWorld.CellType.LAVA:
 						_add_embers(pos, cx, cz, embers_xf, embers_col)
@@ -152,6 +190,13 @@ func rebuild_chunk(key: Vector2i, x_start: int, y_start: int, underground_view: 
 			holder.add_child(_make_prop_multimesh(PROP_KEYS[i], prop_xfs[i]))
 	if Probe3D.enabled and scatter_us > 0:
 		Probe3D.add("terrain_scatter", scatter_us / 1000.0)
+	if underground_view:
+		# Plan 13: timber supports and edge rubble run as their own timed
+		# section (underground_detail), never inside the surface scatter probe.
+		var ug_start := Time.get_ticks_usec() if Probe3D.enabled else 0
+		_populate_underground(key, x_start, y_start, holder)
+		if Probe3D.enabled:
+			Probe3D.add("underground_detail", (Time.get_ticks_usec() - ug_start) / 1000.0)
 	var log: Dictionary = {}
 	for i in range(PROP_KEYS.size()):
 		if not (prop_xfs[i] as Array[Transform3D]).is_empty():
@@ -208,6 +253,173 @@ func _add_embers(pos: Vector2i, cx: float, cz: float, xforms: Array[Transform3D]
 		xf.basis = Basis.from_euler(Vector3(0.0, ArtStyle3D.cell_hash(pos, 99 + i) * TAU, 0.0)).scaled(Vector3(r, h, r))
 		xforms.append(xf)
 		colors.append(Color.WHITE)
+
+
+# ─── Plan 13: underground supports and rubble ───
+
+## Timber frames on visible DIRT cells that border an excavated floor, plus
+## sparse dark pebble rubble on cave-in/magma rock and depleted ore. Runs only
+## on Standard/Fancy (the caller gates on detail_enabled), only on fog-visible
+## cells, and everything is seed-deterministic via _scatter_salt. Decorative
+## only — no collision, no support mechanic, no sim writes.
+func _populate_underground(key: Vector2i, x_start: int, y_start: int, holder: Node3D) -> void:
+	var posts_xf: Array[Transform3D] = []
+	var posts_col: Array[Color] = []
+	var lintels_xf: Array[Transform3D] = []
+	var lintels_col: Array[Color] = []
+	var pebble_xfs: Array = []
+	for i in range(UNDERGROUND_PEBBLE_KEYS.size()):
+		pebble_xfs.append([] as Array[Transform3D])
+	for dy in range(CHUNK_ROWS):
+		for dx in range(CHUNK_COLS):
+			var pos := Vector2i(x_start + dx, y_start + dy)
+			if pos.y < GridWorld.Y_MIN + 1 or pos.y > GridWorld.Y_MAX:
+				continue
+			var cell: GridWorld.Cell = _grid._cells.get(pos)
+			if cell == null or cell.type == GridWorld.CellType.EMPTY:
+				continue
+			if _grid.fog_state_at(GameManager.Team.PLAYER, pos) != 2:
+				continue
+			var center: Vector2 = _grid.grid_to_world(pos, true)
+			var cx := center.x * WORLD_SCALE
+			var cz := center.y * WORLD_SCALE
+			match cell.type:
+				GridWorld.CellType.DIRT:
+					_maybe_add_support(pos, cx, cz, posts_xf, posts_col, lintels_xf, lintels_col)
+				GridWorld.CellType.SOLID_ROCK, GridWorld.CellType.MAGMA_ROCK:
+					_maybe_add_pebble(pos, cx, cz, ROCK_PEBBLE_CHANCE, pebble_xfs)
+				GridWorld.CellType.ORE:
+					# Rich veins stay crystal-dominant; only exhausted tiles
+					# gain a small rubble accent.
+					if GridMining.is_depleted(cell):
+						_maybe_add_pebble(pos, cx, cz, DEPLETED_ORE_PEBBLE_CHANCE, pebble_xfs)
+	if not posts_xf.is_empty():
+		holder.add_child(_make_multimesh(_box(), posts_xf, posts_col, _detail_material()))
+		holder.add_child(_make_multimesh(_box(), lintels_xf, lintels_col, _detail_material()))
+	for i in range(UNDERGROUND_PEBBLE_KEYS.size()):
+		if not (pebble_xfs[i] as Array[Transform3D]).is_empty():
+			holder.add_child(_make_prop_multimesh(UNDERGROUND_PEBBLE_KEYS[i], pebble_xfs[i]))
+	var log: Dictionary = {}
+	if not posts_xf.is_empty():
+		log["support_post"] = posts_xf
+		log["support_lintel"] = lintels_xf
+	for i in range(UNDERGROUND_PEBBLE_KEYS.size()):
+		if not (pebble_xfs[i] as Array[Transform3D]).is_empty():
+			log[UNDERGROUND_PEBBLE_KEYS[i]] = pebble_xfs[i]
+	if not log.is_empty():
+		underground_log[key] = log
+
+
+## First orthogonal neighbor (fixed scan order) that is an excavated cell —
+## the tunnel mouth a support frame faces or a rubble pebble hugs. Returns
+## Vector2i.ZERO when the cell borders no excavated space.
+func _excavated_neighbor(pos: Vector2i) -> Vector2i:
+	for dir in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+		var n: Vector2i = pos + dir
+		if n.y > GridWorld.Y_MIN and n.y <= GridWorld.Y_MAX \
+				and n.x >= GridWorld.X_MIN and n.x <= GridWorld.X_MAX \
+				and not _grid.has_cell(n):
+			return dir
+	return Vector2i.ZERO
+
+
+## One timber doorframe per eligible cell: two posts plus a lintel spanning
+## the edge shared with the excavated neighbor, standing just inside the solid
+## cell so tunnel centers stay clear. Low probability plus the ore guard keep
+## tunnels from becoming support forests and veins crystal-dominant.
+func _maybe_add_support(pos: Vector2i, cx: float, cz: float,
+		posts_xf: Array[Transform3D], posts_col: Array[Color],
+		lintels_xf: Array[Transform3D], lintels_col: Array[Color]) -> void:
+	var face := _excavated_neighbor(pos)
+	if face == Vector2i.ZERO:
+		return
+	if ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_SUPPORT)) >= SUPPORT_CHANCE:
+		return
+	for dir in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+		var n: GridWorld.Cell = _grid._cells.get(pos + dir)
+		if n != null and (n.type == GridWorld.CellType.ORE
+				or n.type == GridWorld.CellType.FRESH_ORE):
+			return
+	var height := lerpf(0.26, 0.32, ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_SUPPORT_HEIGHT)))
+	var half_cell: float = GridWorld.CELL_SIZE * 0.5 * WORLD_SCALE
+	var post_span := SUPPORT_LINTEL_L * 0.5 - SUPPORT_POST_W * 0.5
+	# Frame plane sits inside the solid cell, this far off the shared edge.
+	var fx := cx
+	var fz := cz
+	if face == Vector2i.RIGHT:
+		fx = cx + half_cell - SUPPORT_EDGE_INSET
+	elif face == Vector2i.LEFT:
+		fx = cx - half_cell + SUPPORT_EDGE_INSET
+	elif face == Vector2i.DOWN:
+		fz = cz + half_cell - SUPPORT_EDGE_INSET
+	else:
+		fz = cz - half_cell + SUPPORT_EDGE_INSET
+	# Posts stand along the frame axis (x for LEFT/RIGHT faces, z otherwise).
+	var post_a := Vector3(fx, height * 0.5, cz - post_span)
+	var post_b := Vector3(fx, height * 0.5, cz + post_span)
+	var lintel_origin := Vector3(fx, height - SUPPORT_LINTEL_H * 0.5, cz)
+	var post_scale := Vector3(SUPPORT_POST_W, height, SUPPORT_POST_W)
+	var lintel_scale := Vector3(SUPPORT_LINTEL_D, SUPPORT_LINTEL_H, SUPPORT_LINTEL_L)
+	if face == Vector2i.LEFT or face == Vector2i.RIGHT:
+		post_a = Vector3(cx - post_span, height * 0.5, fz)
+		post_b = Vector3(cx + post_span, height * 0.5, fz)
+		lintel_origin = Vector3(cx, height - SUPPORT_LINTEL_H * 0.5, fz)
+		lintel_scale = Vector3(SUPPORT_LINTEL_L, SUPPORT_LINTEL_H, SUPPORT_LINTEL_D)
+	for p in [post_a, post_b]:
+		posts_xf.append(Transform3D(Basis.from_scale(post_scale), p))
+		posts_col.append(ArtStyle3D.PALETTE.wood)
+	lintels_xf.append(Transform3D(Basis.from_scale(lintel_scale), lintel_origin))
+	lintels_col.append(ArtStyle3D.PALETTE.wood_dark)
+
+
+## Sparse dark rubble flush to a cell edge — the edge shared with an excavated
+## neighbor when there is one, else a deterministic edge. The authored pebble
+## footprints span up to ~2 cells, so each instance squashes the facing axis
+## (and narrows the along axis) while keeping the imported 0.12 height band,
+## and the whole footprint stays inside the host cell: rubble reads against
+## the wall and never fills a walkable tunnel center.
+func _maybe_add_pebble(pos: Vector2i, cx: float, cz: float, chance: float, pebble_xfs: Array) -> void:
+	if ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_PEBBLE)) >= chance:
+		return
+	var kind := mini(int(ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_PEBBLE_KIND)) \
+		* UNDERGROUND_PEBBLE_KEYS.size()), UNDERGROUND_PEBBLE_KEYS.size() - 1)
+	var source := _prop_source(UNDERGROUND_PEBBLE_KEYS[kind])
+	if source.is_empty():
+		return
+	var norm := source["norm"] as Transform3D
+	var bounds: AABB = (source["mesh"] as Mesh).get_aabb()
+	var norm_scale := norm.basis.get_scale().x
+	# World extents after the imported footprint normalization.
+	var ext_x := bounds.size.x * norm_scale
+	var ext_z := bounds.size.z * norm_scale
+	var face := _excavated_neighbor(pos)
+	if face == Vector2i.ZERO:
+		var side := int(ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_PEBBLE_SIDE)) * 4.0)
+		face = [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN][mini(side, 3)]
+	var h1 := ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_PEBBLE_SIDE + 1))
+	var h2 := ArtStyle3D.cell_hash(pos, _scatter_salt(SALT_PEBBLE_SIDE + 2))
+	# Uniform squash (0.34..0.48) keeps every authored footprint inside the
+	# 0.32 cell while preserving the imported 0.12 height band; facing axis
+	# numbers below are shared by both orientations.
+	var squash := lerpf(0.34, 0.48, h1)
+	var half_cell: float = GridWorld.CELL_SIZE * 0.5 * WORLD_SCALE
+	var px := cx
+	var pz := cz
+	var span := half_cell - maxf(ext_x, ext_z) * squash * 0.5 - PEBBLE_MARGIN
+	if face == Vector2i.RIGHT:
+		px = cx + half_cell - ext_x * squash * 0.5 - PEBBLE_MARGIN
+		pz = cz + span * (h2 * 2.0 - 1.0)
+	elif face == Vector2i.LEFT:
+		px = cx - half_cell + ext_x * squash * 0.5 + PEBBLE_MARGIN
+		pz = cz + span * (h2 * 2.0 - 1.0)
+	elif face == Vector2i.DOWN:
+		pz = cz + half_cell - ext_z * squash * 0.5 - PEBBLE_MARGIN
+		px = cx + span * (h2 * 2.0 - 1.0)
+	else:
+		pz = cz - half_cell + ext_z * squash * 0.5 + PEBBLE_MARGIN
+		px = cx + span * (h2 * 2.0 - 1.0)
+	var place := Transform3D(Basis.from_scale(Vector3(squash, 1.0, squash)), Vector3(px, 0.0, pz))
+	(pebble_xfs[kind] as Array[Transform3D]).append(place * norm)
 
 
 func _add_prop(pos: Vector2i, cx: float, cz: float, ground: HeightField3D, xfs: Array) -> void:
@@ -387,6 +599,18 @@ static func _cone() -> CylinderMesh:
 		_unit_cone.height = 1.0
 		_unit_cone.radial_segments = 4
 	return _unit_cone
+
+
+## Shared unit cube for the plan-13 timber frames; per-instance transforms
+## scale/place the posts and lintels.
+static var _unit_box: BoxMesh
+
+
+static func _box() -> BoxMesh:
+	if _unit_box == null:
+		_unit_box = BoxMesh.new()
+		_unit_box.size = Vector3.ONE
+	return _unit_box
 
 
 func _make_multimesh(mesh: Mesh, xforms: Array[Transform3D], colors: Array[Color], material: Material) -> MultiMeshInstance3D:

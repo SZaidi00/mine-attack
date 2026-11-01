@@ -2,7 +2,8 @@ extends GutTest
 
 # Fog of War & vision (Revamp Phase 1): per-team vision maps, remembered
 # tiles, enemy silhouettes, fog combat rules, and the lantern structures
-# (placement rules, tiers, ore reveal, destruction salvage).
+# (placement rules, tiers, ore reveal, destruction salvage) plus built sentry
+# towers as surface-only vision sources.
 
 const PLAYER: int = 0
 const ENEMY: int = 1
@@ -55,6 +56,8 @@ func after_each() -> void:
 	# and distance rules start clean for every test.
 	for lantern in get_tree().get_nodes_in_group("lanterns"):
 		lantern.free()
+	for tower in get_tree().get_nodes_in_group("towers"):
+		tower.free()
 	GameManager.set_difficulty(GameManager.Difficulty.NORMAL)
 
 
@@ -85,6 +88,23 @@ func _place_built_lantern(kind: String, cell: Vector2i) -> Node2D:
 	lantern._build_progress = 999.0
 	lantern._process(0.1)
 	return lantern
+
+
+## Places a tower through the real placement path and optionally
+## fast-forwards its construction to completion.
+func _place_tower(cell: Vector2i, build_instantly: bool = true) -> Node2D:
+	var ok: bool = _pc.try_place_structure("tower", _grid.grid_to_world(cell))
+	assert_true(ok, "tower placement must succeed at %s" % str(cell))
+	var tower: Node2D = null
+	for t in get_tree().get_nodes_in_group("towers"):
+		tower = t
+	assert_not_null(tower, "a tower must exist after placement")
+	if tower == null:
+		return null
+	if build_instantly:
+		tower._build_progress = 999.0
+		tower._process(0.1)
+	return tower
 
 
 # ─── Vision maps ───
@@ -313,6 +333,73 @@ func test_surface_fighter_does_not_light_underground() -> void:
 	await wait_seconds(0.1)
 	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(2, 0)), 2, "surface archer must light the surface around it")
 	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(0, 1)), 0, "surface archer must NOT light the underground below")
+
+
+# ─── Sentry towers as vision sources ───
+
+func test_unbuilt_tower_is_not_a_vision_source() -> void:
+	_place_tower(Vector2i(-20, 0), false)
+	var found: bool = false
+	for source in _grid._get_vision_sources(PLAYER):
+		if source[0] == Vector2i(-20, 0) and source[1] == Constants.TOWER_VISION:
+			found = true
+	assert_false(found, "under-construction tower must contribute no vision source")
+
+
+func test_built_tower_is_a_surface_vision_source() -> void:
+	_place_tower(Vector2i(-20, 0))
+	var found: bool = false
+	for source in _grid._get_vision_sources(PLAYER):
+		if source[0] == Vector2i(-20, 0) \
+				and source[1] == Constants.TOWER_VISION \
+				and source[2] == GridWorld.VISION_LAYER_SURFACE:
+			found = true
+	assert_true(found, "built tower must contribute exactly [cell, TOWER_VISION, SURFACE]")
+
+
+func test_built_tower_lights_only_surface() -> void:
+	_place_tower(Vector2i(-20, 0))
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 2,
+		"tower vision reaches the top surface-band row")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.Y_MIN + 1)), 0,
+		"tower must NOT light the underground cell directly below")
+
+
+func test_player_tower_does_not_reveal_enemy_fog() -> void:
+	_place_tower(Vector2i(-20, 0))
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 2,
+		"player tower lifts PLAYER fog")
+	assert_eq(_grid.fog_state_at(ENEMY, Vector2i(-20, GridWorld.SURFACE_TOP)), 0,
+		"player tower must NOT lift ENEMY fog")
+
+
+func test_enemy_tower_reveals_enemy_fog_only() -> void:
+	var tower: Node2D = _place_tower(Vector2i(-20, 0))
+	tower.team = ENEMY  # pretend the enemy built it here
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(ENEMY, Vector2i(-20, GridWorld.SURFACE_TOP)), 2,
+		"enemy tower lifts ENEMY fog for its own team")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 0,
+		"enemy tower must NOT lift PLAYER fog")
+
+
+func test_destroyed_tower_stops_revealing_but_stays_remembered() -> void:
+	var tower: Node2D = _place_tower(Vector2i(-20, 0))
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 2,
+		"setup: the built tower lights the top row")
+	tower.take_damage(9999)
+	assert_eq(get_tree().get_nodes_in_group("towers").size(), 0,
+		"destroyed tower leaves the towers group immediately")
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 1,
+		"live reveal stops on the next update, but the cell stays remembered")
+	GameManager.match_time += Constants.FOG_MEMORY_DURATION + 1.0
+	await wait_seconds(0.1)
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 0,
+		"the memory fades back to full fog")
 
 
 # ─── Lanterns as combat targets ───

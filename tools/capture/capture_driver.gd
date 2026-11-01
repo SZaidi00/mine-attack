@@ -84,6 +84,9 @@ func _ready() -> void:
 
 
 func _apply_game_config(config: Dictionary) -> void:
+	# Capture (and BENCH) are wide-only: pin the world profile before the shell
+	# loads so the sim's _enter_tree applies the authored 101x10 board.
+	GameManager.set_world_profile_request("wide")
 	GameManager.set_difficulty(config.difficulty as GameManager.Difficulty)
 	GameManager.set_adaptive_difficulty(false)
 	GameManager.set_map_seed(config.seed)

@@ -100,6 +100,12 @@ var ai_opener: String = "balanced"
 # replays the same map; unlocked matches re-roll per match (see hud.gd).
 var map_seed: int = -1
 var map_seed_locked: bool = false
+# Launch intent for the next scene load, not per-match state: which world
+# profile the sim applies in main.gd's _enter_tree — "wide" (the 101x10
+# authored 3D board) or "legacy" (the 81x1 main-style 2D board). The main
+# menu's Play flow and the capture driver set it right before changing scene;
+# reset() intentionally preserves it so the suite defaults stay wide.
+var world_profile_request: String = "wide"
 # Soft pause (separate from the tree-pausing pause menu): a temporary 0x speed
 # the player can toggle from the HUD without bringing up the exit menu. It is
 # cleared on match reset so Play Again does not start paused.
@@ -212,7 +218,9 @@ func reset() -> void:
 	_cached_modifiers_key = ""
 	# Note: difficulty, adaptive_difficulty and game_speed are intentionally
 	# kept so Play Again preserves all three choices. soft_paused is cleared so
-	# Play Again never starts in a paused state.
+	# Play Again never starts in a paused state. world_profile_request is launch
+	# intent (set by the menu/capture entry points), likewise not per-match
+	# state, so reset() leaves it alone too.
 
 
 ## Sets the player-chosen game speed. The value is always stored (so the win
@@ -261,6 +269,14 @@ func clear_map_seed() -> void:
 	map_seed = -1
 	map_seed_locked = false
 	DebugLog.log_command("GameManager", "clear_map_seed", "random")
+
+
+## Sets the world-profile launch intent for the next scene load (main menu
+## Play, capture driver). Only "wide"/"legacy" are meaningful; anything else
+## falls back to "wide" so a bad request can never select a nonexistent map.
+func set_world_profile_request(request: String) -> void:
+	world_profile_request = "legacy" if request == "legacy" else "wide"
+	DebugLog.log_command("GameManager", "set_world_profile_request", world_profile_request)
 
 
 ## Mid-match smoothing offset in tier steps (see _difficulty_offset).

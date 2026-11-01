@@ -37,7 +37,8 @@ mine-attack/
 │                      # weather_manager, ai_belief_system, match_stats
 │   ├── controllers/   # ai_controller, player_controller + helper modules
 │   ├── resources/     # unit_data.gd, faction_data.gd, map_definition.gd,
-│   │                  # units/*.tres, factions/*.tres, maps/default.tres
+│   │                  # units/*.tres, factions/*.tres, maps/default.tres,
+│   │                  # maps/legacy.tres (the plan-14 2D world profile)
 │   ├── ui/            # hud + helper modules, debug_overlay, layer_indicator,
 │                      # training_queue_panel, research_panel, unit_button, main_menu,
 │                      # match_graph, minimap, tutorial_hints, tutorial_panel,
@@ -58,12 +59,21 @@ mine-attack/
 │   │                  # world_height_at() ground query, emissive
 │   │                  # lava pass, storm snow cover, lit vertex-color albedo with
 │   │                  # smoothed surface normals and a Standard+ world-triplanar
-│   │                  # detail texture that preserves cell/fog colors),
+│   │                  # detail texture that preserves cell/fog colors; Plan 13
+│   │                  # gives mined-out underground cells presentation-only
+│   │                  # floors — cold depth-strata colors, deterministic seams,
+│   │                  # same fog tint semantics; the grid is read-only and the
+│   │                  # underground stays a flat X-Y plane, never vertical 3D),
 │   │                  # terrain_detail_3d.gd (MultiMesh ore crystals / lava embers /
 │   │                  # snow drifts plus plan-07/09 seeded surface scatter —
 │   │                  # generated + curated Quaternius GLBs, map-seeded cluster
 │   │                  # noise and zone-aware kinds, fog + structure-clearance gated,
-│   │                  # dune-grounded; scatter_log mirrors the instances for tests),
+│   │                  # dune-grounded; scatter_log mirrors the instances for tests;
+│   │                  # Plan 13 adds the separate quality-gated underground pass —
+│   │                  # timber supports on DIRT cells bordering excavated floors
+│   │                  # plus sparse pebble rubble (pack_pebble_*) on cave-in/magma
+│   │                  # rock and depleted ore, Standard/Fancy + fog-visible cells
+│   │                  # only, decorative only, logged to underground_log for tests),
 │   │                  # backdrop_3d.gd (plan-09 seeded noninteractive ground skirt,
 │   │                  # three distant ridge layers and Standard+ pine silhouettes,
 │   │                  # all outside playable cells and hidden underground),
@@ -109,7 +119,10 @@ mine-attack/
 │   │                  # bloom on Standard+, SSAO/shadows on Fancy), effects_3d.gd
 │   │                  # (camera-local full-depth storm snow and eruption cinders/ash,
 │   │                  # underground dust motes, world-space cave-in bursts + R6
-│   │                  # first-breach dust pool and fading ground-crack decal), art_style_3d.gd
+│   │                  # first-breach dust pool and fading ground-crack decal;
+│   │                  # Plan 13 adds a throttled mining-dust burst on GridWorld's
+│   │                  # cell_mined — underground view, fog-visible cells, detail
+│   │                  # presets only), art_style_3d.gd
 │   │                  # (3d-visual-revamp R2 palette/material/bloom tokens, warm-emission
 │   │                  # policy, Potato/Standard/Fancy quality switch — presets also
 │   │                  # carry a viewport render scale (Potato 0.75, web Standard 0.85,
@@ -172,14 +185,16 @@ mine-attack/
 │   │                  # one-shot dust/crack feedback + minimal camera nudge)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
-├── tests/             # GUT test suite (77 test scripts)
+├── tests/             # GUT test suite (81 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
 │                      # gen_crawler_sprites.gd, gen_unit_glbs.py (R7 deterministic
 │                      # sculpted/textured unit GLBs), gen_prop_glbs.py
 │                      # (plan 06 deterministic prop GLBs — boulder/pine/stump/crate,
 │                      # the surface-scatter dressing for plan 07),
 │                      # import_kit_props.py (plan 09 curated glTF/GLB -> embedded,
-│                      # ground-normalized kit props), curate_skeletal_units.py
+│                      # ground-normalized kit props; --validate-only checks static
+│                      # kit props, skeletal rigs stay with curate_skeletal_units.py),
+│                      # curate_skeletal_units.py
 │                      # (plan 10 native KayKit rigs, clips, hand tools, in-place /
 │                      # triangle validation; models/packs/SOURCES.md holds exact
 │                      # licenses, source/final hashes, and clip provenance),
@@ -203,7 +218,18 @@ mine-attack/
 > `"3d"` (default) or `"2d"` (legacy: Play loads `main.tscn` directly, and
 > since desktop rendering switched to `forward_plus` for the 3D port, a
 > 2D-legacy desktop run renders through `forward_plus`; the web/mobile
-> overrides keep `gl_compatibility`). The Node3D
+> overrides keep `gl_compatibility`). Play also sets a world-profile
+> launch intent — `GameManager.world_profile_request` (`"wide"`/`"legacy"`,
+> preserved by `GameManager.reset()`) — which `scripts/world/main.gd`'s
+> `_enter_tree` resolves into a `MapDefinition` (plan 14): `"3d"` keeps the
+> wide 101×10 authored board (roads/regions, cell-centered mines at
+> `(±20,-5)`, camera `(0,-128)`), while `"2d"` swaps in
+> `scripts/resources/maps/legacy.tres` — the `main`-branch world: 81
+> columns, a single surface row, bases at `x=±30`, corner-origin mines at
+> `x=±15` on row 0, camera `(0,-150)`, and no road/region dressing. The
+> profile is applied to the `GridWorld` bounds statics before any child
+> `_ready`; same-seed ore layouts are deterministic only within one
+> profile (a legacy seed replays the legacy board, not the wide one). The Node3D
 > shell mounts the untouched `scenes/main.tscn` sim at `/root/Main` (so
 > every hard-coded path keeps working), hides its CanvasItem layers, and
 > renders the 3D presentation in `scenes/world_3d.tscn` (chunked terrain
@@ -268,7 +294,7 @@ mine-attack/
 > class. On `main`,
 > Play loads `scenes/main.tscn` directly.
 
-`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`. The root `scripts/world/main.gd` applies the base/mine markers from `MapDefinition` (`scripts/resources/maps/default.tres`) in `_enter_tree`, before child initialization. Bases sit at `x=±40`; both mine entrances are cell-centered at `(±20,-5)`. The resource also carries visual-only front-road/mine-spur rectangles and the western-pinewood/eastern-rockfield prop regions. The scene contains:
+`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`. The root `scripts/world/main.gd` resolves the world profile from `GameManager.world_profile_request` (`"legacy"` → `scripts/resources/maps/legacy.tres`, otherwise the exported/default wide resource), applies it via `GridWorld.apply_world_profile()`, applies the resource's `camera_start` to the Camera2D, and applies the base/mine markers from that `MapDefinition` in `_enter_tree`, before child initialization. On the wide board bases sit at `x=±40` with cell-centered mine entrances at `(±20,-5)`; the legacy profile uses bases at `x=±30` with corner-origin mines at `x=±15` on row 0. The wide resource also carries visual-only front-road/mine-spur rectangles and the western-pinewood/eastern-rockfield prop regions (the legacy resource carries none). The scene contains:
 
 - `World/VolcanoBackground` — decorative volcano sprite.
 - `World/GridWorld` — procedural map, A*, fog of war, rendering.
@@ -290,7 +316,7 @@ Autoloads (load order from `project.godot`): `Constants`, `GameManager`, `Factio
 Global singletons. All hold per-match state that survives scene reloads; `hud.gd` resets them on Play Again / Quit to Menu.
 
 - `constants.gd` — balance numbers, costs, train times, upgrade tables, vision/fog constants, dynamic-terrain event tuning (`LAVA_*`/`CAVEIN_*`/`MAGMA_*`/`ORE_*`), weather tuning (`SNOWSTORM_*`), volcano tuning (`VOLCANO_*`), research branch tree (`RESEARCH_TECHS`) and branch-effect tuning, input action `StringName`s. Source of truth for all numeric balance.
-- `game_manager.gd` — `Team`/`Difficulty` enums (Easy, Normal, Hard, Nightmare, Godly), team colors, difficulty modifiers, game speed, match timer, win/loss, soft pause. Rolls the AI's per-match opener (`AI_OPENERS`: balanced/rush/boom/turtle, faction-weighted) which shifts wave thresholds, the miner quota, and build order. Adaptive difficulty smoothing (opt-in via `adaptive_difficulty`, main-menu checkbox): a mid-match `_difficulty_offset` (±1 tier steps) interpolates the numeric difficulty modifiers between adjacent `DIFFICULTY_MODIFIERS` rows (the smarts behavior tier flips only at a full step), nudged by the AI's smoothing evaluator. Holds the map seed state (`map_seed`/`map_seed_locked`): a user-pinned seed replays the same map on Play Again; an unlocked one re-rolls per match. `hit_stop(scale, duration_sec)` drops `Engine.time_scale` briefly for signature impacts (Brute dragon Crush), mirroring the win slow-mo's wall-clock pattern with a separate timer: it yields to the win slow-mo entirely, earliest expiry wins among stacked hit-stops, and it skips under the reduced-motion accessibility setting.
+- `game_manager.gd` — `Team`/`Difficulty` enums (Easy, Normal, Hard, Nightmare, Godly), team colors, difficulty modifiers, game speed, match timer, win/loss, soft pause. Rolls the AI's per-match opener (`AI_OPENERS`: balanced/rush/boom/turtle, faction-weighted) which shifts wave thresholds, the miner quota, and build order. Adaptive difficulty smoothing (opt-in via `adaptive_difficulty`, main-menu checkbox): a mid-match `_difficulty_offset` (±1 tier steps) interpolates the numeric difficulty modifiers between adjacent `DIFFICULTY_MODIFIERS` rows (the smarts behavior tier flips only at a full step), nudged by the AI's smoothing evaluator. Holds the map seed state (`map_seed`/`map_seed_locked`): a user-pinned seed replays the same map on Play Again; an unlocked one re-rolls per match. Also holds the world-profile launch intent (`world_profile_request`: `"wide"` default / `"legacy"`) set by the main menu's Play flow and the capture driver before the scene changes — it is launch intent rather than match state, so `reset()` preserves it and the GUT suite stays on the wide board by default. `hit_stop(scale, duration_sec)` drops `Engine.time_scale` briefly for signature impacts (Brute dragon Crush), mirroring the win slow-mo's wall-clock pattern with a separate timer: it yields to the win slow-mo entirely, earliest expiry wins among stacked hit-stops, and it skips under the reduced-motion accessibility setting.
 - `faction_manager.gd` — faction picks (Arcane, Brute, Industrial), hidden-faction identification, faction-modified costs and starting bonuses.
 - `economy_manager.gd` — coin, population, miner/fighter upgrade levels, units trained, coin mined. Baseline income: both teams trickle `BASELINE_INCOME_COIN` every `BASELINE_INCOME_INTERVAL` from match start, no eligibility gates (AI scaled by the difficulty coin multiplier). Welfare trickle: a team with zero living miners and not enough coin to buy one gains `WELFARE_COIN` every `WELFARE_INTERVAL` (same AI scaling), so a wiped economy can always re-staff.
 - `research_manager.gd` — timed branch research tree: mutually-exclusive tiers, one-time 500g respec, active research slot with queue, Ore Sonar scan.
@@ -320,9 +346,9 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
 
 ### `scripts/world/`
 
-- `main.gd` — root gameplay-scene setup; applies the `MapDefinition` base/mine markers before child `_ready` methods, so footprints, shafts, and ladders use the same layout.
-- `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers. The surface is a 101-column multi-row battlefield band (`x ∈ [-50,50]`), not a single row: `SURFACE_ROWS` (10) walkable rows span `y ∈ [SURFACE_TOP, Y_MIN]` = `[-9, 0]`; underground stays at `y >= 1`. `GridWorld.is_surface_row(y)` is the shared predicate — use it instead of `y == 0` checks. Base building footprints genuinely seal their five rows (`building.gd._mark_footprint_solid`), leaving row 0 in front of each base and the added lanes above it walkable.
-  - `grid_map_generation.gd` — map generation and A* initialization. Generates the 101-column, 10-row surface band above row 0 and the underground layers; the A* region covers both. Initial shafts follow the `MapDefinition` mine columns rather than fixed coordinates. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
+- `main.gd` — root gameplay-scene setup; resolves the world profile (`GameManager.world_profile_request` → `MapDefinition`, applied through `GridWorld.apply_world_profile()`) and the base/mine/camera layout before child `_ready` methods, so footprints, shafts, ladders, and camera bookmarks all use the same profile.
+- `grid_world.gd` — `Cell` inner class, `CellType` enum, signals, grid/A* state, fog maps; delegates to helpers. `X_MIN`/`X_MAX`/`SURFACE_ROWS`/`SURFACE_TOP` are match-scoped statics (wide defaults from `Constants`) that `apply_world_profile(definition)` re-assigns atomically per match — never write them individually. The wide surface is a 101-column multi-row battlefield band (`x ∈ [-50,50]`), not a single row: `SURFACE_ROWS` (10) walkable rows span `y ∈ [SURFACE_TOP, Y_MIN]` = `[-9, 0]`; underground stays at `y >= 1`; the legacy profile collapses this to 81 columns × one row (`SURFACE_TOP` = 0). `GridWorld.is_surface_row(y)` is the shared predicate — use it instead of `y == 0` checks. Base building footprints genuinely seal their five rows (`building.gd._mark_footprint_solid`), leaving row 0 in front of each base and the added lanes above it walkable (on the legacy board the `has_cell` guard makes the sub-row seals a no-op, as on `main`).
+  - `grid_map_generation.gd` — map generation and A* initialization. Generates the 101-column, 10-row surface band above row 0 (81×1 under the legacy profile) and the underground layers; the A* region covers both. Initial shafts follow the `MapDefinition` mine columns rather than fixed coordinates. Uses a dedicated `RandomNumberGenerator` seeded from the match's map seed (`GameManager.map_seed`, editable on the main-menu faction-select screen; `-1` = roll fresh), so the same seed always rebuilds the same map while weather/AI rolls stay random — determinism is per world profile, since a legacy seed consumes a different column count than a wide one. Each seed also rolls a map profile: a central-wall HP multiplier (`MAP_WALL_HP_MULTS`) and an ore richness curve (`MAP_ORE_CURVES`), both stored on `GridWorld.map_profile`.
   - `grid_pathfinding.gd` — `find_path`, `find_path_underground` (crawler variant: seals the whole surface band for the query so underground raids can't bypass the central wall over the top), walkability helpers, wall cell sealing.
   - `grid_fog_of_war.gd` — vision maps, memory, ghost silhouettes, fog rendering.
   - `grid_drawing.gd` — surface/underground terrain drawing, effects, wall HP bar.
@@ -359,10 +385,10 @@ Controllers are split into thin main classes plus `RefCounted` helper modules.
   - `hud_styling.gd` — HUD-specific styling helpers, now backed by `ui_theme_tokens.gd`.
   - `hud_menus.gd` — pause menu and radial build menu (options fan out above the Build button; icons, costs, grayed out when unaffordable/at max count; pigeon card icon is generated pixel art since no sprite asset exists). Picking a structure hides the tray while the placement ghost is armed — a visible tray would eat the confirming click — and reopening the menu mid-placement cancels the ghost.
   - `hud_updates.gd` — label/button synchronization, faction icons + "Enemy: ???" indicator, selection readout.
-- `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system. A persisted Mode dropdown (`[video] play_mode`, default `"3d"`) beside the Resolution row picks the Play target — the 3D shell or the legacy 2D `main.tscn` — via `_play_scene_path()`.
+- `main_menu.gd` — title/difficulty/faction select (selected card gets a gold glow; faction-colored particles drift behind the select screen); uses the shared token system. A persisted Mode dropdown (`[video] play_mode`, default `"3d"`) beside the Resolution row picks the Play target — the 3D shell or the legacy 2D `main.tscn` — via `_play_scene_path()`, with the matching world profile via `_play_world_profile()` (plan 14).
 - `settings_panel.gd` — shared settings popup opened from the main menu and pause menu Settings buttons; scrollable card with three groups — Display (map seed, UI scale slider, colorblind / reduced motion / reduced flash / tutorial checkboxes, tutorial reset), Audio (SFX volume slider on the SFX bus), Controls (capture-key rebinding rows for `Constants.REMAPPABLE_ACTIONS` with conflict rejection). Main menu and pause menu keep their own inline resolution rows (desktop only).
 - `tutorial_panel.gd` — paginated first-time-player tutorial (7 screens: goal, economy, units, structures, research, weather/terrain, controls/tips) opened from the main menu's Tutorial button; `create()` returns a hidden full-rect overlay like `SettingsPanel`, with Back/Next/Finish navigation and icon-illustrated entry rows built from `_PAGES` data.
-- `minimap.gd` — canvas-drawn minimap Control (terrain by `CellType`, 3-state fog overlay, team-colored unit/building dots, camera viewport rect, click/drag to move the camera; shape-coded ore/lava when colorblind mode is on).
+- `minimap.gd` — canvas-drawn minimap Control (terrain by `CellType`, 3-state fog overlay, team-colored unit/building dots, camera viewport rect, click/drag to move the camera; shape-coded ore/lava when colorblind mode is on). Its map geometry is instance state computed in `_ready` from the live `GridWorld` bounds statics (the applied world profile), not from `Constants.GRID_*` — correct for both the wide and legacy boards.
 - `tutorial_hints.gd` — first-match contextual hints (~10 trigger conditions polled on a 1s tick, one card at a time, dismiss persists to `SettingsManager.tutorial_seen`).
 - `coaching_hints.gd` — `class_name CoachingHints` pure function generating 2–3 post-game observations from the `MatchStats` summary (fast-loss, base-damage, economy ratio, army trade, max-tier rules).
 - `match_graph.gd` — post-game coin/population charts from the MatchStats timeline.
@@ -493,7 +519,9 @@ props that plan 07 scatters) with `python3 tools/gen_prop_glbs.py [--validate-on
 min-y 0, metallic 0 / roughness 0.92; self-validates tri/height bands and
 rejects corrupted copies). Curated kit props use
 `python3 tools/import_kit_props.py --source /path/to/pack/glTF --prop Source.gltf=pack_key=0.30`
-(repeat `--prop` per model; `--validate-only` rechecks committed GLBs). Curated
+(repeat `--prop` per model; `--validate-only` strictly checks the static kit
+props and skips GLBs the manifest registers as skeletal — those remain covered
+by `tools/curate_skeletal_units.py --validate-only`). Curated
 skeletal humanoids use `python3 tools/curate_skeletal_units.py --characters
 /path/to/KayKit_Adventurers_2.0_FREE --animations
 /path/to/KayKit_Character_Animations_1.1 --tools
@@ -599,6 +627,7 @@ VERSION_OVERRIDE=v0.2.0 git push origin main
 - Tests live in `tests/` and are discovered by `-gdir=res://tests`.
 - Many tests instantiate `scenes/main.tscn`, run assertions against the live scene, and free it immediately in `after_all()` (not `queue_free()`) to avoid node-name collisions on the next test script.
 - Deterministic tests seed the RNG (`seed(12345)`) and rely on `Constants.DEBUG` being off so `GridWorld` does not re-seed itself. Map generation does NOT follow the global RNG stream (dedicated map RNG, see `grid_map_generation.gd`) — tests that need a fixed map pin `GameManager.set_map_seed(n)` in setup and `GameManager.clear_map_seed()` in teardown.
+- World profiles (plan 14): the GUT suite boots the wide board by default — `GameManager.world_profile_request` defaults to `"wide"` and is launch intent, never derived from the persisted play-mode setting. Tests that boot a legacy world must pin `"legacy"`, then restore `"wide"` and re-apply the wide profile afterward (see `tests/test_world_profile.gd`) so the match-scoped `GridWorld` bounds statics cannot leak into later scripts.
 - Category coverage: AI awareness/belief/crawler/faction strategy/micro/openers/pressure/retaliation/smarts/strategy, building queue, crawler, defend leash, difficulty smoothing, dragon, dynamic terrain, economy, engineer, factions, fog of war, grid world, kill units, necromancy, pigeon, rally, research, stance modes, structures, tech branches, unit guards, volcano, weather, welfare, control groups, attack-move, minimap, tutorial hints, tutorial panel, coaching hints, production toasts, accessibility settings, key remapping, waypoint orders, formations, threat alerts, dynamic music, juice (hit-stop / necro VFX), surface band (multi-row battlefield).
 
 ## Security and deployment considerations

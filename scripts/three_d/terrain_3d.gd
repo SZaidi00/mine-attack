@@ -8,7 +8,9 @@
 ## surface corners smoothed into continuous normals. Standard+ multiplies the
 ## cell/fog vertex colors by a subtle world-triplanar detail texture. Plan 12
 ## applies MapDefinition compacted-road and authored-region tints before fog.
-## The grid is only read, never written.
+## Plan 13 gives mined-out underground cells presentation-only floors: cold
+## depth-strata colors, deterministic seams, and the same fog tint semantics
+## as normal cells. The grid is only read, never written.
 extends Node3D
 
 const WORLD_SCALE: float = 0.01
@@ -42,6 +44,12 @@ const DIRT_MID_COLOR := ArtStyle3D.PALETTE.rock
 const DIRT_DEEP_COLOR := ArtStyle3D.PALETTE.rock_dark
 const FOG_VOID_TINT := ArtStyle3D.PALETTE.fog_void
 const FOG_SHADOW_TINT := ArtStyle3D.PALETTE.rock_dark
+## Plan 13 floor décor lifts: seams sit just above the flat floor but stay
+## under the lava glow pass (GLOW_LIFT 0.004) and the fog overlay (0.06).
+const FLOOR_SEAM_LIFT: float = 0.002
+const FLOOR_SEAM_SALT := 913
+const FLOOR_SEAM_CHANCE: float = 0.42
+const FLOOR_COLOR_SALT := 911
 
 var _grid: GridWorld
 var _map_definition: MapDefinition
@@ -343,6 +351,12 @@ func _rebuild_chunk(key: Vector2i) -> void:
 			if pos.y < GridWorld.SURFACE_TOP or pos.y > GridWorld.Y_MAX + 1:
 				continue
 			if not _grid.has_cell(pos):
+				# Plan 13: a missing in-bounds underground cell is excavated
+				# space — draw its presentation-only floor (and optional seam)
+				# before skipping, so tunnels read as carved mine instead of
+				# holes in the board. The sim never gains a Cell for it.
+				if _is_excavated_floor(pos):
+					_add_excavated_floor(st, pos)
 				continue
 			if _underground_view and _grid.is_surface_row(pos.y):
 				continue
@@ -399,6 +413,106 @@ func _corner_heights(pos: Vector2i, _cell: GridWorld.Cell) -> Array[float]:
 		height_field.height_at_cell(pos.x + 1, pos.y + 1),
 		height_field.height_at_cell(pos.x, pos.y + 1),
 	]
+
+
+## Plan 13: true when pos is genuine excavated space — a real in-bounds
+## underground grid position whose sim entry was mined away. Surface rows,
+## out-of-bounds positions, present cells, and the surface view never qualify,
+## so tests can separate tunnel floors from plain absent data.
+func _is_excavated_floor(pos: Vector2i) -> bool:
+	return _underground_view \
+		and pos.y > GridWorld.Y_MIN and pos.y <= GridWorld.Y_MAX \
+		and pos.x >= GridWorld.X_MIN and pos.x <= GridWorld.X_MAX \
+		and not _grid.has_cell(pos)
+
+
+## Plan 13 excavated-floor base color: the seven-layer depth mapping
+## ((pos.y - 1) / 3 + 1) picks the shallow/mid/deep mine-floor token, nudged
+## by a small deterministic hash so floors stay stable across rebuilds and
+## pinned seeds replay identical strata.
+func _floor_color(pos: Vector2i) -> Color:
+	var layer := (pos.y - 1) / 3 + 1
+	var base: Color
+	if layer <= 2:
+		base = ArtStyle3D.PALETTE.mine_floor_shallow
+	elif layer <= 4:
+		base = ArtStyle3D.PALETTE.mine_floor_mid
+	else:
+		base = ArtStyle3D.PALETTE.mine_floor_deep
+	return base.lightened(ArtStyle3D.cell_hash(pos, FLOOR_COLOR_SALT) * 0.05)
+
+
+## Floor color with the exact normal-cell fog semantics: hidden floors take
+## the opaque void tint (the fog overlay keeps them covered), remembered
+## floors dim toward deep-rock shadow, visible floors keep their strata color.
+func _excavated_floor_color(pos: Vector2i) -> Color:
+	var color := _floor_color(pos)
+	match _grid.fog_state_at(GameManager.Team.PLAYER, pos):
+		0:
+			return FOG_VOID_TINT
+		1:
+			return color.lerp(FOG_SHADOW_TINT, 0.8)
+	return color
+
+
+## Deterministic per-cell decision (stable across rebuilds) for the subtle
+## crack strip on an excavated floor.
+func _has_floor_seam(pos: Vector2i) -> bool:
+	return ArtStyle3D.cell_hash(pos, FLOOR_SEAM_SALT) < FLOOR_SEAM_CHANCE
+
+
+## One flat floor quad (plus its optional seam strips) for an excavated cell.
+## Purely presentational — the sim never gains a Cell and A* stays untouched.
+func _add_excavated_floor(st: SurfaceTool, pos: Vector2i) -> void:
+	var center: Vector2 = _grid.grid_to_world(pos, true)
+	var cx := center.x * WORLD_SCALE
+	var cz := center.y * WORLD_SCALE
+	var color := _excavated_floor_color(pos)
+	_add_quad(st, cx, cz, color)
+	if _has_floor_seam(pos):
+		_add_floor_seam(st, pos, cx, cz, color)
+
+
+## Subtle deterministic seam/crack strips, drawn at FLOOR_SEAM_LIFT (under the
+## lava glow lift and the fog overlay) in the fog-tinted floor's darkened hue.
+func _add_floor_seam(st: SurfaceTool, pos: Vector2i, cx: float, cz: float, color: Color) -> void:
+	var seam_color := color.darkened(0.38)
+	var half: float = GridWorld.CELL_SIZE * 0.5 * WORLD_SCALE
+	var h1 := ArtStyle3D.cell_hash(pos, FLOOR_SEAM_SALT + 1)
+	var h2 := ArtStyle3D.cell_hash(pos, FLOOR_SEAM_SALT + 2)
+	var h3 := ArtStyle3D.cell_hash(pos, FLOOR_SEAM_SALT + 3)
+	var a := Vector3(cx - half + h1 * half * 2.0, FLOOR_SEAM_LIFT, cz - half)
+	var mid := Vector3(cx - half * 0.6 + h2 * half * 1.2, FLOOR_SEAM_LIFT,
+		cz - half * 0.6 + h3 * half * 1.2)
+	var b := Vector3(cx + half, FLOOR_SEAM_LIFT, cz - half + h1 * half * 1.6)
+	_add_flat_strip(st, a, mid, 0.013, seam_color)
+	_add_flat_strip(st, mid, b, 0.010, seam_color)
+	if h2 > 0.55:
+		var c := Vector3(cx - half + h3 * half * 2.0, FLOOR_SEAM_LIFT, cz + half)
+		_add_flat_strip(st, mid, c, 0.008, seam_color)
+
+
+## Thin flat quad strip between two points (a crack segment); y comes from the
+## endpoints so seams stay a constant lift above the floor.
+func _add_flat_strip(st: SurfaceTool, a: Vector3, b: Vector3, width: float, color: Color) -> void:
+	var dir := b - a
+	dir.y = 0.0
+	if dir.length_squared() < 0.000001:
+		return
+	dir = dir.normalized()
+	var side := Vector3(-dir.z, 0.0, dir.x) * (width * 0.5)
+	st.set_color(color)
+	st.add_vertex(a - side)
+	st.set_color(color)
+	st.add_vertex(a + side)
+	st.set_color(color)
+	st.add_vertex(b + side)
+	st.set_color(color)
+	st.add_vertex(a - side)
+	st.set_color(color)
+	st.add_vertex(b + side)
+	st.set_color(color)
+	st.add_vertex(b - side)
 
 
 func _has_lava_neighbor(pos: Vector2i) -> bool:

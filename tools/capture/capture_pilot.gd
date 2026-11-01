@@ -12,7 +12,6 @@ extends Node
 ## through the same public APIs, so every sim-wide unit scan sees a real Unit.
 
 const WEATHER_LEAD_SEC := 3.0
-const SURFACE_CAM_POS := Vector2(0.0, (GridWorld.SURFACE_TOP + GridWorld.SURFACE_ROWS * 0.5) * GridWorld.CELL_SIZE)
 const ZOOMOUT_FACTOR := 0.5
 const UNIT_IDS: Array[String] = [
 	"miner", "pigeon", "archer", "wizard", "engineer", "dragon", "swordsman", "crawler",
@@ -34,6 +33,14 @@ var _lineup_units: Array[Node2D] = []
 var _lineup_revealed := false
 var _lineup_focus := Vector2.ZERO
 var _stress_spawned := false
+
+
+## Surface-band camera focus, computed at runtime from the live GridWorld
+## statics (no longer compile-time constants) — the sim has applied its wide
+## profile long before any pose runs, but the value must not be baked into a
+## const.
+func _surface_cam_pos() -> Vector2:
+	return Vector2(0.0, (GridWorld.SURFACE_TOP + GridWorld.SURFACE_ROWS * 0.5) * GridWorld.CELL_SIZE)
 
 
 func setup(config: Dictionary) -> void:
@@ -113,9 +120,9 @@ func _apply_pose(shot: Dictionary) -> void:
 			_pc.set_view(false)
 			if _shell != null:
 				if shot.pose == "surface":
-					_shell.pose_camera(Presentation3D.to_3d(SURFACE_CAM_POS), 12.0, _shell.SURFACE_PITCH_DEGREES)
+					_shell.pose_camera(Presentation3D.to_3d(_surface_cam_pos()), 12.0, _shell.SURFACE_PITCH_DEGREES)
 				else:
-					_shell.pose_camera(Presentation3D.to_3d(SURFACE_CAM_POS + Vector2(-1000.0, 0.0)), 10.5, _shell.SURFACE_PITCH_DEGREES)
+					_shell.pose_camera(Presentation3D.to_3d(_surface_cam_pos() + Vector2(-1000.0, 0.0)), 10.5, _shell.SURFACE_PITCH_DEGREES)
 		"zoomout":
 			_pc.set_view(false)
 			if _shell != null:
@@ -157,7 +164,7 @@ func _apply_pose(shot: Dictionary) -> void:
 				grid.set_reveal_all(GameManager.Team.PLAYER, true)
 				_dunes_revealed = true
 			if _shell != null:
-				_shell.pose_camera(Presentation3D.to_3d(SURFACE_CAM_POS), 10.5, _shell.SURFACE_PITCH_DEGREES)
+				_shell.pose_camera(Presentation3D.to_3d(_surface_cam_pos()), 10.5, _shell.SURFACE_PITCH_DEGREES)
 		"fortress":
 			_pc.set_view(false)
 			var building := _find_building(GameManager.Team.ENEMY)

@@ -77,6 +77,21 @@ func test_play_targets_2d_legacy_when_set() -> void:
 		"_on_play change_scene target for the legacy mode")
 
 
+func test_play_request_matches_scene_target() -> void:
+	# The world-profile request rides the Play scene pick: both helpers read
+	# the same persisted setting, so they must agree per mode without needing
+	# a real scene switch.
+	var menu: Control = MainMenuScene.instantiate()
+	add_child_autofree(menu)
+	SettingsManager.set_play_mode("3d")
+	assert_eq(menu._play_scene_path(), "res://scenes/main_3d.tscn")
+	assert_eq(menu._play_world_profile(), "wide", "3D play requests the wide world profile")
+	SettingsManager.set_play_mode("2d")
+	assert_eq(menu._play_scene_path(), "res://scenes/main.tscn")
+	assert_eq(menu._play_world_profile(), "legacy", "2D play requests the legacy world profile")
+	SettingsManager.set_play_mode("3d")
+
+
 func test_menu_mode_dropdown_initializes_from_setting() -> void:
 	SettingsManager.set_play_mode("2d")
 	var menu: Control = MainMenuScene.instantiate()

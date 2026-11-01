@@ -68,6 +68,7 @@ func damage_cell(grid_pos: Vector2i, damage: int, miner_level: int) -> int:
 		grid._cell_flash[grid_pos] = 0.2
 		grid.queue_redraw()
 		grid.cell_destroyed.emit(grid_pos)
+		grid.cell_mined.emit(grid_pos)
 		return coin
 	grid._cell_flash[grid_pos] = 0.2
 	grid.queue_redraw()

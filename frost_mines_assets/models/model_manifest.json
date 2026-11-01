@@ -355,5 +355,38 @@
 		"glow_slots": [],
 		"origin": "center",
 		"fallback_on_potato": false
+	},
+	{
+		"key": "pack_pebble_round_1",
+		"path": "res://frost_mines_assets/models/packs/pack_pebble_round_1.glb",
+		"footprint": [1.964, 1.4415],
+		"height": 0.12,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "pack_pebble_round_3",
+		"path": "res://frost_mines_assets/models/packs/pack_pebble_round_3.glb",
+		"footprint": [1.7099, 1.8434],
+		"height": 0.12,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
+	},
+	{
+		"key": "pack_pebble_square_2",
+		"path": "res://frost_mines_assets/models/packs/pack_pebble_square_2.glb",
+		"footprint": [1.0443, 0.7483],
+		"height": 0.12,
+		"tri_gate": 6000,
+		"accent_slots": [],
+		"glow_slots": [],
+		"origin": "center",
+		"fallback_on_potato": false
 	}
 ]

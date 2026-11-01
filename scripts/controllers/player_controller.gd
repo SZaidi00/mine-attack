@@ -32,7 +32,10 @@ var _zoom_factor: float = 1.0
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
 var _view_mode: ViewMode = ViewMode.SURFACE
-var _last_surface_cam_pos: Vector2 = Vector2(0, (GridWorld.SURFACE_TOP + GridWorld.SURFACE_ROWS * 0.5) * GridWorld.CELL_SIZE)
+# Neutral default only: the real bookmark is computed in _ready (after the
+# world profile was applied in main.gd's _enter_tree) by
+# _camera_helper._init_view_positions() from the authored camera position.
+var _last_surface_cam_pos: Vector2 = Vector2.ZERO
 var _last_underground_cam_pos: Vector2 = Vector2(0, 400)
 # Camera slide target after a view toggle (INF = not sliding).
 var _view_slide_target: Vector2 = Vector2.INF

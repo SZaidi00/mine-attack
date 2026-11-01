@@ -769,8 +769,20 @@ func _on_play() -> void:
 	GameManager.roll_ai_opener()
 	# The Play target comes from the persisted Mode setting: "3d" enters the
 	# main_3d shell, which mounts the untouched main.tscn sim itself; "2d"
-	# loads main.tscn directly (the legacy 2D presentation).
+	# loads main.tscn directly (the legacy 2D presentation). The matching
+	# world profile rides along as launch intent: main.gd's _enter_tree
+	# resolves the MapDefinition (wide authored board vs. the 81x1 legacy
+	# resource) and applies it before the grid initializes.
+	GameManager.set_world_profile_request(_play_world_profile())
 	get_tree().change_scene_to_file(_play_scene_path())
+
+
+## World profile the Play button requests alongside the scene, from the
+## persisted play-mode setting: the legacy 81x1 main-style board for "2d",
+## the wide authored board for "3d". main.gd's _enter_tree resolves the
+## matching MapDefinition from this launch intent.
+func _play_world_profile() -> String:
+	return "legacy" if SettingsManager.get_play_mode() == "2d" else "wide"
 
 
 ## Scene the Play button loads, from the persisted play-mode setting: the 3D
