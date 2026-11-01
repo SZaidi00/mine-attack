@@ -17,6 +17,7 @@ signal queue_paused_changed(paused: bool)
 signal destroyed(team: GameManager.Team)
 signal coin_deposited(team: GameManager.Team, amount: int)
 signal unit_spawned(unit: Node2D)
+signal spawn_point_changed(has_point: bool)
 
 @export var team: GameManager.Team = GameManager.Team.PLAYER
 @export var max_hp: int = _Constants.PLAYER_BUILDING_HP
@@ -39,6 +40,12 @@ var _collapse_t: float = 0.0
 var _last_damage_time: float = -999.0
 # Throttle for the faction-identification scout check (enemy building only).
 var _identify_accum: float = 0.0
+# Spawn point: optional muster destination for newly trained units, set by
+# the player from the HUD ("Set Spawn"). Miners and crawlers always keep
+# their auto-descend into the mine instead.
+var _spawn_point: Vector2 = Vector2.ZERO
+var _has_spawn_point: bool = false
+var _spawn_marker_3d: Node3D = null
 
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
@@ -64,6 +71,14 @@ func _ready() -> void:
 		ResearchManager.research_changed.connect(_on_research_changed)
 	queue_redraw()
 	call_deferred("_spawn_starting_miners")
+
+
+func _exit_tree() -> void:
+	# The 3D spawn marker lives in the shell's effects container, outside this
+	# subtree — free it here so a destroyed/rebuilt building never leaks one.
+	if is_instance_valid(_spawn_marker_3d):
+		_spawn_marker_3d.queue_free()
+		_spawn_marker_3d = null
 
 
 func _on_research_completed(completed_team: GameManager.Team, _tech_id: String) -> void:
@@ -248,6 +263,47 @@ func get_train_time(unit_id: String) -> float:
 	return train_time
 
 
+## Spawn point: the player picks a surface cell from the HUD and newly
+## trained fighters/engineers move there on spawn. The move is issued before
+## unit_spawned emits, so an explicit stance order (attack/garrison) from
+## PlayerController still wins for fighters. Miners and crawlers are exempt
+## — they head straight into the mine shaft.
+func set_spawn_point(world_pos: Vector2) -> void:
+	_spawn_point = world_pos
+	_has_spawn_point = true
+	queue_redraw()
+	spawn_point_changed.emit(true)
+	_rebuild_spawn_marker_3d()
+
+
+func clear_spawn_point() -> void:
+	if not _has_spawn_point:
+		return
+	_has_spawn_point = false
+	queue_redraw()
+	spawn_point_changed.emit(false)
+	_rebuild_spawn_marker_3d()
+
+
+func has_spawn_point() -> bool:
+	return _has_spawn_point
+
+
+func get_spawn_point() -> Vector2:
+	return _spawn_point
+
+
+## 3D shell marker, rebuilt on every set/clear and freed with the building.
+## In 2D standalone (and tests) effects_parent() is null and only the 2D flag
+## drawn in _draw exists.
+func _rebuild_spawn_marker_3d() -> void:
+	if is_instance_valid(_spawn_marker_3d):
+		_spawn_marker_3d.queue_free()
+		_spawn_marker_3d = null
+	if _has_spawn_point:
+		_spawn_marker_3d = SpawnPointMarker3D.create(get_tree(), _spawn_point)
+
+
 func queue_unit(unit_id: String) -> bool:
 	if not _resources.has(unit_id):
 		DebugLog.log_reject("Building %d" % get_instance_id(), "queue_unit", "unknown unit_id " + unit_id)
@@ -285,6 +341,10 @@ func _spawn_front(_unit_id: String, data: UnitData, paid_cost: int = -1) -> void
 	unit.set("team", team)
 	unit.position = _spawn_position()
 	get_node("/root/Main/Units").add_child(unit)
+	# Spawn point: issued before unit_spawned so the controller's stance hook
+	# (attack/garrison) can override it for fighters.
+	if _has_spawn_point and not data_copy.is_miner and not data_copy.is_crawler:
+		unit.call("move_to", _spawn_point)
 	unit_spawned.emit(unit)
 	# Make sure miners head straight into the shaft as soon as they spawn.
 	if data_copy.is_miner and unit.has_method("climb_down_ladder"):
@@ -522,3 +582,9 @@ func _draw() -> void:
 			var icon_size := Vector2(24, 24)
 			var icon_pos := Vector2(bar_pos.x + bar_w + 6, bar_pos.y + bar_h / 2.0 - icon_size.y / 2.0)
 			draw_texture_rect(faction.icon, Rect2(icon_pos, icon_size), false)
+	# Spawn point: gold pole + pennant at the muster cell (local coords).
+	if _has_spawn_point:
+		var flag_base: Vector2 = to_local(_spawn_point)
+		var pole_top: Vector2 = flag_base + Vector2(0, -26)
+		draw_line(flag_base, pole_top, Color("#FBBF24"), 2.0)
+		draw_colored_polygon(PackedVector2Array([pole_top, pole_top + Vector2(13, 4), pole_top + Vector2(0, 8)]), Color("#FBBF24"))

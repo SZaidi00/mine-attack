@@ -105,6 +105,7 @@ to `main` only (plan 03 wired the checks in).
 | 12 | Wider map and authored surface regions | M | 11 |
 | 13 | Underground mine visual slice and sentry fog vision | M | 12 |
 | 14 | Mode-specific world profiles (legacy 2D / expanded 3D) | M | 13 |
+| 15 | Building spawn point | S | 14 |
 
 Sizes: S ≈ a focused day, M ≈ 2–4 days, L ≈ a week+. "Depends on" is a soft
 ordering for humans; each plan is still self-contained for the agent.
