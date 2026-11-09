@@ -244,9 +244,12 @@ func test_overflow_recovers_with_one_full_fog_refresh() -> void:
 func test_built_tower_clears_surface_fog_but_not_the_cell_below() -> void:
 	var fog := _fog()
 	var grid := _grid()
-	var tower_cell := Vector2i(-30, 0)
-	var surface_probe := Vector2i(-30, GridWorld.SURFACE_TOP)  # 9 rows up, inside TOWER_VISION
-	var underground_probe := Vector2i(-30, GridWorld.Y_MIN + 1)
+	# Far-backfield column: quiet at test time (plan 17 centered the base at
+	# x=-25, so the old -30 probes sit inside the mining neighborhood and the
+	# tower itself would land in the footprint's no-build zone).
+	var tower_cell := Vector2i(-45, 0)
+	var surface_probe := Vector2i(-45, -4)  # 4 rows up, at TOWER_VISION's edge (plan 18)
+	var underground_probe := Vector2i(-45, GridWorld.Y_MIN + 1)
 	# Precondition: an otherwise-hidden surface area on the own half. The
 	# fog-diff-cap tests above force-visible the whole underground half, which
 	# the next _update_vision demotes to fresh memory — wipe the maps so the

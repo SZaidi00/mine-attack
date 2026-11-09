@@ -9,10 +9,10 @@ grid_x_max = 50
 surface_rows = 10
 mine_entries_centered = true
 camera_start = Vector2(0, -128)
-player_building_cell = Vector2i(-40, -2)
-enemy_building_cell = Vector2i(40, -2)
-player_mine_cell = Vector2i(-20, -5)
-enemy_mine_cell = Vector2i(20, -5)
+player_building_cell = Vector2i(-25, -2)
+enemy_building_cell = Vector2i(25, -2)
+player_mine_cell = Vector2i(-15, -5)
+enemy_mine_cell = Vector2i(15, -5)
 surface_regions = Array[Dictionary]([{
 "id": "west_pinewood",
 "recipe": "trees",
@@ -24,4 +24,4 @@ surface_regions = Array[Dictionary]([{
 "rect": Rect2i(29, -9, 8, 7),
 "density": 1.15
 }])
-surface_roads = Array[Rect2i]([Rect2i(-50, 0, 101, 1), Rect2i(-20, -5, 1, 6), Rect2i(20, -5, 1, 6)])
+surface_roads = Array[Rect2i]([Rect2i(-50, 0, 101, 1), Rect2i(-15, -5, 1, 6), Rect2i(15, -5, 1, 6)])

@@ -128,6 +128,14 @@ func test_different_seed_grows_a_different_board() -> void:
 	_shutdown()
 	await _boot(11)
 	await _go_underground()
+	# Seed 11's underground is solid DIRT — no rock for rubble and no support
+	# roll lands near the plan-19 shafts — so lay deterministic rubble cells
+	# with forced cave-ins (the pebble test's fixture pattern) instead of
+	# relying on the seeded layout to decorate itself.
+	_grid().force_cave_in(Vector2i(-30, 10))
+	_grid().force_cave_in(Vector2i(30, 10))
+	_terrain().force_full_rebuild()
+	await _frames(40)
 	var seed_eleven: Dictionary = _detail().underground_log
 	assert_gt(_log_entry_count(seed_eleven), 0, "seed 11 grows underground decoration")
 	assert_ne(seed_eleven, seed_seven, "different pinned seeds decorate differently")
@@ -191,7 +199,7 @@ func test_pebbles_use_only_curated_keys_and_sit_on_rock_cells() -> void:
 	await _boot(7)
 	await _go_underground()
 	var grid := _grid()
-	# Cave-in rubble: nine SOLID_ROCK cells near the player shaft.
+	# Cave-in rubble: nine SOLID_ROCK cells in a mid-map pocket.
 	var center := Vector2i(-30, 12)
 	grid.force_cave_in(center)
 	_terrain().force_full_rebuild()

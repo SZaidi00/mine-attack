@@ -166,6 +166,12 @@ const LANTERN_SALVAGE_RATIO: float = 0.5
 # Sentry towers: static surface defenses that auto-attack the highest-priority
 # enemy in range (fighters > miners > buildings) and double as vision sources.
 # Factions override cost/HP/damage/cooldown/build speed (see FactionData).
+# TOWER_VISION is deliberately smaller than the 10-row surface band is tall,
+# so a single tower — even one placed mid-band — cannot light the whole band;
+# full-width coverage takes a second tower and/or lanterns (like the lantern
+# radii below, it is also smaller than the half-map width). Vision is shorter
+# than attack range on purpose: a lone tower out-shoots its own sight and
+# relies on the team's lanterns/pigeons/units to spot far targets.
 const TOWER_COST: int = 300
 const TOWER_HP: int = 800
 const TOWER_RANGE_CELLS: int = 8
@@ -173,7 +179,7 @@ const TOWER_DAMAGE: int = 12
 const TOWER_COOLDOWN: float = 1.2
 const TOWER_BUILD_TIME: float = 8.0
 const TOWER_MAX_COUNT: int = 2
-const TOWER_VISION: int = 10  # surface only
+const TOWER_VISION: int = 4  # surface only
 const TOWER_MIN_BUILDING_DISTANCE: int = 2  # cells from any building/mine entry
 # Placeable walls: single-cell surface barriers that block movement (A* solid
 # once built) and projectiles. Destroyed by fighter attacks. Adjacent same-team

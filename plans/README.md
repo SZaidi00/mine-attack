@@ -38,15 +38,16 @@ misreading the architecture — find the sim-side hook instead.
   checks.
   Base/mine layout markers live in `scripts/resources/maps/default.tres`
   (`MapDefinition`) and are applied by `scripts/world/main.gd` before child
-  initialization: bases at `±40`, cell-centered mine entrances at `(±20,-5)`.
-  The resource also authors visual road rectangles and prop regions.
+  initialization: bases at `(±25,-2)` (plan 17), cell-centered mine entrances
+  at `(±15,-5)` (plan 19 — the original/legacy shaft columns). The resource
+  also authors visual road rectangles and prop regions.
 - Quality tiers: `ArtStyle3D` POTATO / STANDARD / FANCY. New visual work must
   degrade (fewer instances, no shadows, skipped effects on Potato). Check
   `ArtStyle3D.detail_enabled()` / `particle_mult()` patterns.
 - Fog honesty: anything rendered from sim state the player can't see must gate
-  on `GridWorld.fog_state_at(GameManager.Team.PLAYER, pos)` (0 = visible,
-  1 = remembered, 2 = hidden). Mirror the existing patterns rather than
-  inventing new ones.
+  on `GridWorld.fog_state_at(GameManager.Team.PLAYER, pos)` (2 = visible,
+  1 = remembered, 0 = never-seen/hidden). Mirror the existing patterns rather
+  than inventing new ones.
 - GLB asset contract (R7/R4): all imported models are registered in
   `frost_mines_assets/models/model_manifest.json` and validated by
   `scripts/three_d/model_manifest.gd` (origin base at min-y 0, footprint/height
@@ -108,6 +109,8 @@ to `main` only (plan 03 wired the checks in).
 | 15 | Building spawn point | S | 14 |
 | 16 | Chained walls and a raised wall cap | M | 15 |
 | 17 | Center base buildings in the surface band | S | 16 |
+| 18 | Squeeze tower vision below the surface-band height | S | 17 |
+| 19 | Move mine entrances back to the original shaft columns | S | 17 |
 
 Sizes: S ≈ a focused day, M ≈ 2–4 days, L ≈ a week+. "Depends on" is a soft
 ordering for humans; each plan is still self-contained for the agent.

@@ -3,8 +3,10 @@ extends Node2D
 
 ## Sentry tower (Revamp Phase 3): a static surface defense that auto-attacks
 ## the highest-priority enemy in range (fighters > miners > buildings).
-## Built towers also lift surface fog within vision_radius (TOWER_VISION,
-## larger than attack range; range research widens attack range only).
+## Built towers also lift surface fog within vision_radius (TOWER_VISION —
+## deliberately shorter than attack range so a lone tower out-shoots its own
+## sight; spotting far targets is the lanterns'/pigeons'/units' job, and range
+## research widens attack range only).
 ## Towers are invulnerable while under construction; a destroyed tower drops
 ## half its build cost as a coin pickup. Faction variants (Arcane cheaper-HP
 ## magic missiles, Brute heavy bolts, Industrial fast build) come from

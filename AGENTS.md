@@ -223,7 +223,7 @@ mine-attack/
 > preserved by `GameManager.reset()`) — which `scripts/world/main.gd`'s
 > `_enter_tree` resolves into a `MapDefinition` (plan 14): `"3d"` keeps the
 > wide 101×10 authored board (roads/regions, cell-centered mines at
-> `(±20,-5)`, camera `(0,-128)`), while `"2d"` swaps in
+> `(±15,-5)`, camera `(0,-128)`), while `"2d"` swaps in
 > `scripts/resources/maps/legacy.tres` — the `main`-branch world: 81
 > columns, a single surface row, bases at `x=±30`, corner-origin mines at
 > `x=±15` on row 0, camera `(0,-150)`, and no road/region dressing. The
@@ -294,7 +294,7 @@ mine-attack/
 > class. On `main`,
 > Play loads `scenes/main.tscn` directly.
 
-`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`. The root `scripts/world/main.gd` resolves the world profile from `GameManager.world_profile_request` (`"legacy"` → `scripts/resources/maps/legacy.tres`, otherwise the exported/default wide resource), applies it via `GridWorld.apply_world_profile()`, applies the resource's `camera_start` to the Camera2D, and applies the base/mine markers from that `MapDefinition` in `_enter_tree`, before child initialization. On the wide board bases sit at `(±40,-2)` (plan 17 centered the 5-row body in the 10-row band; corner-origin placement, so the body seals rows −7..−3 with rows −2..0 walkable in front) with cell-centered mine entrances at `(±20,-5)`; the legacy profile uses bases at `x=±30` with corner-origin mines at `x=±15` on row 0. The wide resource also carries visual-only front-road/mine-spur rectangles and the western-pinewood/eastern-rockfield prop regions (the legacy resource carries none). The scene contains:
+`scenes/ui/main_menu.tscn` is the main scene on `main` (`project.godot` → `application/run/main_scene`). Its Play flow sets `GameManager.difficulty` and the opt-in `GameManager.adaptive_difficulty`, stores the player's faction pick, rolls a random enemy faction, and loads `scenes/main.tscn`. The root `scripts/world/main.gd` resolves the world profile from `GameManager.world_profile_request` (`"legacy"` → `scripts/resources/maps/legacy.tres`, otherwise the exported/default wide resource), applies it via `GridWorld.apply_world_profile()`, applies the resource's `camera_start` to the Camera2D, and applies the base/mine markers from that `MapDefinition` in `_enter_tree`, before child initialization. On the wide board bases sit at `(±25,-2)` (plan 17 centers the base in its half: the 6×5 body spans x ∓[23..28], sealing rows −7..−3 with rows −2..0 walkable in front, the mine entrances back at their original shaft columns `(±15,-5)`, 8 columns ahead of the base front) with cell-centered mine entrances; the legacy profile uses bases at `x=±30` with corner-origin mines at `x=±15` on row 0. The wide resource also carries visual-only front-road/mine-spur rectangles and the western-pinewood/eastern-rockfield prop regions (the legacy resource carries none). The scene contains:
 
 - `World/VolcanoBackground` — decorative volcano sprite.
 - `World/GridWorld` — procedural map, A*, fog of war, rendering.

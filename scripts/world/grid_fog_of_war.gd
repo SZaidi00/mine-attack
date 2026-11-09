@@ -163,10 +163,11 @@ func _get_vision_sources(team: GameManager.Team) -> Array:
 			sources.append([grid.world_to_grid(lantern.global_position), maxi(1, roundi(radius_cells * weather_mult)), layer])
 	for tower in grid.get_tree().get_nodes_in_group("towers"):
 		# Built towers lift surface fog within their dedicated vision radius
-		# (TOWER_VISION, larger than attack range — range research never
-		# widens vision). Under-construction towers reveal nothing, and the
-		# surface layer lock keeps underground cells dark. Storms scale tower
-		# vision with the same global multiplier buildings use.
+		# (TOWER_VISION — shorter than attack range since plan 18, so one tower
+		# cannot light the whole surface band; range research never widens
+		# vision). Under-construction towers reveal nothing, and the surface
+		# layer lock keeps underground cells dark. Storms scale tower vision
+		# with the same global multiplier buildings use.
 		if tower.team == team and tower.is_built():
 			sources.append([grid.world_to_grid(tower.global_position), maxi(1, roundi(tower.vision_radius * WeatherManager.get_vision_multiplier())), GridWorld.VISION_LAYER_SURFACE])
 	return sources

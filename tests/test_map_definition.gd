@@ -10,10 +10,10 @@ func before_each() -> void:
 
 
 func test_default_layout_uses_wider_markers() -> void:
-	assert_eq(_map.player_building_cell, Vector2i(-40, -2))
-	assert_eq(_map.enemy_building_cell, Vector2i(40, -2))
-	assert_eq(_map.player_mine_cell, Vector2i(-20, -5))
-	assert_eq(_map.enemy_mine_cell, Vector2i(20, -5))
+	assert_eq(_map.player_building_cell, Vector2i(-25, -2))
+	assert_eq(_map.enemy_building_cell, Vector2i(25, -2))
+	assert_eq(_map.player_mine_cell, Vector2i(-15, -5))
+	assert_eq(_map.enemy_mine_cell, Vector2i(15, -5))
 
 
 func test_default_resource_carries_wide_world_profile() -> void:
@@ -44,7 +44,7 @@ func test_legacy_resource_matches_main_branch_layout() -> void:
 func test_front_road_and_mine_spurs_cover_their_cells() -> void:
 	for x in range(GridWorld.X_MIN, GridWorld.X_MAX + 1):
 		assert_true(_map.is_road(Vector2i(x, 0)), "front road covers x=%d" % x)
-	for x in [-20, 20]:
+	for x in [_map.player_mine_cell.x, _map.enemy_mine_cell.x]:
 		for y in range(-5, 1):
 			assert_true(_map.is_road(Vector2i(x, y)), "mine spur covers %s" % Vector2i(x, y))
 		assert_false(_map.is_road(Vector2i(x, -6)), "spur does not continue above the mine")

@@ -163,6 +163,8 @@ func test_wide_request_boots_the_authored_world() -> void:
 			surface_count += 1
 	assert_eq(surface_count, 101 * 10, "the wide board keeps its full surface band")
 	assert_eq(wide_main.get_node("Camera2D").position, Vector2(0, -128))
-	assert_null(grid.get_cell(Vector2i(-20, 3)), "wide shafts stay at the authored columns")
-	assert_not_null(grid.get_cell(Vector2i(-15, 3)), "no legacy shaft at x=-15")
+	# Wide shafts carve only at the authored columns (plan 19 moved them back
+	# to x=±15, the original/legacy shaft columns — no stale shaft at ∓20).
+	assert_null(grid.get_cell(Vector2i(-15, 3)), "wide player shaft carved at x=-15")
+	assert_not_null(grid.get_cell(Vector2i(-20, 3)), "no stale shaft at the old wide column -20")
 	wide_main.free()

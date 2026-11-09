@@ -315,10 +315,14 @@ func test_underground_lantern_lights_only_underground() -> void:
 
 
 func test_surface_lantern_lights_only_surface() -> void:
-	_place_built_lantern("lantern", Vector2i(-20, 0))
+	# Far-backfield column: the underground probe must be deterministically
+	# unseen (probing under the shaft column relied on miners not having
+	# descended yet, which the centered base invalidated).
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-45, 1)), 0, "precondition: the backfield tunnel is unseen")
+	_place_built_lantern("lantern", Vector2i(-45, 0))
 	await wait_seconds(0.1)
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-19, 0)), 2, "surface lantern must light the surface row")
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, 1)), 0, "surface lantern must NOT light the tunnels below")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-44, 0)), 2, "surface lantern lights the surface row")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-45, 1)), 0, "surface lantern must NOT light the tunnels below")
 
 
 func test_miner_lights_only_current_layer() -> void:
@@ -358,20 +362,24 @@ func test_built_tower_is_a_surface_vision_source() -> void:
 
 
 func test_built_tower_lights_only_surface() -> void:
-	_place_tower(Vector2i(-20, 0))
+	# Same backfield-column hermetic setup as the lantern layer-lock test.
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-45, 1)), 0, "precondition: the backfield tunnel is unseen")
+	_place_tower(Vector2i(-45, 0))
 	await wait_seconds(0.1)
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 2,
-		"tower vision reaches the top surface-band row")
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.Y_MIN + 1)), 0,
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-45, -4)), 2,
+		"tower lights a surface cell at its TOWER_VISION edge")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-45, GridWorld.Y_MIN + 1)), 0,
 		"tower must NOT light the underground cell directly below")
 
 
 func test_player_tower_does_not_reveal_enemy_fog() -> void:
 	_place_tower(Vector2i(-20, 0))
 	await wait_seconds(0.1)
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 2,
+	# Probe 4 cells out at the tower's vision edge — clear of the centered
+	# base's 6-cell vision (plan 18 shrank TOWER_VISION below that reach).
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-16, 0)), 2,
 		"player tower lifts PLAYER fog")
-	assert_eq(_grid.fog_state_at(ENEMY, Vector2i(-20, GridWorld.SURFACE_TOP)), 0,
+	assert_eq(_grid.fog_state_at(ENEMY, Vector2i(-16, 0)), 0,
 		"player tower must NOT lift ENEMY fog")
 
 
@@ -379,26 +387,26 @@ func test_enemy_tower_reveals_enemy_fog_only() -> void:
 	var tower: Node2D = _place_tower(Vector2i(-20, 0))
 	tower.team = ENEMY  # pretend the enemy built it here
 	await wait_seconds(0.1)
-	assert_eq(_grid.fog_state_at(ENEMY, Vector2i(-20, GridWorld.SURFACE_TOP)), 2,
+	assert_eq(_grid.fog_state_at(ENEMY, Vector2i(-16, 0)), 2,
 		"enemy tower lifts ENEMY fog for its own team")
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 0,
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-16, 0)), 0,
 		"enemy tower must NOT lift PLAYER fog")
 
 
 func test_destroyed_tower_stops_revealing_but_stays_remembered() -> void:
 	var tower: Node2D = _place_tower(Vector2i(-20, 0))
 	await wait_seconds(0.1)
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 2,
-		"setup: the built tower lights the top row")
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-16, 0)), 2,
+		"setup: the built tower lights the cell at its vision edge")
 	tower.take_damage(9999)
 	assert_eq(get_tree().get_nodes_in_group("towers").size(), 0,
 		"destroyed tower leaves the towers group immediately")
 	await wait_seconds(0.1)
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 1,
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-16, 0)), 1,
 		"live reveal stops on the next update, but the cell stays remembered")
 	GameManager.match_time += Constants.FOG_MEMORY_DURATION + 1.0
 	await wait_seconds(0.1)
-	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-20, GridWorld.SURFACE_TOP)), 0,
+	assert_eq(_grid.fog_state_at(PLAYER, Vector2i(-16, 0)), 0,
 		"the memory fades back to full fog")
 
 

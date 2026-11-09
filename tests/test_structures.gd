@@ -125,18 +125,19 @@ func test_tower_invulnerable_while_building_then_fires() -> void:
 	tower.take_damage(100)
 	assert_eq(tower.hp, tower.max_hp, "under-construction tower takes no damage")
 	# Under construction the tower reveals nothing: the cell at its built
-	# vision edge (10 cells away) stays dark while it builds.
+	# vision edge (4 cells away) stays dark while it builds.
 	await wait_seconds(0.1)
-	assert_false(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-2, 0))),
+	assert_false(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-8, 0))),
 		"under-construction tower must not light fog")
 	await _finish_construction(tower)
 	assert_true(tower.is_built())
 	# A built tower lifts surface fog out to its dedicated vision radius
-	# (TOWER_VISION cells, wider than its attack range): 9 and 10 cells away
-	# are visible, 11 cells away — outside every other source — stays hidden.
-	assert_true(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-3, 0))), "9 cells away lit")
-	assert_true(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-2, 0))), "10 cells away lit")
-	assert_false(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-1, 0))), "11 cells away stays hidden")
+	# (TOWER_VISION cells — plan 18 made it shorter than attack range so one
+	# tower can't light the whole band): 3 and 4 cells away are visible,
+	# 5 cells away — outside every other source — stays hidden.
+	assert_true(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-9, 0))), "3 cells away lit")
+	assert_true(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-8, 0))), "4 cells away lit")
+	assert_false(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-7, 0))), "5 cells away stays hidden")
 	# Fires at an enemy fighter standing inside both the tower's fog circle and
 	# its attack range — the tower's own vision is what makes the target
 	# shootable (no reveal-all stand-in).

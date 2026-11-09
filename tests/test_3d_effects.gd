@@ -496,10 +496,10 @@ func test_cell_mined_ignores_surface_hidden_and_potato_paths() -> void:
 	var index0: int = effects._burst_index
 	effects._mine_burst_cooldown = 0.0  # drain the previous test's throttle
 	# Surface row: never mining dust, even if the cell is visible.
-	effects._on_cell_mined(Vector2i(-20, GridWorld.Y_MIN))
+	effects._on_cell_mined(Vector2i(-15, GridWorld.Y_MIN))
 	assert_eq(effects._burst_index, index0, "surface cells never spawn mining dust")
 	# Hidden underground cell (the enemy shaft starts never-seen).
-	var hidden := Vector2i(20, 3)
+	var hidden := Vector2i(15, 3)
 	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, hidden), 0,
 		"fixture: the enemy shaft starts hidden")
 	effects._on_cell_mined(hidden)
@@ -507,7 +507,7 @@ func test_cell_mined_ignores_surface_hidden_and_potato_paths() -> void:
 	# Potato: details (and mining dust) stay off entirely.
 	var previous_quality := ArtStyle3D.quality
 	ArtStyle3D.apply_quality(ArtStyle3D.Quality.POTATO)
-	effects._on_cell_mined(Vector2i(-20, 3))
+	effects._on_cell_mined(Vector2i(-15, 3))
 	assert_eq(effects._burst_index, index0, "Potato spawns no mining dust")
 	ArtStyle3D.apply_quality(previous_quality)
 	assert_eq(effects._mine_burst_cooldown, 0.0,

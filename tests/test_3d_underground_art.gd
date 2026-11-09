@@ -115,24 +115,24 @@ func test_excavated_floor_predicate_separates_tunnels_from_absent_data() -> void
 	var grid := _grid()
 	terrain.set_underground_view(true)
 	await _frames(5)
-	# The two initial shafts (x=+-20, y 1..6) are mined-out in-bounds cells.
+	# The two initial shafts (x=±15, y 1..6) are mined-out in-bounds cells.
 	for y in range(1, 7):
-		assert_true(terrain._is_excavated_floor(Vector2i(-20, y)),
+		assert_true(terrain._is_excavated_floor(Vector2i(-15, y)),
 			"initial player shaft cell %d is an excavated floor" % y)
-		assert_true(terrain._is_excavated_floor(Vector2i(20, y)),
+		assert_true(terrain._is_excavated_floor(Vector2i(15, y)),
 			"initial enemy shaft cell %d is an excavated floor" % y)
 	# Surface row, out-of-bounds columns, and present cells never qualify.
-	assert_false(terrain._is_excavated_floor(Vector2i(-20, GridWorld.Y_MIN)),
+	assert_false(terrain._is_excavated_floor(Vector2i(-15, GridWorld.Y_MIN)),
 		"surface-band rows are never floors")
 	assert_false(terrain._is_excavated_floor(Vector2i(GridWorld.X_MIN - 1, 3)),
 		"out-of-bounds columns are never floors")
-	assert_false(terrain._is_excavated_floor(Vector2i(-21, 3)),
+	assert_false(terrain._is_excavated_floor(Vector2i(-16, 3)),
 		"a present underground cell is not excavated space")
-	assert_false(terrain._is_excavated_floor(Vector2i(-20, GridWorld.Y_MAX + 1)),
+	assert_false(terrain._is_excavated_floor(Vector2i(-15, GridWorld.Y_MAX + 1)),
 		"the border floor row (a real wall cell) is not excavated space")
 	terrain.set_underground_view(false)
 	await _frames(5)
-	assert_false(terrain._is_excavated_floor(Vector2i(-20, 3)),
+	assert_false(terrain._is_excavated_floor(Vector2i(-15, 3)),
 		"the surface view never draws floors")
 	terrain.set_underground_view(true)
 
@@ -145,7 +145,7 @@ func test_initial_shafts_grow_floor_geometry_with_depth_strata_colors() -> void:
 	terrain.set_underground_view(true)
 	await _frames(40)
 	# Excavate one cell per depth band next to the player shaft.
-	var samples: Array[Vector2i] = [Vector2i(-20, 2), Vector2i(-21, 8), Vector2i(-21, 14)]
+	var samples: Array[Vector2i] = [Vector2i(-15, 2), Vector2i(-16, 8), Vector2i(-16, 14)]
 	for pos in samples:
 		if grid.has_cell(pos):
 			grid.damage_cell(pos, 100000, 3)
@@ -163,13 +163,13 @@ func test_initial_shafts_grow_floor_geometry_with_depth_strata_colors() -> void:
 func test_floor_colors_differ_from_dirt_rock_and_void() -> void:
 	await _frames(10)
 	var terrain := _terrain()
-	var shallow: Color = terrain._floor_color(Vector2i(-20, 1))
-	var mid: Color = terrain._floor_color(Vector2i(-20, 8))
-	var deep: Color = terrain._floor_color(Vector2i(-20, 14))
+	var shallow: Color = terrain._floor_color(Vector2i(-15, 1))
+	var mid: Color = terrain._floor_color(Vector2i(-15, 8))
+	var deep: Color = terrain._floor_color(Vector2i(-15, 14))
 	# Depth bands are distinct and stable.
 	assert_ne(shallow, mid, "shallow and mid floors differ")
 	assert_ne(mid, deep, "mid and deep floors differ")
-	assert_eq(shallow, terrain._floor_color(Vector2i(-20, 1)),
+	assert_eq(shallow, terrain._floor_color(Vector2i(-15, 1)),
 		"floor colors are deterministic across calls")
 	# Every band stays distinct from dirt, solid rock, and the fog void.
 	for i in range(3):
@@ -186,7 +186,7 @@ func test_floor_fog_tinting_matches_cell_semantics() -> void:
 	await _frames(10)
 	var terrain := _terrain()
 	var grid := _grid()
-	var pos := Vector2i(-20, 2)
+	var pos := Vector2i(-15, 2)
 	# Visible: the raw strata color comes through.
 	grid.set_reveal_all(GameManager.Team.PLAYER, true)
 	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, pos), 2, "fixture starts visible")
@@ -194,7 +194,7 @@ func test_floor_fog_tinting_matches_cell_semantics() -> void:
 		"visible floors keep their strata color")
 	# Hidden: the opaque void tint (the fog overlay keeps the floor covered).
 	grid.set_reveal_all(GameManager.Team.PLAYER, false)
-	var hidden := Vector2i(20, 3)
+	var hidden := Vector2i(15, 3)
 	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, hidden), 0,
 		"fixture: the enemy shaft starts never-seen")
 	assert_eq(terrain._excavated_floor_color(hidden), ArtStyle3D.PALETTE.fog_void,
@@ -224,7 +224,7 @@ func test_floor_seams_are_subtle_lifted_and_deterministic() -> void:
 	assert_lt(terrain.FLOOR_SEAM_LIFT, Fog3D.UNDERGROUND_LIFT,
 		"seams stay under the fog overlay lift")
 	# The seam decision is a pure, stable hash.
-	var pos := Vector2i(-20, 2)
+	var pos := Vector2i(-15, 2)
 	var first: bool = terrain._has_floor_seam(pos)
 	for i in range(3):
 		assert_eq(terrain._has_floor_seam(pos), first, "seam decision is deterministic")
@@ -234,7 +234,7 @@ func test_floor_seams_are_subtle_lifted_and_deterministic() -> void:
 	await _frames(40)
 	var seam_found := false
 	for y in range(1, 7):
-		var p := Vector2i(-20, y)
+		var p := Vector2i(-15, y)
 		if terrain._has_floor_seam(p):
 			seam_found = true
 			var arrays := _chunk_arrays(terrain, p)
@@ -252,7 +252,7 @@ func test_forced_underground_rebuilds_leave_sim_untouched() -> void:
 	var terrain := _terrain()
 	var grid := _grid()
 	# A sim mutation (mining) is expected; rendering must not add any more.
-	grid.damage_cell(Vector2i(-21, 4), 100000, 3)
+	grid.damage_cell(Vector2i(-16, 4), 100000, 3)
 	var before := _sim_signature(grid)
 	terrain.set_underground_view(true)
 	await _frames(40)
@@ -269,7 +269,7 @@ func test_same_seed_rebuilds_give_identical_floor_colors_and_seams() -> void:
 	terrain.set_underground_view(true)
 	await _frames(40)
 	var cells: Array[Vector2i] = []
-	for x in [-20, 20]:
+	for x in [-15, 15]:
 		for y in range(1, 7):
 			cells.append(Vector2i(x, y))
 	var record := func() -> Array:
