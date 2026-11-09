@@ -26,6 +26,7 @@ static var _cached_scene: Node = null
 static var _shell: Node3D = null
 static var _terrain: Node = null
 static var _effects_parent: Node3D = null
+static var _camera: Camera3D = null
 
 
 ## The live 3D shell when it runs the show, else null. Detection mirrors how
@@ -43,6 +44,7 @@ static func shell(tree: SceneTree) -> Node3D:
 	_shell = null
 	_terrain = null
 	_effects_parent = null
+	_camera = null
 	if cs is Node3D and cs.has_node("World3D"):
 		_shell = cs as Node3D
 	return _shell
@@ -83,3 +85,34 @@ static func ground_height(tree: SceneTree, world_x: float, world_z: float) -> fl
 
 static func to_3d(pos2d: Vector2, y: float = 0.0) -> Vector3:
 	return Vector3(pos2d.x * WORLD_SCALE, y, pos2d.y * WORLD_SCALE)
+
+
+## The shell's rig camera (CameraRig/Camera3D), else null. Cached like the
+## terrain: the rig is static for a scene's lifetime.
+static func rig_camera(tree: SceneTree) -> Camera3D:
+	var s: Node3D = shell(tree)
+	if s == null:
+		return null
+	if _camera != null and is_instance_valid(_camera):
+		return _camera
+	_camera = s.get_node_or_null("CameraRig/Camera3D") as Camera3D
+	return _camera
+
+
+## Project a 2D sim world point to screen pixels through the rig camera — the
+## exact inverse of the shell branch in player_commands._screen_to_world, so
+## drag-box selection tests screen-space inclusion against the same projection
+## the player's eyes see. `height_2d` lifts the point above the dune ground in
+## 2D pixels (a flying unit's combat body rides its flight altitude, mirroring
+## how unit_proxy_3d.gd lifts the model from the ground-snapped base). Returns
+## Vector2.INF when there is no shell or the point is behind the camera, so
+## rect tests read it as outside — never a crash.
+static func screen_position(tree: SceneTree, world2d: Vector2, height_2d: float = 0.0) -> Vector2:
+	var cam: Camera3D = rig_camera(tree)
+	if cam == null:
+		return Vector2.INF
+	var ground := ground_height(tree, world2d.x * WORLD_SCALE, world2d.y * WORLD_SCALE)
+	var p3 := Vector3(world2d.x * WORLD_SCALE, ground + height_2d * WORLD_SCALE, world2d.y * WORLD_SCALE)
+	if cam.is_position_behind(p3):
+		return Vector2.INF
+	return cam.unproject_position(p3)

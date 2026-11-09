@@ -114,14 +114,16 @@ Landed as eight deterministic, sculpted/textured GLBs from
 attachment, 256² painted atlases), with the silhouette/pivot/material contract
 and reusable prompts in `05-r7-unit-workshop.md`. `unit_model_loader.gd`
 normalizes/grounds imports, duplicates per-proxy materials, rebinds
-team/accent/glow slots, exposes named pivots to the existing sim-state
-animator, and switches geometric Arcane/Brute/Industrial attachments on the
-shared rig. Enemy attachments/accents stay neutral until faction
-identification; undead retain the green material pass and Potato retains the
-procedural recipes. `tests/test_3d_unit_models.gd` covers imports, budgets,
-material isolation, variants/reveal, animation, and fallback. The capture
-harness gained `units` / `units_underground` gallery poses; review captures
-for all three player factions live under `r7/`.
+team/accent/glow slots, exposes named pivots to the sim-state animator, and
+switches geometric Arcane/Brute/Industrial attachments on the shared rig. Plan
+08 layers original programmatic idle/walk/attack/death clips onto miner and
+swordsman at every quality tier; unclipped kinds and mining keep procedural
+motion. Enemy attachments/accents stay neutral until faction identification;
+undead retain the green material pass and Potato retains the procedural model
+recipes. `tests/test_3d_unit_models.gd` covers imports, budgets, material
+isolation, variants/reveal, clip playback/state mapping/death, and fallback. The
+capture harness gained `units` / `units_underground` gallery poses; review
+captures for all three player factions live under `r7/`.
 
 Acceptance: every unit identifiable by silhouette at max local zoom in both
 views; ≤8k tris/unit; 200-unit scene still 60 fps; owner sign-off. Structural,

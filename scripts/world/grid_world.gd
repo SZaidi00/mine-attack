@@ -2,6 +2,10 @@ class_name GridWorld
 extends Node2D
 
 signal cell_destroyed(grid_pos: Vector2i)
+# Emitted only when ordinary mining erases a non-wall cell (underground
+# digging feedback for the 3D dust bursts); wall breaches keep using
+# cell_destroyed alone.
+signal cell_mined(grid_pos: Vector2i)
 signal wall_hp_changed(current: int, maximum: int)
 # Emitted by the Ore Sonar scan with the newly revealed ore cells (VFX hook).
 signal cells_revealed(cells: Array)
@@ -11,6 +15,12 @@ signal cells_revealed(cells: Array)
 # per-frame push signals by design.
 var player_fog_revision: int = 0
 var _player_fog_changed_cells: Dictionary = {}  # Vector2i -> true, drained by consumers
+# Cap on the change accumulator above: bounds per-frame work for the
+# chunk-granular consumer. A diff pass that exceeds it drops the excess cells,
+# sets player_fog_overflow (logged, then drained by Fog3D's full-refresh
+# fallback) — overflow is observability + recovery, never silent staleness.
+const PLAYER_FOG_CHANGE_CAP: int = 512
+var player_fog_overflow: bool = false
 # Revamp Phase 4 dynamic-terrain events (HUD banners, VFX hooks).
 signal lava_warning_started(seconds: float, layers: int)
 signal lava_risen(layers: int)
@@ -75,21 +85,55 @@ const _LAYER_TILES: Array[Texture2D] = [
 
 const CELL_SIZE: int = _Constants.TILE_SIZE
 
-# Map bounds in grid coordinates.
-const X_MIN: int = _Constants.GRID_X_MIN
-const X_MAX: int = _Constants.GRID_X_MAX
+# Map bounds in grid coordinates. Y_MIN/Y_MAX/CELL_SIZE are true constants —
+# every world profile shares them. X_MIN/X_MAX/SURFACE_ROWS/SURFACE_TOP are
+# MATCH-SCOPED LIVE VALUES: they default to the wide Constants board but are
+# swapped per match by apply_world_profile() from the active MapDefinition
+# (wide 101x10 for 3D, legacy 81x1 for 2D). Never assign these statics
+# individually; only apply_world_profile() may change them, and every sim
+# scene re-applies its profile in main.gd's _enter_tree before any child
+# _ready runs.
+static var X_MIN: int = _Constants.GRID_X_MIN
+static var X_MAX: int = _Constants.GRID_X_MAX
 const Y_MIN: int = _Constants.GRID_Y_MIN
 const Y_MAX: int = _Constants.GRID_Y_MAX
 
 # Walkable surface battlefield: SURFACE_ROWS rows stacked above row 0
 # (y in [SURFACE_TOP, Y_MIN]). Underground stays at y >= 1.
-const SURFACE_ROWS: int = _Constants.SURFACE_ROWS
-const SURFACE_TOP: int = Y_MIN - SURFACE_ROWS + 1
+static var SURFACE_ROWS: int = _Constants.SURFACE_ROWS
+static var SURFACE_TOP: int = Y_MIN - _Constants.SURFACE_ROWS + 1
 
 # Central wall is a single objective with shared HP. The pool is per-instance
 # (not a const) because the per-seed map profile scales it: map generation
 # sets _wall_max_hp from WALL_HP * profile wall multiplier.
 const WALL_HP_BASE: float = _Constants.WALL_HP
+
+
+## Applies a MapDefinition's world profile to the match-scoped grid bounds
+## statics above, atomically: X_MIN, X_MAX, SURFACE_ROWS, and the derived
+## SURFACE_TOP are assigned together, before any consumer reads them.
+## A null definition (or one with degenerate bounds: an empty/inverted X
+## range or surface_rows < 1) restores the wide Constants defaults and, for a
+## degenerate resource, logs an error — the previous profile stays live in
+## neither case; the wide defaults are always a valid fallback.
+static func apply_world_profile(definition: MapDefinition = null) -> void:
+	var x_min: int = _Constants.GRID_X_MIN
+	var x_max: int = _Constants.GRID_X_MAX
+	var rows: int = _Constants.SURFACE_ROWS
+	if definition != null:
+		if definition.grid_x_min < definition.grid_x_max and definition.surface_rows >= 1:
+			x_min = definition.grid_x_min
+			x_max = definition.grid_x_max
+			rows = definition.surface_rows
+		else:
+			push_error(("MapDefinition '%s' has degenerate world bounds (x: %d..%d, surface_rows: %d); "
+					+ "falling back to the wide default profile")
+				% [definition.resource_path, definition.grid_x_min, definition.grid_x_max,
+					definition.surface_rows])
+	X_MIN = x_min
+	X_MAX = x_max
+	SURFACE_ROWS = rows
+	SURFACE_TOP = Y_MIN - rows + 1
 
 # Helper modules split grid responsibilities into smaller files.
 const GridMapGeneration = preload("res://scripts/world/grid_map_generation.gd")
@@ -415,6 +459,15 @@ func consume_player_fog_changes() -> Array:
 	var cells: Array = _player_fog_changed_cells.keys()
 	_player_fog_changed_cells.clear()
 	return cells
+
+
+## Drains the overflow flag set when a diff pass dropped changed cells past
+## PLAYER_FOG_CHANGE_CAP. Fog3D consumes it at its refresh cadence to fall back
+## to a full rebuild; the flag lives on the sim and is only ever cleared here.
+func consume_player_fog_overflow() -> bool:
+	var overflowed: bool = player_fog_overflow
+	player_fog_overflow = false
+	return overflowed
 
 
 func _get_vision_sources(team: GameManager.Team) -> Array:

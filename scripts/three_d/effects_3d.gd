@@ -18,6 +18,9 @@ const MOTES_BASE_AMOUNT: int = 130
 const BURST_POOL_SIZE: int = 4
 const BURST_BASE_AMOUNT: int = 26
 const BREACH_CRACK_LIFETIME: float = 1.8
+## Plan 13: minimum seconds between ordinary-mining dust bursts — several
+## miners finishing cells in one frame must not exhaust the shared pool.
+const MINE_BURST_THROTTLE_SEC: float = 0.12
 
 const MOTES_NAME: StringName = &"DustMotes"
 const STORM_NAME: StringName = &"StormSnow"
@@ -55,6 +58,7 @@ var _ash_near: GPUParticles3D
 var _meteor_shower: GPUParticles3D
 var _bursts: Array[GPUParticles3D] = []
 var _burst_index := 0
+var _mine_burst_cooldown := 0.0
 var _breach_crack: MeshInstance3D
 var _breach_crack_material: StandardMaterial3D
 var _breach_crack_left := 0.0
@@ -74,6 +78,8 @@ func setup(grid: GridWorld, camera: Camera3D) -> void:
 		_build_emitters()
 	if not _grid.cave_in_occurred.is_connected(_on_cave_in):
 		_grid.cave_in_occurred.connect(_on_cave_in)
+	if not _grid.cell_mined.is_connected(_on_cell_mined):
+		_grid.cell_mined.connect(_on_cell_mined)
 	_refresh_emitters()
 
 
@@ -86,6 +92,7 @@ func set_underground_view(underground: bool) -> void:
 
 func _process(delta: float) -> void:
 	_update_breach_crack(delta)
+	_mine_burst_cooldown = maxf(0.0, _mine_burst_cooldown - delta)
 	if _grid == null or _camera == null or not is_instance_valid(_camera):
 		_try_lazy_setup()
 		return
@@ -138,6 +145,25 @@ func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
 
 func _on_cave_in(center: Vector2i) -> void:
 	_spawn_dust_burst(center)
+
+
+## Plan 13: ordinary mining destruction. Restrained dust only while the
+## underground view is up, the mined cell is a real underground position the
+## player currently sees, and the quality preset runs details; a short global
+## throttle keeps several miners finishing cells in one frame from spamming
+## the shared pool. Cave-ins and the emphasized first breach stay distinct —
+## they bypass this handler entirely.
+func _on_cell_mined(grid_pos: Vector2i) -> void:
+	if not _underground_view or not ArtStyle3D.detail_enabled():
+		return
+	if _grid == null or grid_pos.y <= GridWorld.Y_MIN:
+		return
+	if _grid.fog_state_at(GameManager.Team.PLAYER, grid_pos) != 2:
+		return
+	if _mine_burst_cooldown > 0.0:
+		return
+	_mine_burst_cooldown = MINE_BURST_THROTTLE_SEC
+	_spawn_dust_burst(grid_pos)
 
 
 func _spawn_dust_burst(center: Vector2i, emphasis: bool = false) -> void:

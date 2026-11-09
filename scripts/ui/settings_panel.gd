@@ -5,8 +5,8 @@ extends RefCounted
 ## returns a hidden full-rect Control; callers add it as a child and toggle
 ## `visible`. PROCESS_MODE_ALWAYS keeps it interactive while the tree is
 ## paused. The card body is a ScrollContainer with three groups: Display
-## (map seed, UI scale, accessibility checkboxes, tutorial hints), Audio
-## (SFX volume), and Controls (hotkey remapping).
+## (map seed, UI scale, play mode, accessibility checkboxes, tutorial hints),
+## Audio (SFX volume), and Controls (hotkey remapping).
 
 const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
 const _Constants = preload("res://scripts/autoload/constants.gd")
@@ -185,6 +185,40 @@ static func _build_display_group(content: VBoxContainer, root: Control) -> HSlid
 		SettingsManager.set_graphics_quality(quality_values[index])
 		AudioManager.play("click"))
 	quality_row.add_child(quality_opt)
+
+	# Play mode: which presentation the main menu's Play button loads. The
+	# flip takes effect on the next Play — the current match is unaffected.
+	var mode_row := HBoxContainer.new()
+	mode_row.add_theme_constant_override("separation", 10)
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	group.add_child(mode_row)
+
+	var mode_label := Label.new()
+	mode_label.text = "Mode:"
+	mode_label.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+	mode_row.add_child(mode_label)
+
+	var mode_opt := OptionButton.new()
+	mode_opt.custom_minimum_size = Vector2(250, 0)
+	mode_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mode_opt.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_PRIMARY)
+	var mode_values: Array[String] = ["3d", "2d"]
+	var mode_names: Array[String] = ["3D (recommended)", "2D legacy"]
+	var current_mode := SettingsManager.get_play_mode()
+	for i in range(mode_values.size()):
+		mode_opt.add_item(mode_names[i])
+		if mode_values[i] == current_mode:
+			mode_opt.select(i)
+	mode_opt.item_selected.connect(func(index: int) -> void:
+		SettingsManager.set_play_mode(mode_values[index])
+		AudioManager.play("click"))
+	mode_row.add_child(mode_opt)
+
+	var mode_note := Label.new()
+	mode_note.text = "next Play"
+	mode_note.add_theme_font_size_override("font_size", UIThemeTokens.FONT_SIZE_SMALL)
+	mode_note.add_theme_color_override("font_color", UIThemeTokens.COLOR_TEXT_DIM)
+	mode_row.add_child(mode_note)
 
 	_make_check(group, "Colorblind mode", SettingsManager.get_colorblind(),
 		func(on: bool): SettingsManager.set_colorblind(on))

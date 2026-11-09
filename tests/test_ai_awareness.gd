@@ -218,7 +218,7 @@ func test_ai_builds_lantern_when_affordable() -> void:
 	assert_eq(lanterns.size(), 1, "the AI places a surface lantern")
 	assert_eq(EconomyManager.get_coin(ENEMY), 1300, "the T1 cost is paid")
 	var cell: Vector2i = _grid.world_to_grid(lanterns[0].global_position)
-	assert_eq(cell.y, 0, "surface lanterns stand on the surface row")
+	assert_true(_grid.is_surface_row(cell.y), "surface lanterns stand on the surface row")
 	assert_true(cell.x >= 2, "the lantern is on the AI's half of the map")
 
 
@@ -270,7 +270,7 @@ func test_ai_builds_tower_with_vision_and_the_l2_economy() -> void:
 	assert_eq(towers.size(), 1, "the tower stands")
 	assert_eq(EconomyManager.get_coin(ENEMY), 500, "the 300g tower cost is paid")
 	var cell: Vector2i = _grid.world_to_grid(towers[0].global_position)
-	assert_eq(cell.y, 0, "towers stand on the surface row")
+	assert_true(_grid.is_surface_row(cell.y), "towers stand on the surface row")
 	assert_true(cell.x >= 2, "the tower is on the AI's half of the map")
 
 

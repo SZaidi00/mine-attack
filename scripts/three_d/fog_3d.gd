@@ -120,6 +120,13 @@ func _process(delta: float) -> void:
 	if _grid == null or _grid.player_fog_revision == _seen_revision:
 		return
 	_seen_revision = _grid.player_fog_revision
+	# Overflow recovery: the diff pass that bumped this revision dropped changed
+	# cells past the sim's accumulator cap, so any change-list-driven consumer
+	# is incomplete. This overlay's refresh is already the full rebuild (it
+	# re-reads fog_state_at for every cell), which is exactly the fallback the
+	# overflow calls for — draining the flag here guarantees one full refresh
+	# lands per overflowed revision instead of letting stale tint linger.
+	_grid.consume_player_fog_overflow()
 	_rebuild()
 
 

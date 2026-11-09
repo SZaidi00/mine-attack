@@ -54,8 +54,14 @@ upper target and far below the hard gate.
 
 The GLB scene root is named for the unit. `Body` is its child and owns the base
 meshes, animation pivots, and faction groups. Meshes are rigid-parented rather
-than skinned: the existing procedural animator can rotate the imported Node3D
-pivots directly without an AnimationPlayer or skeleton.
+than skinned, so no skeleton is required. Plan 08 adds
+`scripts/three_d/unit_animation_clips.gd`: original programmatic `idle`, `walk`,
+`attack`, and `death` clips target the named pivots on miner and swordsman rigs
+at every quality tier, including Potato's procedural models. `UnitModel3D`
+selects clips from sim state and advances them manually from visible proxy
+syncs; procedural mining, body motion, death topple/sink, and every unclipped or
+incomplete rig remain intact. No third-party animation assets are bundled;
+retargeting a CC0 clip library is a follow-up.
 
 - Humanoid shoulders are `ArmL`/`ArmR`; arm geometry hangs below local origin.
   Hips are `LegL`/`LegR`, with leg and boot geometry below local origin. X

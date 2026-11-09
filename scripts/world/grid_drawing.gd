@@ -30,13 +30,18 @@ func _draw_surface() -> void:
 	grid.draw_texture_rect(grid._SURFACE_GROUND_TEXTURE, Rect2(world_left, band_top, world_width, ground_height), true)
 
 	# Surface band only.
+	var main: Node = grid.get_node_or_null("/root/Main")
+	var layout: MapDefinition = main.get("map_definition") if main != null else null
 	for pos in grid._cells.keys():
 		if not grid.is_surface_row(pos.y):
 			continue
 		var cell: GridWorld.Cell = grid._cells[pos]
 		var rect: Rect2 = Rect2(pos.x * grid.CELL_SIZE, pos.y * grid.CELL_SIZE, grid.CELL_SIZE, grid.CELL_SIZE)
 		if cell.type == GridWorld.CellType.SURFACE_GROUND:
-			grid.draw_rect(rect, GameManager.COLOR_ICE, true)
+			var ground_color := GameManager.COLOR_ICE
+			if layout != null and layout.is_road(pos):
+				ground_color = ground_color.lerp(GameManager.COLOR_STEEL, 0.45)
+			grid.draw_rect(rect, ground_color, true)
 			grid.draw_rect(rect, GameManager.COLOR_STEEL, false, 1.0)
 
 

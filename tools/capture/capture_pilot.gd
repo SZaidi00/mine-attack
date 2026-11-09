@@ -12,7 +12,6 @@ extends Node
 ## through the same public APIs, so every sim-wide unit scan sees a real Unit.
 
 const WEATHER_LEAD_SEC := 3.0
-const SURFACE_CAM_POS := Vector2(0.0, -150.0)
 const ZOOMOUT_FACTOR := 0.5
 const UNIT_IDS: Array[String] = [
 	"miner", "pigeon", "archer", "wizard", "engineer", "dragon", "swordsman", "crawler",
@@ -28,10 +27,20 @@ var _weather_active := ""
 var _breach_revealed := false
 var _dunes_revealed := false
 var _fortress_revealed := false
+var _survey_revealed := false
 var _ui_prepared := false
 var _lineup_units: Array[Node2D] = []
 var _lineup_revealed := false
+var _lineup_focus := Vector2.ZERO
 var _stress_spawned := false
+
+
+## Surface-band camera focus, computed at runtime from the live GridWorld
+## statics (no longer compile-time constants) — the sim has applied its wide
+## profile long before any pose runs, but the value must not be baked into a
+## const.
+func _surface_cam_pos() -> Vector2:
+	return Vector2(0.0, (GridWorld.SURFACE_TOP + GridWorld.SURFACE_ROWS * 0.5) * GridWorld.CELL_SIZE)
 
 
 func setup(config: Dictionary) -> void:
@@ -61,7 +70,15 @@ func _process(delta: float) -> void:
 		if is_instance_valid(unit):
 			unit.position = unit.get_meta("lineup_position")
 			unit.is_underground = bool(unit.get_meta("lineup_underground"))
-			unit.set("_state", Unit.State.IDLE)
+			var action: StringName = unit.get_meta("lineup_action", &"")
+			unit.set("_state", _lineup_state(action))
+			var action_time := _elapsed + delta - float(unit.get_meta("lineup_started", _elapsed))
+			if action == &"attack":
+				var cooldown := maxf(unit.data.attack_cooldown, 0.05)
+				unit.set("_attack_timer", cooldown - fposmod(action_time, cooldown))
+			elif action == &"mine":
+				var period := 1.0 / maxf(unit.data.mining_swings_per_sec, 0.1)
+				unit.set("_mine_timer", period - fposmod(action_time, period))
 	if int(_config.get("stress_units", 0)) > 0 and not _stress_spawned:
 		_spawn_stress_units()
 	_elapsed += delta
@@ -103,16 +120,16 @@ func _apply_pose(shot: Dictionary) -> void:
 			_pc.set_view(false)
 			if _shell != null:
 				if shot.pose == "surface":
-					_shell.pose_camera(Vector3(0.0, 0.0, -1.5), 12.0, _shell.SURFACE_PITCH_DEGREES)
+					_shell.pose_camera(Presentation3D.to_3d(_surface_cam_pos()), 12.0, _shell.SURFACE_PITCH_DEGREES)
 				else:
-					_shell.pose_camera(Vector3(-10.0, 0.0, -1.5), 10.5, _shell.SURFACE_PITCH_DEGREES)
+					_shell.pose_camera(Presentation3D.to_3d(_surface_cam_pos() + Vector2(-1000.0, 0.0)), 10.5, _shell.SURFACE_PITCH_DEGREES)
 		"zoomout":
 			_pc.set_view(false)
 			if _shell != null:
 				_shell.pose_camera(Vector3.ZERO, 16.0, _shell.SURFACE_PITCH_DEGREES)
 		"underground":
 			_pc.set_view(true)
-			var lantern_cell := Vector2i(-15, 3)
+			var lantern_cell := Vector2i(get_node("/root/Main").get("map_definition").player_mine_cell.x, 3)
 			_ensure_underground_lantern(lantern_cell)
 			var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
 			if grid != null and _shell != null:
@@ -147,7 +164,7 @@ func _apply_pose(shot: Dictionary) -> void:
 				grid.set_reveal_all(GameManager.Team.PLAYER, true)
 				_dunes_revealed = true
 			if _shell != null:
-				_shell.pose_camera(Vector3(0.0, 0.0, -1.5), 10.5, _shell.SURFACE_PITCH_DEGREES)
+				_shell.pose_camera(Presentation3D.to_3d(_surface_cam_pos()), 10.5, _shell.SURFACE_PITCH_DEGREES)
 		"fortress":
 			_pc.set_view(false)
 			var building := _find_building(GameManager.Team.ENEMY)
@@ -161,15 +178,25 @@ func _apply_pose(shot: Dictionary) -> void:
 				hud.get("_faction_popup").visible = false
 			if building != null and _shell != null:
 				_shell.pose_camera(Presentation3D.to_3d(building.global_position), 7.0, _shell.SURFACE_PITCH_DEGREES)
-		"units", "units_underground":
-			var underground: bool = shot.pose == "units_underground"
+		"units", "units_underground", "unit_actions", "unit_actions_underground":
+			var underground: bool = shot.pose.ends_with("_underground")
+			var actions: bool = shot.pose.begins_with("unit_actions")
 			_pc.set_view(underground)
-			var focus := _spawn_unit_lineup(underground)
+			var focus := _spawn_unit_lineup(underground, actions)
 			if _shell != null:
 				var pitch: float = _shell.UNDERGROUND_PITCH_DEGREES if underground else _shell.SURFACE_PITCH_DEGREES
-				_shell.pose_camera(Presentation3D.to_3d(focus), 3.5 if underground else 6.0, pitch)
-		"custom":
-			# 3D branch: custom:X:Y:Z = focus (X, Y world units) + dolly Z.
+				var dolly := 3.5 if underground or actions else 6.0
+				_shell.pose_camera(Presentation3D.to_3d(focus), dolly, pitch)
+		"custom", "survey":
+			# 3D branch: custom/survey:X:Y:Z = focus (X, Y world units) + dolly Z.
+			if shot.pose == "survey":
+				var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
+				if grid != null:
+					grid.set_reveal_all(GameManager.Team.PLAYER, true)
+					_survey_revealed = true
+				if _shell != null:
+					_shell.get_node("World3D/Terrain3D").force_full_rebuild()
+					_shell.get_node("World3D/Fog3D")._rebuild()
 			if _shell != null:
 				var pitch: float = _shell.UNDERGROUND_PITCH_DEGREES \
 					if _pc.get_current_view_mode() == PlayerController.ViewMode.UNDERGROUND \
@@ -185,7 +212,32 @@ func _find_building(team: GameManager.Team) -> Node2D:
 	return null
 
 
-func _spawn_unit_lineup(underground: bool) -> Vector2:
+func _lineup_action(unit: Unit, actions: bool) -> StringName:
+	if not actions:
+		return &""
+	if unit.data.is_miner:
+		return &"mine"
+	if unit.data.is_engineer:
+		return &"repair"
+	if unit.data.is_fighter:
+		return &"attack"
+	return &""
+
+
+func _lineup_state(action: StringName) -> int:
+	match action:
+		&"mine":
+			return Unit.State.MINE
+		&"repair":
+			return Unit.State.REPAIR
+		&"attack":
+			return Unit.State.ATTACK
+	return Unit.State.IDLE
+
+
+func _spawn_unit_lineup(underground: bool, actions := false) -> Vector2:
+	if not _lineup_units.is_empty():
+		return _lineup_focus
 	_clear_unit_lineup()
 	var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
 	var container := get_node_or_null("/root/Main/Units")
@@ -193,7 +245,7 @@ func _spawn_unit_lineup(underground: bool) -> Vector2:
 		return Vector2.ZERO
 	grid.set_reveal_all(GameManager.Team.PLAYER, true)
 	_lineup_revealed = true
-	var row := 3 if underground else -2
+	var row := 3 if underground else (-3 if actions else -2)
 	for i in range(UNIT_IDS.size()):
 		var cell := Vector2i(-9 + (i % 4) * 2, row + floori(i / 4.0) * 2) if underground \
 			else Vector2i(-7 + i * 2, row)
@@ -205,15 +257,21 @@ func _spawn_unit_lineup(underground: bool) -> Vector2:
 		unit.position = grid.grid_to_world(cell)
 		container.add_child(unit)
 		unit.set_process(false)
-		unit.set("_state", Unit.State.IDLE)
+		var action := _lineup_action(unit, actions)
+		unit.set("_state", _lineup_state(action))
+		unit.set("_mine_target_angle", -PI * 0.5 if actions else 0.0)
+		var aim_offset := Vector2(0.0, -32.0) if actions else Vector2(32.0, 0.0)
+		unit.set("_target_position", unit.position + aim_offset)
 		unit.set_meta("lineup_position", unit.position)
 		unit.set_meta("lineup_underground", underground)
+		unit.set_meta("lineup_action", action)
+		unit.set_meta("lineup_started", _elapsed)
 		_lineup_units.append(unit)
+	_lineup_focus = grid.grid_to_world(Vector2i(-6, row + 1)) if underground else grid.grid_to_world(Vector2i(0, row))
 	if underground:
 		grid.damage_cell(Vector2i(-6, row + 1), 100000, 3)
 		_ensure_underground_lantern(Vector2i(-6, row + 1))
-		return grid.grid_to_world(Vector2i(-6, row + 1))
-	return grid.grid_to_world(Vector2i(0, row))
+	return _lineup_focus
 
 
 ## BENCH stress load: spawn n units per team across the surface band — real,
@@ -235,7 +293,7 @@ func _spawn_stress_units() -> void:
 	while spawned < n * 2:
 		var team: GameManager.Team = GameManager.Team.PLAYER if spawned < n else GameManager.Team.ENEMY
 		var i := spawned if team == GameManager.Team.PLAYER else spawned - n
-		var row := GridWorld.SURFACE_TOP + 1 + (i / per_row) % 4
+		var row := GridWorld.SURFACE_TOP + 1 + (i / per_row) % maxi(1, GridWorld.SURFACE_ROWS - 2)
 		# Each team spawns on its own half so the bench load persists for the
 		# whole window instead of brawling to death at the midfield line.
 		var col := (-19 + (i % per_row)) if team == GameManager.Team.PLAYER else (1 + (i % per_row))
@@ -314,11 +372,11 @@ func _capture(shot: Dictionary) -> void:
 	# yields, which would otherwise offset every name by one.
 	_pending_captures += 1
 	var name: String = "%03d_%s.png" % [_shot_idx + 1, shot.pose]
-	if _shell != null and ["underground", "breach", "storm", "volcano", "units_underground"].has(shot.pose):
+	if _shell != null and ["underground", "breach", "storm", "volcano", "units_underground", "unit_actions_underground"].has(shot.pose):
 		await get_tree().create_timer(_shell.VIEW_TWEEN_DURATION).timeout
-	if ["underground", "breach", "units_underground", "dunes", "fortress"].has(shot.pose):
+	if ["underground", "breach", "units_underground", "unit_actions_underground", "dunes", "fortress", "survey"].has(shot.pose):
 		await get_tree().create_timer(Fog3D.REFRESH_INTERVAL).timeout
-	if shot.pose == "units":
+	if ["units", "unit_actions"].has(shot.pose):
 		await get_tree().create_timer(0.3).timeout
 	# Two frames: one for the pose/weather to take effect, one to draw.
 	await get_tree().process_frame
@@ -331,13 +389,16 @@ func _capture(shot: Dictionary) -> void:
 		print("Capture: %s at t=%.2fs" % [name, _elapsed])
 	if shot.pose == "storm" or shot.pose == "volcano":
 		_end_forced_weather()
-	elif (shot.pose == "breach" and _breach_revealed) or (shot.pose == "dunes" and _dunes_revealed) or (shot.pose == "fortress" and _fortress_revealed):
+	elif (shot.pose == "breach" and _breach_revealed) or (shot.pose == "dunes" and _dunes_revealed) or (shot.pose == "fortress" and _fortress_revealed) or (shot.pose == "survey" and _survey_revealed):
 		var grid := get_node_or_null("/root/Main/World/GridWorld") as GridWorld
 		if grid != null:
 			grid.set_reveal_all(GameManager.Team.PLAYER, false)
 		_breach_revealed = false
 		_dunes_revealed = false
 		_fortress_revealed = false
-	elif shot.pose == "units" or shot.pose == "units_underground":
-		_clear_unit_lineup()
+		_survey_revealed = false
+	elif shot.pose in ["units", "units_underground", "unit_actions", "unit_actions_underground"]:
+		var next_same: bool = _shot_idx < _config.shots.size() and _config.shots[_shot_idx].pose == shot.pose
+		if not next_same:
+			_clear_unit_lineup()
 	_pending_captures -= 1

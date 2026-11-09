@@ -12,6 +12,10 @@ extends GutTest
 # and explicit attack orders flash pooled telegraph arcs (Telegraph3D).
 # Visual-revamp R6 adds the once-per-match central-wall breach dust/crack
 # moment and its reduced-motion-aware camera nudge.
+# Plan 13 adds restrained mining dust: ordinary (non-wall) cell erasure emits
+# GridWorld.cell_mined, which fires a pooled burst only for player-visible
+# underground cells on detail-enabled tiers, throttled so a burst of miners
+# cannot exhaust the pool.
 
 var _shell: Node
 var _main: Node
@@ -440,3 +444,72 @@ func test_volcano_warning_pulses_the_sun() -> void:
 	assert_eq(float(unpulsed["sun_energy"]), float(base["sun_energy"]),
 		"the pulse only runs during the warning window")
 	WeatherManager.force_volcano_end()
+
+
+# ─── Plan 13: restrained mining dust (cell_mined) ───
+
+func test_cell_mined_spawns_throttled_dust_for_visible_underground_mining() -> void:
+	await _frames(10)
+	var effects := _effects()
+	var grid := _grid()
+	effects.set_underground_view(true)
+	grid.set_reveal_all(GameManager.Team.PLAYER, true)
+	await _frames(3)
+	var pos := Vector2i(-21, 4)
+	assert_true(grid.has_cell(pos) and not grid.get_cell(pos).is_wall,
+		"precondition: an ordinary diggable underground cell")
+	effects._mine_burst_cooldown = 0.0
+	grid.damage_cell(pos, 100000, 3)
+	await _frames(2)
+	var expected: Vector2 = grid.grid_to_world(pos) * Effects3D.WORLD_SCALE
+	var fired: GPUParticles3D = null
+	for burst in effects._bursts:
+		if burst.emitting and is_equal_approx(burst.position.x, expected.x) \
+				and is_equal_approx(burst.position.z, expected.y):
+			fired = burst
+	assert_not_null(fired, "visible underground mining fires a pooled dust burst")
+	assert_almost_eq(effects._mine_burst_cooldown, Effects3D.MINE_BURST_THROTTLE_SEC, 0.05,
+		"the handler arms its throttle window")
+	# A second cell mined inside the window reuses the pool instead of
+	# exhausting it (and keeps the plain, non-emphasized burst read).
+	var index_after_first: int = effects._burst_index
+	grid.damage_cell(Vector2i(-21, 5), 100000, 3)
+	await _frames(2)
+	assert_eq(effects._burst_index, index_after_first,
+		"throttled mining does not consume another pool slot")
+	# Once the cooldown lapses, mining fires the next pooled burst.
+	effects._mine_burst_cooldown = 0.0
+	grid.damage_cell(Vector2i(-21, 6), 100000, 3)
+	await _frames(2)
+	assert_eq(effects._burst_index, (index_after_first + 1) % Effects3D.BURST_POOL_SIZE,
+		"the next eligible mining fires the following pooled burst")
+	grid.set_reveal_all(GameManager.Team.PLAYER, false)
+	effects.set_underground_view(false)
+
+
+func test_cell_mined_ignores_surface_hidden_and_potato_paths() -> void:
+	await _frames(10)
+	var effects := _effects()
+	var grid := _grid()
+	effects.set_underground_view(true)
+	await _frames(3)
+	var index0: int = effects._burst_index
+	effects._mine_burst_cooldown = 0.0  # drain the previous test's throttle
+	# Surface row: never mining dust, even if the cell is visible.
+	effects._on_cell_mined(Vector2i(-15, GridWorld.Y_MIN))
+	assert_eq(effects._burst_index, index0, "surface cells never spawn mining dust")
+	# Hidden underground cell (the enemy shaft starts never-seen).
+	var hidden := Vector2i(15, 3)
+	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, hidden), 0,
+		"fixture: the enemy shaft starts hidden")
+	effects._on_cell_mined(hidden)
+	assert_eq(effects._burst_index, index0, "hidden cells never spawn mining dust")
+	# Potato: details (and mining dust) stay off entirely.
+	var previous_quality := ArtStyle3D.quality
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.POTATO)
+	effects._on_cell_mined(Vector2i(-15, 3))
+	assert_eq(effects._burst_index, index0, "Potato spawns no mining dust")
+	ArtStyle3D.apply_quality(previous_quality)
+	assert_eq(effects._mine_burst_cooldown, 0.0,
+		"every rejected path leaves the throttle untouched")
+	effects.set_underground_view(false)

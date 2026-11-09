@@ -166,6 +166,12 @@ const LANTERN_SALVAGE_RATIO: float = 0.5
 # Sentry towers: static surface defenses that auto-attack the highest-priority
 # enemy in range (fighters > miners > buildings) and double as vision sources.
 # Factions override cost/HP/damage/cooldown/build speed (see FactionData).
+# TOWER_VISION is deliberately smaller than the 10-row surface band is tall,
+# so a single tower — even one placed mid-band — cannot light the whole band;
+# full-width coverage takes a second tower and/or lanterns (like the lantern
+# radii below, it is also smaller than the half-map width). Vision is shorter
+# than attack range on purpose: a lone tower out-shoots its own sight and
+# relies on the team's lanterns/pigeons/units to spot far targets.
 const TOWER_COST: int = 300
 const TOWER_HP: int = 800
 const TOWER_RANGE_CELLS: int = 8
@@ -173,16 +179,17 @@ const TOWER_DAMAGE: int = 12
 const TOWER_COOLDOWN: float = 1.2
 const TOWER_BUILD_TIME: float = 8.0
 const TOWER_MAX_COUNT: int = 2
-const TOWER_VISION: int = 10  # surface only
+const TOWER_VISION: int = 4  # surface only
 const TOWER_MIN_BUILDING_DISTANCE: int = 2  # cells from any building/mine entry
 # Placeable walls: single-cell surface barriers that block movement (A* solid
-# once built) and projectiles. Destroyed by fighter attacks. Factions override
-# cost and max count (Industrial: 30g, 3).
+# once built) and projectiles. Destroyed by fighter attacks. Adjacent same-team
+# walls link into a chain (posts + rails — see WallSegment). Factions override
+# cost and max count (Industrial: 30g, 10).
 # (PLACED_ prefix: WALL_HP/WALL_* already name the central wall's constants.)
 const PLACED_WALL_COST: int = 50
 const PLACED_WALL_HP: int = 400
 const PLACED_WALL_BUILD_TIME: float = 3.0
-const PLACED_WALL_MAX_COUNT: int = 2
+const PLACED_WALL_MAX_COUNT: int = 8
 # Destroyed towers/walls drop this share of their build cost (as lanterns do).
 const STRUCTURE_SALVAGE_RATIO: float = 0.5
 # Player-initiated demolition of own towers/walls/lanterns/traps refunds this
@@ -888,15 +895,15 @@ const LAYER_TILE_HP: Dictionary = {
 }
 
 # ─── MAP / GRID ───
-const GRID_X_MIN: int = -40
-const GRID_X_MAX: int = 40
+const GRID_X_MIN: int = -50
+const GRID_X_MAX: int = 50
 const GRID_Y_MIN: int = 0
 const GRID_Y_MAX: int = 21
 
 # Walkable surface battlefield: SURFACE_ROWS rows of open ground stacked above
 # row 0 (y in [GRID_Y_MIN - SURFACE_ROWS + 1, GRID_Y_MIN]). Underground stays
 # at y >= 1.
-const SURFACE_ROWS: int = 6
+const SURFACE_ROWS: int = 10
 
 # Rows per underground layer in GridWorld (3 rows => 7 layers).
 const ROWS_PER_LAYER: int = 3

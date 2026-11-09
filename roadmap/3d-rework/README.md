@@ -5,7 +5,7 @@
 of the original 3D conversion are complete; see `roadmap/3d-conversion/`).
 
 > **Sim-side groundwork (2026-10-21):** the surface is no longer a single
-> row — the sim now generates a 6-row walkable battlefield band
+> row — the sim now generates a 10-row walkable battlefield band
 > (`y ∈ [SURFACE_TOP, 0]`, `Constants.SURFACE_ROWS`), so units move in 2D on
 > the surface and structures place anywhere in the band (walls seal their
 > whole column). The presentation-only hard rule below still applies to

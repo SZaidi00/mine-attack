@@ -22,13 +22,16 @@ extends Node
 ##                        underground - built mine lantern + local-area light pool
 ##                        breach    - underground + forced first wall breach
 ##                        units / units_underground - R7 eight-unit lineup
+##                        unit_actions / unit_actions_underground - native
+##                          mining, attacks, and engineer repair poses
 ##                        base      - R8 player keep + active production
 ##                        dunes     - R8 open snow-field composition
 ##                        fortress  - R8 revealed enemy citadel
 ##                        storm     - surface + forced snowstorm
 ##                        volcano   - surface + forced volcano eruption
 ##                        custom:X:Y:Z - explicit camera focus (X, Y) and
-##                                      dolly Z (e.g. custom:0:-150:6)
+##                                      dolly Z (e.g. custom:0:-128:6)
+##                        survey:X:Y:Z - custom framing + reveal-all for the shot
 ##   --stress-units <n> spawn n extra units per team (surface) once the match
 ##                      is up — the 200-unit perf stress for BENCH runs
 ##   --bench <seconds>  run the match for this long (sim-seconds), then print
@@ -57,7 +60,7 @@ const DEFAULT_SEED := 12345
 const VALID_FACTIONS: Array[String] = ["arcane", "brute", "industrial"]
 const VALID_POSES: Array[String] = [
 	"start", "surface", "zoomout", "underground", "breach", "storm", "volcano",
-	"units", "units_underground", "base", "dunes", "fortress",
+	"units", "units_underground", "unit_actions", "unit_actions_underground", "base", "dunes", "fortress",
 ]
 
 
@@ -81,6 +84,9 @@ func _ready() -> void:
 
 
 func _apply_game_config(config: Dictionary) -> void:
+	# Capture (and BENCH) are wide-only: pin the world profile before the shell
+	# loads so the sim's _enter_tree applies the authored 101x10 board.
+	GameManager.set_world_profile_request("wide")
 	GameManager.set_difficulty(config.difficulty as GameManager.Difficulty)
 	GameManager.set_adaptive_difficulty(false)
 	GameManager.set_map_seed(config.seed)
@@ -158,7 +164,7 @@ static func parse_args(args: PackedStringArray) -> Dictionary:
 
 ## Parse a "--shots" spec into an ordered Array of shot Dictionaries:
 ## {"t": float, "pose": String, "pos": Vector2, "zoom": float}.
-## pos/zoom are only set for "custom" poses. Pure/static for tests.
+## pos/zoom are only set for "custom" and "survey" poses. Pure/static for tests.
 static func parse_shots(spec: String) -> Array:
 	var shots: Array = []
 	for raw in spec.split(";", false):
@@ -168,7 +174,7 @@ static func parse_shots(spec: String) -> Array:
 		var t := parts[0].to_float()
 		var pose := parts[1].strip_edges()
 		var shot := {"t": t, "pose": pose, "pos": Vector2.ZERO, "zoom": 0.0}
-		if pose == "custom":
+		if pose == "custom" or pose == "survey":
 			# Malformed entries are skipped silently so CI runs stay clean;
 			# the produced PNG count reveals a typo'd spec.
 			if parts.size() < 5:

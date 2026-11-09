@@ -412,12 +412,11 @@ func test_surface_lantern_uses_imported_lamp() -> void:
 		"procedural head contract preserved underground")
 
 
-func test_mine_entry_imported_headframe_straddles_the_shaft() -> void:
+func test_mine_entry_imported_headframe_centers_on_the_shaft() -> void:
 	var proxy := StructureProxy3D.create(_main.get_node("World/PlayerMineEntry"), _grid)
 	autofree(proxy)
 	assert_not_null(proxy._model_wrapper, "Fancy builds the imported headframe")
-	var half := StructureProxy3D.CELL * 0.5
-	assert_almost_eq(proxy._model_wrapper.position.x, half, 0.001,
-		"corner-origin model shifts half a cell onto the shaft column")
-	assert_almost_eq(proxy._model_wrapper.position.z, half, 0.001,
-		"corner-origin model shifts half a cell onto the shaft column")
+	assert_almost_eq(proxy._model_wrapper.position.x, 0.0, 0.001,
+		"cell-centered model shares the shaft column's x position")
+	assert_almost_eq(proxy._model_wrapper.position.z, 0.0, 0.001,
+		"cell-centered model shares the shaft column's surface position")

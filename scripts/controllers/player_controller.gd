@@ -32,7 +32,10 @@ var _zoom_factor: float = 1.0
 @onready var _grid: GridWorld = get_node("/root/Main/World/GridWorld")
 
 var _view_mode: ViewMode = ViewMode.SURFACE
-var _last_surface_cam_pos: Vector2 = Vector2(0, -150)
+# Neutral default only: the real bookmark is computed in _ready (after the
+# world profile was applied in main.gd's _enter_tree) by
+# _camera_helper._init_view_positions() from the authored camera position.
+var _last_surface_cam_pos: Vector2 = Vector2.ZERO
 var _last_underground_cam_pos: Vector2 = Vector2(0, 400)
 # Camera slide target after a view toggle (INF = not sliding).
 var _view_slide_target: Vector2 = Vector2.INF
@@ -40,6 +43,9 @@ var _view_slide_target: Vector2 = Vector2.INF
 var _shake_strength: float = 0.0
 # Rally stance armed: the next left-click sets the rally point for all fighters.
 var _rally_armed: bool = false
+# Spawn-point placement armed: the next left-click sets the building's spawn
+# point (HUD "Set Spawn" button). Right-click or Esc cancels.
+var _spawn_point_armed: bool = false
 # Attack-move armed: the next left-click issues an attack-move order for the
 # selected fighters. Toggled by the attack_move action (Q).
 var _attack_move_armed: bool = false
@@ -198,6 +204,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		_commands._handle_rally_input(event)
 		return
 
+	# Spawn-point placement mode: left-click places the point on a surface
+	# cell, right-click or Esc cancels. Swallow the input either way.
+	if _spawn_point_armed:
+		_commands._handle_spawn_point_input(event)
+		return
+
 	# Control groups: raw digit keys with Ctrl (assign) / Alt (recall), checked
 	# before the action chain so they can't fall through to the train_* hotkeys
 	# (digits 1-8 are bound there). Intentionally not remappable.
@@ -346,6 +358,14 @@ func is_rally_armed() -> bool:
 	return _rally_armed
 
 
+func is_spawn_point_armed() -> bool:
+	return _spawn_point_armed
+
+
+func toggle_spawn_point_armed() -> void:
+	_commands.toggle_spawn_point_armed()
+
+
 ## Control groups: Ctrl+digit stores a snapshot of the current selection under
 ## that digit (even an empty one — that is how a group is cleared); Alt+digit
 ## recalls it, dropping units that died in the meantime.
@@ -368,6 +388,7 @@ func _toggle_attack_move_arm() -> void:
 		DebugLog.log_reject("PlayerController", "attack_move", "no fighters selected")
 		return
 	_attack_move_armed = not _attack_move_armed
+	_spawn_point_armed = false
 	DebugLog.log_command("PlayerController", "attack_move", "armed" if _attack_move_armed else "disarmed")
 
 

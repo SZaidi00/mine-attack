@@ -118,6 +118,14 @@ func refresh_clearances() -> void:
 # ─── Internals ───
 
 
+## Public read-only clearance strength at continuous cell coordinates — the
+## same stamp set refresh_clearances() maintains. Plan 07's surface scatter
+## skips any candidate above 0, so props never land on or within a structure's
+## trampled radius.
+func clearance_at_cell(cx: float, cy: float) -> float:
+	return _clearance_at(cx, cy)
+
+
 func _stamp(cx: int, cy: int) -> void:
 	var r := int(ceil(CLEAR_RADIUS))
 	for dy in range(-r, r + 1):

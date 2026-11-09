@@ -36,6 +36,15 @@ const PALETTE := {
 	"lamp_warm": Color("#FFB85C"),
 	"witch_light": Color("#A8E6C8"),
 	"storm_gloom": Color("#B9C6D4"),
+	"compacted_snow": Color("#7E8B98"),
+	"pine": Color("#2D4746"),
+	# Plan 13 excavated mine floors: cold carved strata, lighter and bluer than
+	# the matching dirt band (shallow dirt #4A4850, mid rock #3A3F4A, deep coal
+	# #1C2029). The extra value is deliberate: at the underground ambient level,
+	# darker floors collapsed into the unexplored void in pixel captures.
+	"mine_floor_shallow": Color("#6B697A"),
+	"mine_floor_mid": Color("#596073"),
+	"mine_floor_deep": Color("#47536C"),
 }
 
 const TEAM_PLAYER := Color("#4A90F5")
