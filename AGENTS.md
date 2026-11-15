@@ -203,8 +203,7 @@ mine-attack/
 │                      # models/model_manifest.json), resize_glb_textures.py
 │                      # (downscales embedded GLB textures to the 2048² cap)
 ├── .githooks/         # pre-push release hook
-├── improvements/      # revamp.md + new sprites
-└── plans/             # Kimi Code implementation plans — see plans/README.md
+└── improvements/      # revamp.md + new sprites
 ```
 
 **Implemented revamp phases:** Phase 1 (Fog of War & lanterns), Phase 2 (factions), Phase 3 (towers & walls), Phase 4 (dynamic terrain: lava rising, cave-ins, ore depletion), Phase 5 (weather: snowstorms), Phase 6 (tech-tree overhaul: mutually-exclusive research branches, respec, traps, burning ground), Phase 7 (UI & menu updates: faction-select glow + themed particles, enemy-faction "???" top-bar indicator + identified popup, radial build menu, red weather warning), Phase 8 (AI refactor: AIBeliefSystem autoload, faction scouting, AI lantern placement, weather/lava responses, faction-specific strategies), Phase 9 (volcano weather event: background volcano, eruption warnings, meteors, burn patches, snowstorm extinguishing, lava-time acceleration).
