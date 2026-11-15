@@ -285,7 +285,7 @@ func test_depleted_ore_trickles_at_a_tenth() -> void:
 	# survives its post-depletion swing (a destroying swing pays the
 	# remainder, which is correct behavior but not what is measured here).
 	var ore_cells: Array[Vector2i] = []
-	for x in range(-40, -2):
+	for x in range(GridWorld.X_MIN, -2):
 		for y in range(1, 22):
 			var pos: Vector2i = Vector2i(x, y)
 			var cell = _grid.get_cell(pos)

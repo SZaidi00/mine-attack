@@ -163,6 +163,24 @@ func test_volcano_meteor_rate_scales_with_difficulty() -> void:
 
 # ─── Impact damage ───
 
+func test_meteor_targets_cover_the_expanded_surface() -> void:
+	var found_upper_lane := false
+	for i in range(48):
+		var scene: Node = get_tree().current_scene
+		var previous_children: int = scene.get_child_count()
+		WeatherManager._spawn_meteor()
+		assert_eq(scene.get_child_count(), previous_children + 1, "one new meteor spawned for the target check")
+		var meteor := scene.get_child(scene.get_child_count() - 1) as Meteor
+		assert_not_null(meteor, "the newest child is the spawned meteor")
+		if meteor == null:
+			continue
+		var cell: Vector2i = _grid.world_to_grid(meteor._target_pos)
+		assert_true(_grid.is_surface_row(cell.y), "meteor target is inside the expanded surface band")
+		found_upper_lane = found_upper_lane or cell.y < -1
+		meteor.free()
+	assert_true(found_upper_lane, "meteor targeting reaches the added surface lanes")
+
+
 func test_meteor_damages_surface_unit() -> void:
 	var target: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, _grid.grid_to_world(Vector2i(-20, 0)))
 	target.stop()

@@ -32,6 +32,10 @@ var _last_damage_time: float = -999.0
 var _build_progress: float = 0.0
 var _is_built: bool = false
 var _cell: Vector2i = Vector2i(-9999, -9999)
+# Chain state: which of the 4 adjacent cells hold a same-team wall. Drives
+# the post-and-rails look in _draw and the 3D proxy's link meshes. Refreshed
+# group-wide whenever a wall spawns or leaves (refresh_group).
+var _connections: Dictionary = {"left": false, "right": false, "up": false, "down": false}
 # Post-spawn base stats; research bonuses recompute from these so already-
 # placed walls update on research changes without compounding.
 var _base_max_hp: int = 0
@@ -60,6 +64,45 @@ func _ready() -> void:
 	if not ResearchManager.research_changed.is_connected(_on_research_changed):
 		ResearchManager.research_changed.connect(_on_research_changed)
 	queue_redraw()
+	# A freshly placed wall links any adjacent same-team walls (and they it).
+	refresh_group(get_tree())
+
+
+## Recomputes this wall's chain links from the live "walls" group and redraws
+## when the set changed. Links require a same-team wall on the 4-adjacent
+## cell; built state is irrelevant — chains form as they build.
+func refresh_connections() -> void:
+	var conns: Dictionary = {"left": false, "right": false, "up": false, "down": false}
+	for wall in get_tree().get_nodes_in_group("walls"):
+		if wall == self or wall.team != team:
+			continue
+		var other_cell: Vector2i = wall.get_cell()
+		if other_cell.y == _cell.y:
+			if other_cell.x == _cell.x - 1:
+				conns["left"] = true
+			elif other_cell.x == _cell.x + 1:
+				conns["right"] = true
+		elif other_cell.x == _cell.x:
+			if other_cell.y == _cell.y - 1:
+				conns["up"] = true
+			elif other_cell.y == _cell.y + 1:
+				conns["down"] = true
+	if conns != _connections:
+		_connections = conns
+		queue_redraw()
+
+
+## Group-wide chain refresh: called when any wall spawns (its own _ready) or
+## leaves (_destroy/demolish, after remove_from_group so it excludes itself).
+static func refresh_group(tree: SceneTree) -> void:
+	for wall in tree.get_nodes_in_group("walls"):
+		wall.refresh_connections()
+
+
+## Chain state for the 3D proxy (which rebuilds its link meshes at reconcile
+## time when this changes) and the test suite.
+func get_connections() -> Dictionary:
+	return _connections.duplicate()
 
 
 func _on_research_completed(completed_team: GameManager.Team, _tech_id: String) -> void:
@@ -193,6 +236,7 @@ func repair(amount: int) -> int:
 ## coin, frees the sealed column, and removes the wall (no salvage pickup).
 func demolish() -> void:
 	remove_from_group("walls")
+	refresh_group(get_tree())
 	if _grid != null:
 		for y in range(GridWorld.SURFACE_TOP, GridWorld.Y_MAX + 1):
 			var pos := Vector2i(_cell.x, y)
@@ -208,6 +252,7 @@ func demolish() -> void:
 
 func _destroy() -> void:
 	remove_from_group("walls")
+	refresh_group(get_tree())
 	# Free the cells this wall sealed: the surface band and dug cells beneath
 	# it. Undug dirt stays A*-solid on its own.
 	if _grid != null:
@@ -237,8 +282,39 @@ func _draw() -> void:
 	var texture: Texture2D = _TEXTURES[team]
 	var tex_size: Vector2 = texture.get_size()
 	var alpha: float = 1.0 if _is_built else 0.55
-	# The wall fills its surface-row cell (local +16 = cell center).
-	draw_texture_rect(texture, Rect2(-tex_size / 2.0, tex_size), false, Color(1, 1, 1, alpha))
+	var team_color: Color = GameManager.COLOR_PLAYER if team == GameManager.Team.PLAYER else GameManager.COLOR_ENEMY
+
+	# Chained-wall look: a narrow post (the old texture squished to 16px) at
+	# the cell center, with rails running to each connected neighbor's post.
+	# Adjacent walls each paint half a rail, meeting at the cell boundary.
+	# Unconnected x-sides keep short stubs so a lone wall still reads solid.
+	var post := Rect2(-8, -tex_size.y / 2.0, 16, tex_size.y)
+	draw_texture_rect(texture, post, false, Color(1, 1, 1, alpha))
+
+	# Rails sit lower than the post top ("post + shorter link") in two lanes.
+	var rail_color: Color = GameManager.COLOR_STEEL
+	for side: String in ["left", "right"]:
+		var dir: float = -1.0 if side == "left" else 1.0
+		var outer: float = dir * (GridWorld.CELL_SIZE / 2.0 if _connections[side] else 20.0)
+		var inner: float = dir * 8.0
+		var rail := Rect2(minf(outer, inner), -10.0, absf(outer - inner), 5.0)
+		draw_rect(rail, rail_color)
+		draw_rect(Rect2(rail.position, Vector2(rail.size.x, 1.5)), team_color, true)
+		var rail2 := Rect2(minf(outer, inner), 5.0, absf(outer - inner), 5.0)
+		draw_rect(rail2, rail_color)
+		draw_rect(Rect2(rail2.position, Vector2(rail2.size.x, 1.5)), team_color, true)
+	for side: String in ["up", "down"]:
+		if not _connections[side]:
+			continue
+		var dir: float = -1.0 if side == "up" else 1.0
+		var outer: float = dir * GridWorld.CELL_SIZE / 2.0
+		var inner: float = dir * (tex_size.y / 2.0)
+		var rail := Rect2(-10.0, minf(outer, inner), 5.0, absf(outer - inner))
+		draw_rect(rail, rail_color)
+		draw_rect(Rect2(rail.position, Vector2(1.5, rail.size.y)), team_color, true)
+		var rail2 := Rect2(5.0, minf(outer, inner), 5.0, absf(outer - inner))
+		draw_rect(rail2, rail_color)
+		draw_rect(Rect2(rail2.position, Vector2(1.5, rail2.size.y)), team_color, true)
 
 	# Selection highlight outline.
 	if selected:

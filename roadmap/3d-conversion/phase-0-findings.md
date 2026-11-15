@@ -58,11 +58,60 @@ billboard (`frost_mines_assets/units/miner_l1_player.png`) following
 - FOV left at the 75° default; only a flat dark background environment —
   no lighting (deliberately out of scope).
 
-## Script changes needed: none
+## Sim changes on this branch
 
-Zero changes to autoloads, AI, units, world, or UI scripts. All spike code
-is new files under `scripts/three_d/` plus `scenes/main_3d.tscn`; the only
-edit to an existing file is `run/main_scene` in `project.godot`.
+The 3D presentation layer is still new files (`scripts/three_d/`,
+`scenes/main_3d.tscn`/`world_3d.tscn`), but the "zero sim changes" claim
+did not survive Phase 1. Verified sim-side edits (vs `main`):
+
+- `scripts/autoload/constants.gd` — new `SURFACE_ROWS` (= 6): the surface
+  is a walkable band, not a single row.
+- `scripts/world/grid_world.gd` — `SURFACE_TOP` + `is_surface_row()`; the
+  `player_fog_revision` counter and `consume_player_fog_changes()` change
+  feed the 3D fog/terrain rebuilds poll.
+- `scripts/world/grid_map_generation.gd` — surface band generation
+  (open-ground rows `SURFACE_TOP..0`); the A* region reaches `SURFACE_TOP`.
+- `scripts/world/grid_pathfinding.gd` — `find_path_underground()` seals the
+  whole surface band for crawler raids; owner wall-seal lifts read the seal
+  map.
+- `scripts/world/wall_segment.gd` — a built wall seals its entire column
+  through the band (`_seal_column`), recorded in
+  `GridWorld._wall_sealed_cells`.
+- `scripts/world/building.gd` — base footprints seal their full band-row
+  height (`_mark_footprint_solid`).
+- `scripts/world/grid_fog_of_war.gd` — per-frame diff of the player's fog
+  state bumps the revision (with a `PLAYER_FOG_CHANGE_CAP` overflow
+  warning; plan 01, PR #7).
+- `scripts/world/lantern.gd` / `tower.gd` — attack stand points moved off
+  the fixed row-0 ground line onto the structure's own band row.
+- `scripts/units/unit_navigation.gd` — building stand point clamped into
+  the band; kiting walkability floor at `SURFACE_TOP`; the enemy-wall check
+  reads the seal map.
+- `scripts/units/unit_combat.gd` (+ `building.gd`, `burning_ground.gd`) —
+  damage/fire/immune popups branch to `DamagePopup3D` when the shell runs.
+- `scripts/controllers/player_commands.gd` — `_screen_to_world()`
+  unprojects through the rig camera; order markers and attack telegraphs
+  branch to 3D spawns.
+- `scripts/controllers/player_selection.gd` — drag-box selection projects
+  units through the rig camera (plan 02, PR #7).
+- `scripts/controllers/player_build_placement.gd` — shell-mode placement
+  preview (`BuildGhost3D` + `RangeDisc3D`, 2D ghost skipped); tower/wall
+  validity accepts any band row.
+- `scripts/controllers/player_camera.gd` — pan clamp and default view
+  extended to the band.
+- `scripts/controllers/ai_awareness.gd` — AI tower/lantern cell picks
+  iterate the whole band.
+- `scripts/autoload/weather_manager.gd` — meteors target any band row.
+- `scripts/ui/main_menu.gd` — Play loads `scenes/main_3d.tscn` (the
+  branch's one menu edit).
+- `scripts/autoload/settings_manager.gd`, `scripts/ui/debug_overlay.gd`,
+  `scripts/ui/minimap.gd` — graphics-quality persistence, Probe3D perf
+  readout, minimap camera rect follows the rig.
+
+Every edit is either the surface-band generalization (a sim-side feature in
+its own right) or a one-way presentation branch (`Presentation3D.shell()`
+is null in 2D, so the 2D path and the GUT suite are untouched). The
+sim → render-only rule still holds; nothing 3D writes back.
 
 ## Known gaps (deliberate spike scope)
 
@@ -73,9 +122,15 @@ edit to an existing file is `run/main_scene` in `project.godot`.
 - Terrain is a single flat plane; surface and underground coexist at
   y = 0 as in 2D (Tab separates them).
 
+*Update: all four closed by Phases 1–2 — rig-camera picking (including
+drag-box select, plan 02 / PR #7), reduced-motion-aware rig shake in
+`main_3d.gd`, the full effects layer (`effects_3d.gd` /
+`event_proxies_3d.gd`), and sculpted dune terrain (`height_field.gd`). See
+[phase-1-progress.md](phase-1-progress.md).*
+
 ## Go / no-go checklist
 
-- [ ] Camera pan/zoom/Tab feels tight (no seasickness, no dead zones). — *pending playtest*
-- [ ] The 2D tile data reads clearly from an angled view. — *pending playtest*
-- [ ] Sim still runs at 60fps+ with the 3D viewport open. — *pending playtest (watch the 0.2 s terrain rebuild hitch under lava/cave-in bursts)*
+- [ ] Camera pan/zoom/Tab feels tight (no seasickness, no dead zones). — *pending playtest* (deterministic camera coverage exists in `tests/test_3d_camera.gd`; the feel judgment stays human)
+- [ ] The 2D tile data reads clearly from an angled view. — *pending playtest* (deterministic renders via `tools/capture/run_capture.sh`; the readability judgment stays human)
+- [ ] Sim still runs at 60fps+ with the 3D viewport open. — *partially verifiable headless*: BENCH mode (`STRESS_UNITS=100 BENCH=30`) prints Probe3D per-section script-time averages after 30 sim-seconds at 200 live units (setup in `tools/capture/README.md`) — real-GPU frame rate stays *pending playtest*; frame times under software GL are meaningless
 - [x] No changes were needed in any autoload or AI script to make the camera work.

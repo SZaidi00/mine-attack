@@ -140,8 +140,8 @@ func test_faction_accent_colors_differ_per_faction() -> void:
 
 
 func test_undead_tint_changes_body_materials() -> void:
-	var living := UnitModel3D.create(_spawn("swordsman"))
-	var undead := UnitModel3D.create(_spawn("swordsman", true))
+	var living := UnitModel3D.create(_spawn("swordsman"), false)
+	var undead := UnitModel3D.create(_spawn("swordsman", true), false)
 	autofree(living)
 	autofree(undead)
 	assert_ne(_albedo_set(living), _albedo_set(undead),
@@ -224,7 +224,7 @@ func test_r7_manifest_models_load_within_scale_and_triangle_budgets() -> void:
 		var key: String = "unit_" + unit_id
 		var entry := ModelManifest.entry_for(key)
 		assert_false(entry.is_empty(), "%s has a manifest entry" % key)
-		var result := UnitModelLoader.instantiate(key)
+		var result := UnitModelLoader.instantiate(key, GameManager.Team.PLAYER, false)
 		assert_false(result.is_empty(), "%s imports" % key)
 		if result.is_empty():
 			continue
@@ -242,7 +242,7 @@ func test_r7_manifest_models_load_within_scale_and_triangle_budgets() -> void:
 
 func test_r7_standard_imports_and_potato_fallback() -> void:
 	ArtStyle3D.apply_quality(ArtStyle3D.Quality.STANDARD)
-	var imported := UnitModel3D.create(_spawn("swordsman"))
+	var imported := UnitModel3D.create(_spawn("swordsman"), false)
 	autofree(imported)
 	assert_true(imported._using_imported, "Standard uses the sculpted GLB")
 	assert_not_null(imported._arm_r, "imported rig exposes animation pivots")
@@ -261,8 +261,8 @@ func test_r7_standard_imports_and_potato_fallback() -> void:
 
 
 func test_r7_materials_are_isolated_per_instance() -> void:
-	var first := UnitModel3D.create(_spawn("miner"))
-	var second := UnitModel3D.create(_spawn("miner"))
+	var first := UnitModel3D.create(_spawn("miner"), false)
+	var second := UnitModel3D.create(_spawn("miner"), false)
 	autofree(first)
 	autofree(second)
 	var first_team := _material_named(first, "team")
@@ -290,6 +290,11 @@ func test_r7_player_faction_variants_share_the_base_rig() -> void:
 					"only the active faction attachment shows")
 
 
+func _badge_color(model: UnitModel3D) -> Color:
+	var mat := _material_named(model, "accent")
+	return mat.albedo_color if mat != null else Color.TRANSPARENT
+
+
 func test_r7_enemy_variant_and_accent_reveal_on_identification() -> void:
 	FactionManager.enemy_faction_id = "brute"
 	FactionManager.reset()
@@ -300,20 +305,108 @@ func test_r7_enemy_variant_and_accent_reveal_on_identification() -> void:
 	var brute := model.find_child("FactionBrute", true, false) as Node3D
 	assert_not_null(brute)
 	assert_false(brute.visible, "hidden enemy has no faction silhouette")
-	assert_eq(model._accent_mats[0].albedo_color, Color(0.42, 0.43, 0.47),
+	assert_eq(_badge_color(model), Color(0.42, 0.43, 0.47),
 		"hidden enemy accent is neutral")
 	FactionManager.identify_faction(GameManager.Team.ENEMY)
 	assert_true(brute.visible, "identification reveals the sculpted faction variant")
-	assert_eq(model._accent_mats[0].albedo_color, ArtStyle3D.FACTION_ACCENTS["brute"],
+	assert_eq(_badge_color(model), ArtStyle3D.FACTION_ACCENTS["brute"],
 		"identification reveals the faction accent")
 
 
 func test_r7_imported_pivots_follow_sim_attack_state() -> void:
 	var u := _spawn("miner")
-	var model := UnitModel3D.create(u)
+	var model := UnitModel3D.create(u, false)
 	autofree(model)
 	assert_not_null(model._tool)
 	u._state = Unit.State.ATTACK
 	u._attack_timer = 0.3
 	model.sync_animation(u, 0.016)
 	assert_gt(absf(model._tool.rotation.x), 0.01, "attack timer poses the imported tool pivot")
+
+
+func test_humanoid_proxies_have_four_clips_on_every_quality_tier() -> void:
+	for quality in [ArtStyle3D.Quality.POTATO, ArtStyle3D.Quality.STANDARD, ArtStyle3D.Quality.FANCY]:
+		ArtStyle3D.apply_quality(quality)
+		for unit_id in ["miner", "swordsman"]:
+			var proxy := UnitProxy3D.create(_spawn(unit_id), quality == ArtStyle3D.Quality.POTATO)
+			get_tree().root.add_child(proxy)
+			autofree(proxy)
+			var player := proxy._model._animation_player
+			assert_not_null(player, "%s tier %s proxy has an AnimationPlayer" % [quality, unit_id])
+			if player == null:
+				continue
+			assert_eq(player.playback_process_mode, AnimationPlayer.ANIMATION_PROCESS_MANUAL,
+				"proxy sync owns playback advancement")
+			assert_eq(player.get_animation_list().size(), 4, "exactly the four authored clips")
+			for clip in [UnitAnimationClips.IDLE, UnitAnimationClips.WALK,
+					UnitAnimationClips.ATTACK, UnitAnimationClips.DEATH]:
+				assert_true(player.has_animation(clip), "%s has %s" % [unit_id, clip])
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.FANCY)
+
+
+func test_walk_moves_a_pivot_and_idle_loop_restores_its_base_pose() -> void:
+	for unit_id in ["miner", "swordsman"]:
+		var model := UnitModel3D.create(_spawn(unit_id), false)
+		get_tree().root.add_child(model)
+		autofree(model)
+		var player := model._animation_player
+		var pivot := model._arm_l
+		var base := pivot.transform
+		player.play(UnitAnimationClips.WALK)
+		player.advance(0.25)
+		assert_false(pivot.transform.is_equal_approx(base), "%s walk changes the arm transform" % unit_id)
+		player.play(UnitAnimationClips.IDLE)
+		player.advance(0.0)
+		player.advance(UnitAnimationClips.IDLE_DURATION)
+		assert_true(pivot.transform.is_equal_approx(base), "%s idle loop returns to the base transform" % unit_id)
+
+
+func test_sim_states_select_walk_attack_and_procedural_mining() -> void:
+	var u := _spawn("swordsman")
+	var model := UnitModel3D.create(u, false)
+	get_tree().root.add_child(model)
+	autofree(model)
+	u._state = Unit.State.MOVE
+	model.sync_animation(u, 0.016)
+	assert_eq(model._animation_player.current_animation, UnitAnimationClips.WALK)
+	u._state = Unit.State.ATTACK
+	u._attack_timer = 0.3
+	model.sync_animation(u, 0.016)
+	assert_eq(model._animation_player.current_animation, UnitAnimationClips.ATTACK)
+	u._state = Unit.State.MINE
+	u._mine_timer = 0.1
+	model.sync_animation(u, 0.016)
+	assert_true(model._current_clip.is_empty(), "mining keeps its dedicated procedural motion")
+	assert_gt(absf(model._tool.rotation.x), 0.01, "procedural mining still poses the tool")
+
+
+func test_death_clip_plays_and_existing_topple_and_sink_complete() -> void:
+	var u := _spawn("swordsman")
+	var model := UnitModel3D.create(u, false)
+	get_tree().root.add_child(model)
+	autofree(model)
+	u._state = Unit.State.DEAD
+	model.sync_animation(u, 0.016)
+	assert_eq(model._animation_player.current_animation, UnitAnimationClips.DEATH)
+	assert_true(model._animation_player.is_playing(), "death clip starts on the dead state")
+	for i in range(24):
+		model.sync_animation(u, 0.05)
+	assert_false(model._animation_player.is_playing(), "death clip finishes and holds its final pose")
+	assert_almost_eq(model._body.rotation.x, -PI * 0.5, 0.001, "existing topple still completes")
+	assert_almost_eq(model._body.position.y, model._body_base_y - 0.06, 0.001,
+		"existing post-topple sink still completes")
+
+
+func test_unclipped_crawler_keeps_procedural_movement_on_potato() -> void:
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.POTATO)
+	var u := _spawn("crawler")
+	var model := UnitModel3D.create(u)
+	get_tree().root.add_child(model)
+	autofree(model)
+	assert_null(model._animation_player, "unclipped kinds do not allocate an AnimationPlayer")
+	u._state = Unit.State.MOVE
+	model.sync_animation(u, 0.016)
+	u.global_position += Vector2(3.0, 0.0)
+	model.sync_animation(u, 0.016)
+	assert_gt(absf(model._body.rotation.z), 0.001, "crawler body still skitters procedurally")
+	ArtStyle3D.apply_quality(ArtStyle3D.Quality.FANCY)

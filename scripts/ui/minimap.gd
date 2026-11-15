@@ -4,12 +4,15 @@ extends Control
 ## camera viewport rect, all code-drawn. Clicking (or dragging) jumps the
 ## player camera. Self-contained: every external reference is resolved with
 ## get_node_or_null so the scene also loads standalone.
+##
+## The map geometry mirrors the LIVE GridWorld bounds (the world profile
+## applied when the match scene entered the tree), not Constants: Constants
+## only carries the wide defaults, while a legacy 2D match runs an 81x1
+## board. Fields are computed once in _ready, which runs after main.gd's
+## _enter_tree applied the profile.
 
 const UIThemeTokens = preload("res://scripts/ui/ui_theme_tokens.gd")
 
-const _COLS: int = Constants.GRID_X_MAX - Constants.GRID_X_MIN + 1
-const _Y_TOP: int = Constants.GRID_Y_MIN - Constants.SURFACE_ROWS + 1
-const _ROWS: int = Constants.GRID_Y_MAX - _Y_TOP + 1
 const _REDRAW_INTERVAL: float = 0.25
 
 const _DIRT_BY_LAYER: Dictionary = {
@@ -23,6 +26,10 @@ const _COLOR_LAVA: Color = Color("#D94E12")
 const _COLOR_MAGMA_ROCK: Color = Color("#3D221A")
 const _COLOR_SOLID_ROCK: Color = Color("#3A3D44")
 
+# Live map geometry, computed from the GridWorld profile in _ready.
+var _cols: int = 0
+var _y_top: int = 0
+var _rows: int = 0
 var _grid: Node2D = null
 var _camera: Camera2D = null
 
@@ -30,6 +37,9 @@ var _camera: Camera2D = null
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	custom_minimum_size = Vector2(220, 64)
+	_cols = GridWorld.X_MAX - GridWorld.X_MIN + 1
+	_y_top = GridWorld.SURFACE_TOP
+	_rows = GridWorld.Y_MAX - _y_top + 1
 	_grid = get_node_or_null("/root/Main/World/GridWorld")
 	_camera = get_node_or_null("/root/Main/Camera2D")
 	var timer := Timer.new()
@@ -47,24 +57,24 @@ func _ready() -> void:
 
 func grid_to_map(grid_pos: Vector2i) -> Vector2:
 	return Vector2(
-		(grid_pos.x - Constants.GRID_X_MIN) * size.x / _COLS,
-		(grid_pos.y - _Y_TOP) * size.y / _ROWS)
+		(grid_pos.x - GridWorld.X_MIN) * size.x / _cols,
+		(grid_pos.y - _y_top) * size.y / _rows)
 
 
 func world_to_map(world_pos: Vector2) -> Vector2:
-	var fx: float = world_pos.x / Constants.TILE_SIZE - Constants.GRID_X_MIN
-	var fy: float = world_pos.y / Constants.TILE_SIZE - _Y_TOP
-	return Vector2(fx * size.x / _COLS, fy * size.y / _ROWS)
+	var fx: float = world_pos.x / Constants.TILE_SIZE - GridWorld.X_MIN
+	var fy: float = world_pos.y / Constants.TILE_SIZE - _y_top
+	return Vector2(fx * size.x / _cols, fy * size.y / _rows)
 
 
 func map_to_world(map_pos: Vector2) -> Vector2:
-	var gx: float = map_pos.x * _COLS / maxf(size.x, 1.0) + Constants.GRID_X_MIN
-	var gy: float = map_pos.y * _ROWS / maxf(size.y, 1.0) + _Y_TOP
+	var gx: float = map_pos.x * _cols / maxf(size.x, 1.0) + GridWorld.X_MIN
+	var gy: float = map_pos.y * _rows / maxf(size.y, 1.0) + _y_top
 	var world := Vector2((gx + 0.5) * Constants.TILE_SIZE, (gy + 0.5) * Constants.TILE_SIZE)
-	var x_min: float = Constants.GRID_X_MIN * Constants.TILE_SIZE
-	var x_max: float = (Constants.GRID_X_MAX + 1) * Constants.TILE_SIZE
-	var y_min: float = _Y_TOP * Constants.TILE_SIZE
-	var y_max: float = (Constants.GRID_Y_MAX + 1) * Constants.TILE_SIZE
+	var x_min: float = GridWorld.X_MIN * Constants.TILE_SIZE
+	var x_max: float = (GridWorld.X_MAX + 1) * Constants.TILE_SIZE
+	var y_min: float = _y_top * Constants.TILE_SIZE
+	var y_max: float = (GridWorld.Y_MAX + 1) * Constants.TILE_SIZE
 	return Vector2(clampf(world.x, x_min, x_max), clampf(world.y, y_min, y_max))
 
 
@@ -98,14 +108,14 @@ func _draw() -> void:
 
 
 func _draw_terrain() -> void:
-	var cw: float = size.x / _COLS
-	var ch: float = size.y / _ROWS
+	var cw: float = size.x / _cols
+	var ch: float = size.y / _rows
 	var colorblind: bool = SettingsManager.get_colorblind()
 	for pos: Vector2i in _grid._cells:
 		var cell: GridWorld.Cell = _grid._cells[pos]
 		var rect := Rect2(
-			(pos.x - Constants.GRID_X_MIN) * cw,
-			(pos.y - _Y_TOP) * ch,
+			(pos.x - GridWorld.X_MIN) * cw,
+			(pos.y - _y_top) * ch,
 			cw + 0.6, ch + 0.6)
 		match cell.type:
 			GridWorld.CellType.SURFACE_GROUND:

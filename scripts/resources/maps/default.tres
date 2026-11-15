@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="MapDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/map_definition.gd" id="1_map"]
+
+[resource]
+script = ExtResource("1_map")
+grid_x_min = -50
+grid_x_max = 50
+surface_rows = 10
+mine_entries_centered = true
+camera_start = Vector2(0, -128)
+player_building_cell = Vector2i(-25, -2)
+enemy_building_cell = Vector2i(25, -2)
+player_mine_cell = Vector2i(-15, -5)
+enemy_mine_cell = Vector2i(15, -5)
+surface_regions = Array[Dictionary]([{
+"id": "west_pinewood",
+"recipe": "trees",
+"rect": Rect2i(-36, -9, 8, 7),
+"density": 1.25
+}, {
+"id": "east_rockfield",
+"recipe": "rocks",
+"rect": Rect2i(29, -9, 8, 7),
+"density": 1.15
+}])
+surface_roads = Array[Rect2i]([Rect2i(-50, 0, 101, 1), Rect2i(-15, -5, 1, 6), Rect2i(15, -5, 1, 6)])

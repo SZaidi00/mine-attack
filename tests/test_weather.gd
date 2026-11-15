@@ -48,6 +48,8 @@ func before_each() -> void:
 func after_each() -> void:
 	for lantern in get_tree().get_nodes_in_group("lanterns"):
 		lantern.free()
+	for tower in get_tree().get_nodes_in_group("towers"):
+		tower.free()
 	WeatherManager.reset()
 
 
@@ -69,6 +71,16 @@ func _build_surface_lantern(team: int, pos: Vector2) -> Lantern:
 	lantern._build_progress = 999.0
 	lantern._process(0.1)
 	return lantern
+
+
+func _build_tower(team: int, pos: Vector2) -> Tower:
+	var tower: Tower = load("res://scenes/tower.tscn").instantiate()
+	tower.team = team
+	tower.position = pos
+	_main.get_node("Structures").add_child(tower)
+	tower._build_progress = 999.0
+	tower._process(0.1)
+	return tower
 
 
 # ─── Storm lifecycle ───
@@ -202,16 +214,40 @@ func test_storm_halves_unit_and_lantern_vision() -> void:
 	WeatherManager.force_snowstorm_end()
 
 
+func test_storm_scales_tower_vision() -> void:
+	var tower: Tower = _build_tower(PLAYER, _grid.grid_to_world(Vector2i(-28, 0)))
+	var tower_cell: Vector2i = _grid.world_to_grid(tower.global_position)
+
+	var base: Dictionary = {}
+	for source in _grid._get_vision_sources(PLAYER):
+		base[source[0]] = source[1]
+	assert_eq(base.get(tower_cell), Constants.TOWER_VISION, "clear-weather tower radius")
+
+	WeatherManager.force_snowstorm_start()
+	var stormed: Dictionary = {}
+	for source in _grid._get_vision_sources(PLAYER):
+		stormed[source[0]] = source[1]
+	assert_eq(stormed.get(tower_cell), maxi(1, roundi(Constants.TOWER_VISION * Constants.SNOWSTORM_VISION_MULT)),
+		"storm scales the tower radius with the global vision multiplier")
+	WeatherManager.force_snowstorm_end()
+
+	var cleared: Dictionary = {}
+	for source in _grid._get_vision_sources(PLAYER):
+		cleared[source[0]] = source[1]
+	assert_eq(cleared.get(tower_cell), Constants.TOWER_VISION, "clear-weather tower radius restored")
+
+
 # ─── Exposure damage ───
 
 func test_storm_damages_exposed_surface_units_only() -> void:
 	var exposed: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", PLAYER, _grid.grid_to_world(Vector2i(-20, 0)))
 	exposed.stop()
+	exposed.position = _grid.grid_to_world(Vector2i(-20, GridWorld.SURFACE_TOP))
 	var sheltered_miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _grid.grid_to_world(Vector2i(-5, 10)))
 	sheltered_miner.is_underground = true
 	WeatherManager.force_snowstorm_start()
 	await wait_seconds(1.5)
-	assert_lt(exposed.hp, exposed.data.max_hp, "exposed surface unit takes storm damage")
+	assert_lt(exposed.hp, exposed.data.max_hp, "top-row surface unit takes storm damage")
 	assert_gt(exposed.hp, exposed.data.max_hp - 6, "storm damage is ~2 HP/s, not a burst")
 	assert_true(exposed._frosted, "exposed unit shows the frost overlay")
 	assert_eq(sheltered_miner.hp, sheltered_miner.data.max_hp, "underground units are unaffected")

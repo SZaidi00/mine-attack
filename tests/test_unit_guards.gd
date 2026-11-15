@@ -75,7 +75,7 @@ func test_enter_mine_rejects_wrong_team() -> void:
 func test_unreachable_mine_target_is_blacklisted() -> void:
 	# A miner underground, ordered to a deep solid cell it cannot possibly
 	# reach: must go idle and blacklist the cell, never walk through dirt.
-	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(-464, 176))
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _player_shaft_world(176.0))
 	miner.set("is_underground", true)
 	var far_cell: Vector2i = Vector2i(-30, 18)
 	miner.call("mine_cell", far_cell)
@@ -123,7 +123,7 @@ func test_fighter_upgrade_applies_stats() -> void:
 func test_seek_does_not_prefer_buried_ore() -> void:
 	# Miners don't know where buried ore is: the seek must not beeline to
 	# undiscovered ore — it digs the nearest face instead.
-	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(-464, 80))
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _player_shaft_world(80.0))
 	miner.set("is_underground", true)
 	var c: Dictionary = _find_seek_candidates(miner)
 	assert_ne(c.ore, Vector2i(-9999, -9999), "scenario needs an undiscovered ore target")
@@ -138,7 +138,7 @@ func test_seek_does_not_prefer_buried_ore() -> void:
 func test_damaged_ore_is_discovered_and_preferred() -> void:
 	# Once an ore tile has taken a swing (hp < max_hp = it yielded gold), the
 	# miner "knows" about it and prefers it over plain dirt faces.
-	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, Vector2(-464, 80))
+	var miner: Node2D = _spawn_unit("res://scripts/resources/units/miner.tres", PLAYER, _player_shaft_world(80.0))
 	miner.set("is_underground", true)
 	var c: Dictionary = _find_seek_candidates(miner)
 	assert_ne(c.ore, Vector2i(-9999, -9999), "scenario needs an undiscovered ore target")
@@ -155,6 +155,11 @@ func test_damaged_ore_is_discovered_and_preferred() -> void:
 
 ## Nearest valid diggable DIRT cell and nearest valid UNDISCOVERED ore cell
 ## for the given (underground, level 1) miner, replicating the seek's filters.
+func _player_shaft_world(y: float) -> Vector2:
+	var cell: Vector2i = _main.get("map_definition").player_mine_cell
+	return Vector2((cell.x + 0.5) * GridWorld.CELL_SIZE, y)
+
+
 func _find_seek_candidates(miner: Node2D) -> Dictionary:
 	var grid: Node = _main.get_node("World/GridWorld")
 	var center: Vector2i = grid.world_to_grid(miner.global_position)
@@ -163,7 +168,7 @@ func _find_seek_candidates(miner: Node2D) -> Dictionary:
 	var dirt_d := INF
 	var ore := Vector2i(-9999, -9999)
 	var ore_d := INF
-	for x in range(-40, -1):  # player side while the wall stands (x <= -2)
+	for x in range(GridWorld.X_MIN, -1):  # player side while the wall stands (x <= -2)
 		for y in range(1, 22):
 			var pos := Vector2i(x, y)
 			var cell = grid.get_cell(pos)

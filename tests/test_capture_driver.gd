@@ -53,6 +53,14 @@ func test_parse_shots_orders_by_time_and_parses_fields() -> void:
 	assert_eq(shots[2].pose, "zoomout")
 
 
+func test_parse_shots_accepts_survey_pose() -> void:
+	var shots := CaptureDriver.parse_shots("8:survey:-1120:-192:6")
+	assert_eq(shots.size(), 1)
+	assert_eq(shots[0].pose, "survey")
+	assert_eq(shots[0].pos, Vector2(-1120, -192))
+	assert_eq(shots[0].zoom, 6.0)
+
+
 func test_parse_shots_skips_garbage() -> void:
 	var shots := CaptureDriver.parse_shots("bogus;;10:start;custom:1:2")
 	assert_eq(shots.size(), 1)
@@ -79,3 +87,11 @@ func test_parse_shots_accepts_r8_showcase_poses() -> void:
 	assert_eq(shots[0].pose, "base")
 	assert_eq(shots[1].pose, "dunes")
 	assert_eq(shots[2].pose, "fortress")
+
+
+func test_parse_shots_accepts_skeletal_action_lineups() -> void:
+	var shots := CaptureDriver.parse_shots("4:unit_actions;8:unit_actions;12:unit_actions_underground")
+	assert_eq(shots.size(), 3)
+	assert_eq(shots[0].pose, "unit_actions")
+	assert_eq(shots[1].t, 8.0)
+	assert_eq(shots[2].pose, "unit_actions_underground")

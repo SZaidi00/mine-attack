@@ -93,6 +93,7 @@ func _handle_input(event: InputEvent) -> void:
 func start_build_placement(kind: String) -> void:
 	_cancel_build_mode()
 	pc._rally_armed = false
+	pc._spawn_point_armed = false
 	pc._build_mode = kind
 	pc._build_ghost = Node2D.new()
 	pc._build_ghost.name = "BuildGhost"

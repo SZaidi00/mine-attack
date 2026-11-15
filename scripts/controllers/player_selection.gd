@@ -64,11 +64,26 @@ func _box_select(start: Vector2, end: Vector2) -> void:
 	var units: Array = []
 	var min_p: Vector2 = Vector2(min(start.x, end.x), min(start.y, end.y))
 	var max_p: Vector2 = Vector2(max(start.x, end.x), max(start.y, end.y))
+	var tree: SceneTree = pc.get_tree()
+	var shell: Node3D = Presentation3D.shell(tree)
 	var canvas: Transform2D = pc.get_viewport().get_canvas_transform()
-	for unit in pc.get_tree().get_nodes_in_group("player"):
+	for unit in tree.get_nodes_in_group("player"):
 		# Feet or combat body (flying dragons) — either inside the box counts.
-		var feet_sp: Vector2 = canvas * unit.global_position
-		var combat_sp: Vector2 = canvas * unit.get_combat_position()
+		var feet_sp: Vector2
+		var combat_sp: Vector2
+		if shell != null:
+			# 3D shell: the canvas transform belongs to the hidden sim Camera2D,
+			# which no longer tracks the rig (dolly zoom, zoom-to-cursor, and the
+			# 55/82.5-degree pitches exist only on the rig), so project each unit
+			# through the rig camera instead — the same branch _screen_to_world
+			# takes. The combat body lifts straight up from the feet by the
+			# flight altitude, matching what unit proxies render.
+			var altitude: float = float(unit.call("get_flight_altitude"))
+			feet_sp = Presentation3D.screen_position(tree, unit.global_position)
+			combat_sp = Presentation3D.screen_position(tree, unit.global_position, altitude)
+		else:
+			feet_sp = canvas * unit.global_position
+			combat_sp = canvas * unit.get_combat_position()
 		var feet_in: bool = feet_sp.x >= min_p.x and feet_sp.x <= max_p.x and feet_sp.y >= min_p.y and feet_sp.y <= max_p.y
 		var combat_in: bool = combat_sp.x >= min_p.x and combat_sp.x <= max_p.x and combat_sp.y >= min_p.y and combat_sp.y <= max_p.y
 		if feet_in or combat_in:

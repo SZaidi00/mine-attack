@@ -103,7 +103,10 @@ func test_tower_placement_rejects_bad_cells() -> void:
 	assert_false(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 4))), "no underground towers")
 	assert_false(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(8, 0))), "own half only")
 	var rect: Rect2i = _player_building().get_footprint_cell_rect()
-	assert_false(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(rect.position.x - 1, 0))), "not within 2 cells of a building")
+	# One cell out from the footprint's left edge, on the base's own row —
+	# inside the grow(TOWER_MIN_BUILDING_DISTANCE) no-build zone (plan 17
+	# centered the base in the band, so row 0 in front of it is legal now).
+	assert_false(_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(rect.position.x - 1, rect.position.y + 2))), "not within 2 cells of a building")
 	assert_eq(get_tree().get_nodes_in_group("towers").size(), 0, "rejections must not spawn anything")
 
 
@@ -121,17 +124,27 @@ func test_tower_invulnerable_while_building_then_fires() -> void:
 	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
 	tower.take_damage(100)
 	assert_eq(tower.hp, tower.max_hp, "under-construction tower takes no damage")
+	# Under construction the tower reveals nothing: the cell at its built
+	# vision edge (4 cells away) stays dark while it builds.
+	await wait_seconds(0.1)
+	assert_false(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-8, 0))),
+		"under-construction tower must not light fog")
 	await _finish_construction(tower)
 	assert_true(tower.is_built())
-	# Only lanterns lift fog; towers no longer provide vision.
-	assert_false(_grid.is_visible_to(PLAYER, tower.global_position + Vector2(10 * 32, 0)), "built tower must not light fog")
-	# Fires at a visible enemy fighter in range (vision supplied for the test).
-	_grid.set_reveal_all(PLAYER, true)
-	var enemy: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, tower.global_position + Vector2(160, 16))
+	# A built tower lifts surface fog out to its dedicated vision radius
+	# (TOWER_VISION cells — plan 18 made it shorter than attack range so one
+	# tower can't light the whole band): 3 and 4 cells away are visible,
+	# 5 cells away — outside every other source — stays hidden.
+	assert_true(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-9, 0))), "3 cells away lit")
+	assert_true(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-8, 0))), "4 cells away lit")
+	assert_false(_grid.is_visible_to(PLAYER, _grid.grid_to_world(Vector2i(-7, 0))), "5 cells away stays hidden")
+	# Fires at an enemy fighter standing inside both the tower's fog circle and
+	# its attack range — the tower's own vision is what makes the target
+	# shootable (no reveal-all stand-in).
+	var enemy: Node2D = _spawn_unit("res://scripts/resources/units/swordsman.tres", ENEMY, tower.global_position + Vector2(160, 0))
 	enemy.stop()
 	await wait_seconds(2.0)
 	assert_lt(enemy.get("hp"), enemy.data.max_hp, "tower shot the intruder")
-	_grid.set_reveal_all(PLAYER, false)
 
 
 func test_tower_prioritizes_fighters_over_miners() -> void:
@@ -192,9 +205,13 @@ func test_wall_placement_rules() -> void:
 
 
 func test_wall_max_count() -> void:
-	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-20, 0))))
-	assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-22, 0))))
-	assert_false(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-24, 0))), "3rd wall exceeds the neutral cap of 2")
+	# Neutral cap is 8 (plan 16 raised it from 2 so walls can form lines);
+	# consecutive cells so the row chains, which must not affect the count.
+	for i in range(Constants.PLACED_WALL_MAX_COUNT):
+		assert_true(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-20 - i, 0))),
+			"wall %d of %d places" % [i + 1, Constants.PLACED_WALL_MAX_COUNT])
+	assert_false(_pc.try_place_structure("wall", _grid.grid_to_world(Vector2i(-29, 0))),
+		"the wall after the cap is rejected")
 
 
 func test_wall_blocks_and_frees_astar_cell() -> void:
@@ -339,8 +356,9 @@ func test_sieging_unit_retaliates_against_tower() -> void:
 
 func test_fighters_target_remembered_structure_through_fog() -> void:
 	# Static structures stay targetable on remembered intel — fog must not
-	# grant a tower free invulnerability once live vision moves on.
-	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-12, 0)))
+	# grant a tower free invulnerability once live vision moves on. This cell is
+	# beyond the centered mine entrance's vision, so the scout controls visibility.
+	_pc.try_place_structure("tower", _grid.grid_to_world(Vector2i(-5, 0)))
 	var tower: Node2D = get_tree().get_nodes_in_group("towers")[0]
 	tower.team = ENEMY  # pretend the enemy built it
 	await _finish_construction(tower)

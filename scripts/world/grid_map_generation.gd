@@ -61,9 +61,10 @@ func _generate_map() -> void:
 			else:
 				_set_cell(Vector2i(x, y), GridWorld.Cell.new(GridWorld.CellType.DIRT, layer, ml_req, tile_hp, 0))
 
-	# Entry shafts (empty vertical corridors for own mine entry).
-	carve_shaft(-15)
-	carve_shaft(15)
+	# Entry shafts follow the layout resource applied before grid generation.
+	var layout := _layout()
+	carve_shaft(layout.player_mine_cell.x)
+	carve_shaft(layout.enemy_mine_cell.x)
 
 	# Border walls.
 	for y in range(grid.SURFACE_TOP, grid.Y_MAX + 1):
@@ -71,6 +72,17 @@ func _generate_map() -> void:
 		_set_cell(Vector2i(grid.X_MAX + 1, y), GridWorld.Cell.new(GridWorld.CellType.WALL, 0, 99, 9999, 0, true))
 	for x in range(grid.X_MIN - 1, grid.X_MAX + 2):
 		_set_cell(Vector2i(x, grid.Y_MAX + 1), GridWorld.Cell.new(GridWorld.CellType.WALL, 0, 99, 9999, 0, true))
+
+
+func _layout() -> MapDefinition:
+	if not grid.is_inside_tree():
+		return MapDefinition.new()
+	var main: Node = grid.get_node_or_null("/root/Main")
+	if main != null:
+		var layout := main.get("map_definition") as MapDefinition
+		if layout != null:
+			return layout
+	return MapDefinition.new()
 
 
 func _layer_miner_level(layer: int) -> int:

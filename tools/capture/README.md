@@ -46,7 +46,7 @@ and invisible to the GUT suite (parsing is covered by
 ## Flags and shot specs
 
 ```
-SHOTS="10:start;45:zoomout;80:underground;100:breach;120:storm;150:volcano;180:custom:0:-150:6" \
+SHOTS="10:start;45:zoomout;80:underground;100:breach;120:storm;150:volcano;180:custom:0:-128:6" \
 FACTION=brute DIFFICULTY=2 SEED=777 SPEED=2.0 \
 tools/capture/run_capture.sh /tmp/shots
 ```
@@ -55,11 +55,16 @@ Pose names: `start` (spawn camera), `surface` (surface bookmark,
 recentered), `zoomout` (centered, 0.5× zoom), `underground` (built mine
 lantern framed at local-area dolly), `breach` (forced central-wall breach
 framed underground), `units` / `units_underground` (R7 eight-unit silhouette
-lineups on the surface/near-top-down plane), `base` (R8 player keep and an
+lineups on the surface/near-top-down plane), `unit_actions` /
+`unit_actions_underground` (native skeletal mining, attacks, and engineer
+repair; repeating the same action shot preserves playback so poses differ),
+`base` (R8 player keep and an
 active production dial), `dunes` (R8 snow-field composition), `fortress`
 (R8 revealed enemy citadel), `storm` / `volcano` (surface + forced weather),
-and `custom:X:Y:Z` (explicit camera position and dolly). Times are sim-seconds;
-keep the list ordered.
+`custom:X:Y:Z` (explicit camera position and dolly), and `survey:X:Y:Z`
+(custom framing plus reveal-all and forced terrain/fog rebuilds for the shot).
+Survey restores the prior fog state after saving. Times are sim-seconds; keep
+the list ordered.
 
 `RESOLUTION=3840x2160` changes the capture size (default `1920x1080`). The R8
 showcase runner captures all six marketing poses at 1080p and 4K:
@@ -110,6 +115,8 @@ the sim), and the pilot poses the 3D camera rig instead of the 2D camera:
 - `custom:X:Y:Z` — rig focus at world (X, Y) (2D px × 0.01) with dolly Z
   (3.0–16.0 on the surface, 3.0–10.0 underground). Example:
   `60:custom:-800:-100:6`.
+- `survey:X:Y:Z` — custom framing plus reveal-all and forced terrain/fog
+  rebuilds for reliable region shots; restores the reveal override afterward.
 
 The rig is reached at `/root/Main3D`; the pilot uses its public
 `pose_camera(focus, dolly, pitch)` API. Posing cancels any active view tween

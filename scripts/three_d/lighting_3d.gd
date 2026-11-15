@@ -35,12 +35,14 @@ const _MOODS: Dictionary = {
 	},
 	"underground": {
 		"sun_color": Color("#6C7684"),
-		"sun_energy": 0.18,
+		"sun_energy": 0.3,
 		"ambient_color": ArtStyle3D.PALETTE.rock_dark,
-		"ambient_energy": 0.28,
+		# Plan 13: a near-dark, cool ambient floor for readable strata at RTS
+		# zoom; lanterns and lava still own the warmth, and hidden fog stays opaque.
+		"ambient_energy": 0.6,
 		"background_color": ArtStyle3D.PALETTE.rock_dark,
 		"fog_color": ArtStyle3D.PALETTE.rock_dark,
-		"fog_density": 0.035,
+		"fog_density": 0.022,
 	},
 	"storm": {
 		"sun_color": ArtStyle3D.PALETTE.storm_gloom,

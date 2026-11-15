@@ -227,7 +227,7 @@ func test_miner_reveal_scans_ore() -> void:
 	FactionManager.set_player_faction("arcane")
 	# Find a buried (undiscovered) ore cell to scan.
 	var ore_cell: Vector2i = Vector2i(-9999, -9999)
-	for x in range(-40, 41):
+	for x in range(GridWorld.X_MIN, GridWorld.X_MAX + 1):
 		for y in range(1, 22):
 			var pos := Vector2i(x, y)
 			var cell = _grid.get_cell(pos)

@@ -19,7 +19,7 @@ extends Node3D
 const SIM_SCENE: PackedScene = preload("res://scenes/main.tscn")
 const EFFECTS_3D_SCRIPT: GDScript = preload("res://scripts/three_d/effects_3d.gd")
 
-## 3D units per 2D pixel. The map is ~2560x800 px, i.e. ~26x8 units.
+## 3D units per 2D pixel. The map is ~3232x1000 px, i.e. ~32x10 units.
 const WORLD_SCALE: float = 0.01
 const SURFACE_PITCH_DEGREES: float = 55.0
 const UNDERGROUND_PITCH_DEGREES: float = 82.5
@@ -30,7 +30,7 @@ const UNDERGROUND_PITCH_DEGREES: float = 82.5
 const CAMERA_FOV: float = 45.0
 ## Dolly retuned for the narrow FOV: DOLLY_START puts a 1.4x-scaled humanoid
 ## at ~31 px on a 1080p frame, DOLLY_MAX still covers a player's half
-## (~13 units of ground width need dolly ~5.2; 16 shows the whole map).
+## (~16.3 units of ground width need dolly ~6.4; 16 shows a wide overview).
 const DOLLY_MIN: float = 3.0
 const DOLLY_MAX: float = 16.0
 const UNDERGROUND_DOLLY_MAX: float = 10.0
@@ -52,6 +52,7 @@ var _selection_rings: SelectionRings3D
 var _projectile_proxies: ProjectileProxies3D
 var _event_proxies: EventProxies3D
 var _fog: Fog3D
+var _backdrop: Backdrop3D
 var _focus: Vector3 = Vector3.ZERO
 var _surface_focus: Vector3
 var _underground_focus: Vector3
@@ -119,7 +120,9 @@ func _ready() -> void:
 	_focus = _surface_focus
 
 	var grid: GridWorld = _sim.get_node("World/GridWorld") as GridWorld
-	_terrain.setup(grid)
+	_backdrop = $World3D/Backdrop3D
+	_backdrop.setup(grid)
+	_terrain.setup(grid, _sim.get("map_definition") as MapDefinition)
 	# Structure proxies arriving/leaving re-stamp the dune clearances.
 	_proxies.structure_set_changed.connect(_terrain.notify_structures_changed)
 	# §2.5: art-directed effects attach the stub script onto the existing
@@ -184,9 +187,12 @@ func _apply_quality_live(q: ArtStyle3D.Quality) -> void:
 	if _proxies != null:
 		_proxies.rebuild_all()
 	if _terrain != null:
+		_terrain.apply_quality()
 		_terrain.force_full_rebuild()
 	if _fog != null:
 		_fog.apply_quality()
+	if _backdrop != null:
+		_backdrop.apply_quality()
 
 
 func _to_ground(pos2d: Vector2) -> Vector3:
@@ -416,6 +422,8 @@ func _apply_view(underground: bool, initial: bool) -> void:
 		_view_tween.tween_property(self, "_dolly", target_dolly, VIEW_TWEEN_DURATION)
 		_view_tween.tween_property(self, "_pitch_degrees", target_pitch, VIEW_TWEEN_DURATION)
 	_terrain.set_underground_view(underground)
+	if _backdrop != null:
+		_backdrop.set_underground_view(underground)
 	_proxies.set_underground_view(underground)
 	_selection_rings.set_underground_view(underground)
 	_projectile_proxies.set_underground_view(underground)

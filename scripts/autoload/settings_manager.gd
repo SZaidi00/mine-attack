@@ -146,6 +146,26 @@ func set_graphics_quality(value: String) -> void:
 	setting_changed.emit(&"graphics_quality")
 
 
+# ---------- Play mode ----------
+
+## Main-menu Play target: "3d" (default) enters the main_3d shell, which mounts
+## the untouched main.tscn sim; "2d" loads main.tscn directly (the legacy 2D
+## presentation). Takes effect on the next Play.
+const PLAY_MODE_VALUES: Array[String] = ["3d", "2d"]
+
+
+func get_play_mode() -> String:
+	var value := str(_load_value("video", "play_mode", "3d"))
+	return value if value in PLAY_MODE_VALUES else "3d"
+
+
+func set_play_mode(value: String) -> void:
+	if value not in PLAY_MODE_VALUES:
+		value = "3d"
+	_save_value("video", "play_mode", value)
+	setting_changed.emit(&"play_mode")
+
+
 # ---------- Accessibility / gameplay preferences ----------
 
 ## HUD scale, 0.75 (smallest) to 1.5 (largest). 1.0 leaves the 1920x1080

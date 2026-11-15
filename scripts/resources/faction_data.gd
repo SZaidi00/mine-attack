@@ -46,7 +46,7 @@ extends Resource
 ## Industrial builds towers twice as fast (0.5).
 @export var tower_build_time_mult: float = 1.0
 @export var wall_cost: int = 50
-@export var wall_max_count: int = 2
+@export var wall_max_count: int = 8
 
 # Ability flags (see unit.gd — each gates one faction ability).
 @export var swordsman_rune_blade: bool = false

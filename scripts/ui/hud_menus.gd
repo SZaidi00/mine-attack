@@ -482,7 +482,7 @@ func _update_build_menu() -> void:
 				max_count = FactionManager.get_wall_max_count(team)
 				count = wall_count
 				can_afford = EconomyManager.can_afford(team, cost)
-				tooltip = "A barrier segment that blocks movement and projectiles (%d HP). Surface only, on your half." % hud._Constants.PLACED_WALL_HP
+				tooltip = "A barrier segment that blocks movement and projectiles (%d HP). Surface only, on your half. Placed next to another of your walls it links into a chain — posts with rails between them." % hud._Constants.PLACED_WALL_HP
 				if count >= max_count:
 					state = _CardState.CAPPED
 				elif not can_afford:

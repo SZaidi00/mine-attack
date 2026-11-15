@@ -53,6 +53,17 @@ func _spawn_tower(team: int, pos: Vector2) -> Node2D:
 	return tower
 
 
+func test_pigeon_patrol_covers_the_surface_band() -> void:
+	var pigeon: Node2D = _spawn_unit("res://scripts/resources/units/pigeon.tres", PLAYER, Vector2.ZERO)
+	var top: float = (GridWorld.SURFACE_TOP + 0.5) * GridWorld.CELL_SIZE
+	var found_upper_lane := false
+	for i in range(64):
+		var target: Vector2 = pigeon._pigeon._pick_enemy_target()
+		assert_true(target.y >= top and target.y <= 16.0, "patrol target stays within the surface band")
+		found_upper_lane = found_upper_lane or target.y < -GridWorld.CELL_SIZE
+	assert_true(found_upper_lane, "patrol samples lanes above the front row")
+
+
 func test_pigeon_damaged_by_archer() -> void:
 	var pigeon: Node2D = _spawn_unit("res://scripts/resources/units/pigeon.tres", ENEMY, Vector2(0, 16))
 	var archer: Node2D = _spawn_unit("res://scripts/resources/units/archer.tres", PLAYER, Vector2(-80, 16))

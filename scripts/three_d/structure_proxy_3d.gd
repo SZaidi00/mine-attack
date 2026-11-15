@@ -88,6 +88,12 @@ var _tilt_sign := 1.0
 var _last_remembered := false
 var _last_built := true
 
+# Chained walls (plan 16): link meshes between posts, rebuilt at reconcile
+# time when the sim wall's connection set changes.
+var _wall_links: Node3D = null
+var _wall_conns: Dictionary = {}
+var _wall_body_base: int = 0
+
 var _lantern_light: OmniLight3D
 var _lantern_pool: MeshInstance3D
 # Node3D (not MeshInstance3D): the procedural head box or, on the imported
@@ -426,17 +432,32 @@ func _build_wall() -> void:
 	_damage_pivot.name = "WallPivot"
 	add_child(_damage_pivot)
 
-	_add_body(ArtStyle3D.make_box(Vector3(CELL * 0.9, 0.5, CELL * 0.42), stone,
+	# Chained-wall look (plan 16): a narrow post at the cell center and short
+	# rails to each connected neighbor, replacing the old full-cell slab.
+	_add_body(ArtStyle3D.make_box(Vector3(CELL * 0.34, 0.5, CELL * 0.42), stone,
 		Vector3(0.0, 0.25 + sink, 0.0)), stone, _damage_pivot)
 	# Team-colored capstone.
-	_add_body(ArtStyle3D.make_box(Vector3(CELL * 0.92, 0.08, CELL * 0.46), team,
+	_add_body(ArtStyle3D.make_box(Vector3(CELL * 0.40, 0.08, CELL * 0.46), team,
 		Vector3(0.0, 0.54 + sink, 0.0)), team, _damage_pivot)
 	if ArtStyle3D.detail_enabled():
 		for i in range(3):
 			var h := ArtStyle3D.cell_hash(_cell, 60 + i)
-			_add_body(ArtStyle3D.make_box(Vector3(CELL * 0.26, 0.2, CELL * 0.44),
+			_add_body(ArtStyle3D.make_box(Vector3(CELL * 0.16, 0.2, CELL * 0.44),
 				stone.darkened(0.08 + h * 0.08),
-				Vector3((float(i) - 1.0) * CELL * 0.3, 0.32 + sink, 0.0)), stone, _damage_pivot)
+				Vector3((float(i) - 1.0) * CELL * 0.085, 0.32 + sink, 0.0)), stone, _damage_pivot)
+
+	# Link meshes live in their own container so a connection change can
+	# rebuild them without touching the post. Registered via _add_body like
+	# the post (construction alpha, fog memory, damage darkening all apply);
+	# _wall_body_base remembers the post-only array length for truncation.
+	_wall_links = Node3D.new()
+	_wall_links.name = "WallLinks"
+	_wall_links.position.y = sink
+	_damage_pivot.add_child(_wall_links)
+	_wall_body_base = _body_meshes.size()
+	if entity != null and entity.get("_connections") is Dictionary:
+		_wall_conns = (entity.get("_connections") as Dictionary).duplicate()
+	_rebuild_wall_links(_wall_conns)
 
 	_rubble = Node3D.new()
 	_rubble.name = "Rubble"
@@ -449,6 +470,36 @@ func _build_wall() -> void:
 			Vector3((h - 0.5) * CELL * 0.8, 0.04, (ArtStyle3D.cell_hash(_cell, 80 + i) - 0.5) * CELL * 0.4))
 		rock.rotation.y = h * TAU
 		_rubble.add_child(rock)
+
+
+## Rebuilds the rail meshes from a connection dict (same shape as
+## WallSegment._connections). Each connected side gets a half-rail reaching
+## the cell boundary to meet the neighbor's half; unconnected x-sides keep a
+## short stub so a lone wall still reads as a barrier. Rails are deliberately
+## shorter and thinner than the post ("post + link" read).
+func _rebuild_wall_links(conns: Dictionary) -> void:
+	# free(), not queue_free(): refresh() may rebuild several times per frame
+	# (place + destroy between reconciles) and stale links must not linger.
+	for child in _wall_links.get_children():
+		child.free()
+	_body_meshes.resize(_wall_body_base)
+	_body_mats.resize(_wall_body_base)
+	_body_colors.resize(_wall_body_base)
+	var stone: Color = ArtStyle3D.PALETTE.rock.lightened(0.02)
+	var half: float = CELL * 0.5
+	var post_edge: float = CELL * 0.17
+	for side: String in ["left", "right"]:
+		var dir: float = -1.0 if side == "left" else 1.0
+		var length: float = (half - post_edge) if conns.get(side, false) else CELL * 0.2
+		_add_body(ArtStyle3D.make_box(Vector3(length, 0.24, CELL * 0.14), stone,
+			Vector3(dir * (post_edge + length * 0.5), 0.27, 0.0)), stone, _wall_links)
+	for side: String in ["up", "down"]:
+		if not conns.get(side, false):
+			continue
+		var dir: float = -1.0 if side == "up" else 1.0
+		var length: float = half - post_edge
+		_add_body(ArtStyle3D.make_box(Vector3(CELL * 0.14, 0.24, length), stone,
+			Vector3(0.0, 0.27, dir * (post_edge + length * 0.5))), stone, _wall_links)
 
 
 # ─── Lantern: the dynamic-light hero ───
@@ -555,10 +606,9 @@ func _build_mine_entry() -> void:
 	var wood: Color = ArtStyle3D.PALETTE.wood
 	var wood_dark: Color = ArtStyle3D.PALETTE.wood_dark
 	var team := ArtStyle3D.team_color(_team)
-	# The node origin sits on a cell corner; the shaft column center is half a
-	# cell over, so the headframe straddles the hole.
-	var cx := CELL * 0.5
-	var cz := CELL * 0.5
+	# The entry node is centered on its surface cell and shaft column.
+	var cx := 0.0
+	var cz := 0.0
 
 	# Dark recessed shaft hole, sunk into the ground. Kept procedural in both
 	# recipes — it reads as the pit the headframe stands over.
@@ -566,11 +616,6 @@ func _build_mine_entry() -> void:
 		Vector3(cx, -0.015, cz)), ArtStyle3D.PALETTE.coal)
 
 	if _try_build_glb("mine_entry"):
-		# The imported headframe is authored origin-at-center; the sim node
-		# origin sits on a cell corner (manifest origin "corner"), so shift
-		# the model half a cell over to straddle the shaft.
-		if str(ModelManifest.entry_for("mine_entry").get("origin", "center")) == "corner":
-			_model_wrapper.position = Vector3(cx, 0.0, cz)
 		return
 	# A-frame legs leaning together over the hole.
 	for side in [-1.0, 1.0]:
@@ -747,6 +792,13 @@ func refresh(underground_view: bool) -> void:
 			_set_growing(true)
 	if _kind == _Kind.TOWER or _kind == _Kind.WALL:
 		_read_damage()
+	if _kind == _Kind.WALL and entity.has_method("get_connections"):
+		# Chain change: a neighboring wall spawned or died since the last
+		# reconcile — rebuild the rails; _tint_bodies below re-tints them.
+		var conns: Dictionary = entity.call("get_connections")
+		if conns != _wall_conns:
+			_wall_conns = conns
+			_rebuild_wall_links(conns)
 	_tint_bodies(remembered, built)
 	if _range_disc != null:
 		# Live read: selection toggles and research range bonuses arrive

@@ -5,13 +5,49 @@ code: `scripts/three_d/art_style_3d.gd`.
 
 ## Look
 
-**Flat-shaded stylized low-poly.** Untextured primitives with flat albedo
-colors, roughness 1.0, lambert shading. No texture maps, no PBR maps, no
-real-time GI (SSAO + tuned ambient only, Fancy preset). This reads cleanly at
-RTS zoom distances and keeps the web build cheap.
+**Flat-shaded stylized low-poly.** Procedural fallbacks use flat albedo
+colors; imported units, structures, and curated props use small painted
+atlases with metallic 0 / roughness 0.92. Terrain combines lit vertex-color
+cell/fog grading with a subtle world-triplanar detail texture on Standard+.
+No real-time GI (SSAO + tuned ambient only, Fancy preset). This reads cleanly
+at RTS zoom distances and keeps the web build cheap.
 
 Mood: cold, post-apocalyptic, Frostpunk-adjacent. Overcast base light;
-weather is the drama.
+weather is the drama. Distant ground, ridges, and pine silhouettes frame the
+battlefield without entering playable cells; backdrop detail stays subdued.
+
+Roads use compacted cold-gray snow (`ArtStyle3D.PALETTE.compacted_snow`), never
+brown dirt. `MapDefinition.surface_roads` and `surface_regions` author the
+front road, mine spurs, western pinewood, and eastern rockfield. Roads suppress
+scatter; region recipes restrict existing tree/rock families without changing
+collision. Region/road vertex tints apply before fog, so hidden cells remain
+opaque void and remembered cells keep their shadow treatment. Potato keeps the
+color composition while dropping decorative props.
+
+## Underground & mine (Plan 13)
+
+The underground reads as a flat X-Y plane, never vertical 3D — excavated
+space is a readable floor, tunnels stay top-down, and presentation never
+writes the sim grid.
+
+- **Excavated floors** — mined-out cells get presentation-only floors in the
+  cold shallow/mid/deep depth-strata tokens, with sparse deterministic seam
+  décor (lifts stay under the lava glow pass and the fog overlay).
+- **Fog is authoritative** — floors inherit normal-cell fog tint semantics;
+  unexplored cells stay the opaque void and remembered cells keep their
+  deep-rock shadow regardless of dressing.
+- **Supports & rubble** — timber frames on DIRT cells bordering an excavated
+  floor and sparse dark pebble rubble (`pack_pebble_*`) on cave-in/magma rock
+  and depleted ore are seed-deterministic decorative MultiMeshes: no
+  collision, no support mechanic, no sim writes, fog-visible cells only.
+- **Warm light has owners** — lanterns and lava stay the only warm
+  underground sources (see the warm-emission policy above); supports and
+  rubble never carry light. The cool underground ambient is a readability
+  floor for visible strata only — never daylight, and never strong enough to
+  dilute the opaque unexplored void.
+- **Quality tiers** — Potato drops supports, rubble, and the mining-dust
+  burst while keeping floors, fog, and lava; Standard/Fancy run the full
+  detail pass.
 
 ## Palette
 
@@ -48,11 +84,14 @@ detach from dark ground even on Potato, where no shadows/SSAO exist.
 
 ## Silhouette rules (must read at max zoom-out)
 
-R7 supersedes the original primitive-rig implementation below: Standard/Fancy
-use sculpted, textured GLBs on shared named-pivot rigs with geometric faction
-variants; Potato retains the procedural fallback. See
-`roadmap/3d-visual-revamp/05-r7-unit-workshop.md`. The signature silhouettes
-remain the readability contract.
+R7 and plan 10 supersede the original primitive-rig implementation below:
+Standard/Fancy use curated KayKit skeletal humanoids with native clips and
+bone-mounted equipment; generated models remain available as fallbacks and for
+non-humanoids. Potato retains the procedural fallback. Team/accent colors use
+atlas garment regions, preserving skin and equipment. See
+`roadmap/3d-visual-revamp/05-r7-unit-workshop.md` and
+`frost_mines_assets/models/packs/SOURCES.md`. The signature silhouettes remain
+the readability contract.
 
 | Unit | Signature shape |
 |---|---|
@@ -72,11 +111,13 @@ are thin posts with a warm glowing head — the dynamic-light heroes.
 
 ## Texel density / poly budget
 
-- R7 units: small painted atlases on sculpted GLBs, ≤8k tris per model
-  including faction attachments; team/accent/glow material slots are rebound
-  per proxy. Potato uses the old <1k-tri primitive recipes.
+- Units: small painted atlases (512² for KayKit) on sculpted GLBs, ≤8k tris
+  per model including hand tools and faction attachments. Team/accent/glow
+  slots or garment-region shader parameters are rebound per proxy. Potato
+  uses the old <1k-tri primitive recipes.
 - Terrain: chunked mesh, one draw per chunk + one emissive pass for lava;
-  ore crystals via `MultiMeshInstance3D`.
+  subtle world-triplanar detail on Standard+, smooth surface normals, and
+  MultiMesh ore/clustered prop detail. Distant backdrop geometry stays cheap.
 - Budget: 60 fps desktop with 200+ units; LOD = decorative detail off +
   limb-swing amplitude reduction at far dolly, not mesh swapping.
 
@@ -98,8 +139,11 @@ the ground.
 
 ## Animation
 
-Procedural, driven by sim state (never writes sim): idle breathing bob, walk
-limb-swing phased by actual movement, attack lunge keyed on the sim's attack
-cooldown timer, mine swing on the sim's swing timer, death topple on `died`.
-Juice (§2.5): camera shake on cave-ins, hit-stop already exists, dust motes
-underground, storm snow drift, volcano embers.
+Driven by sim state (never writes sim). Five humanoids use matching-rig
+KayKit `Skeleton3D` / `AnimationPlayer` clips for idle, walking, role-specific
+attacks, mining, repair, and death. Actions stay in place and scale to sim
+cooldowns; visible proxy syncs advance playback manually. Generated models and
+original named-pivot clips remain fallbacks, while non-humanoids retain
+procedural motion. Death sink, hit flash, undead tint, and faction reveal work
+across both paths. Juice (§2.5): camera shake on cave-ins, hit-stop, dust
+motes, storm drift, volcano embers.

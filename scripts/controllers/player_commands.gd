@@ -16,6 +16,9 @@ func _issue_command(screen_pos: Vector2, shift_queued: bool = false) -> void:
 	if pc._rally_armed:
 		pc._rally_armed = false
 		return
+	if pc._spawn_point_armed:
+		pc._spawn_point_armed = false
+		return
 
 	# Drop dead units from the selection before issuing anything.
 	pc._selected_units = pc._selected_units.filter(func(u): return is_instance_valid(u))
@@ -325,6 +328,7 @@ func upgrade_fighter(unit_id: String) -> void:
 ## with the screen position of the confirming left-click.
 func _set_rally_point(screen_pos: Vector2) -> void:
 	pc._rally_armed = false
+	pc._spawn_point_armed = false
 	var world_pos: Vector2 = _screen_to_world(screen_pos)
 	var fighters: Array = pc._selection._filter_fighters(pc.get_tree().get_nodes_in_group("player"))
 	if fighters.is_empty():
@@ -343,10 +347,60 @@ func _handle_rally_input(event: InputEvent) -> void:
 		DebugLog.log_command("PlayerController", "rally", "placement cancelled")
 
 
+## Spawn point (HUD "Set Spawn"): a building-level muster destination for
+## newly trained fighters and engineers. Toggle the armed state; the next
+## left-click on a surface cell sets it, right-click or Esc cancels. Arming
+## cancels the other armed modes; the other modes cancel this one on entry.
+func toggle_spawn_point_armed() -> void:
+	pc._spawn_point_armed = not pc._spawn_point_armed
+	if pc._spawn_point_armed:
+		pc._rally_armed = false
+		pc._attack_move_armed = false
+		pc._build_placement._cancel_build_mode()
+	DebugLog.log_command("PlayerController", "spawn_point", "armed" if pc._spawn_point_armed else "disarmed")
+
+
+func _set_spawn_point(screen_pos: Vector2) -> void:
+	_set_spawn_point_at(_screen_to_world(screen_pos))
+
+
+func _set_spawn_point_at(world_pos: Vector2) -> void:
+	pc._spawn_point_armed = false
+	# Surface cells only: spawned units live on the surface band and cannot
+	# path to an underground target.
+	var grid_pos: Vector2i = pc._grid.world_to_grid(world_pos)
+	if not pc._grid.is_surface_row(grid_pos.y):
+		_reject_command("spawn_point", "must be a surface cell", world_pos)
+		return
+	var building: Node2D = _player_building()
+	if building == null:
+		DebugLog.log_reject("PlayerController", "spawn_point", "no player building")
+		return
+	building.call("set_spawn_point", world_pos)
+	DebugLog.log_command("PlayerController", "spawn_point", "point=%s" % str(world_pos))
+	_spawn_order_marker(world_pos, Color("#FBBF24"))
+
+
+func _handle_spawn_point_input(event: InputEvent) -> void:
+	if event.is_action_pressed(pc._Constants.INPUT_SELECT):
+		_set_spawn_point(pc.get_viewport().get_mouse_position())
+	elif event.is_action_pressed(pc._Constants.INPUT_COMMAND) or event.is_action_pressed(pc._Constants.INPUT_PAUSE):
+		pc._spawn_point_armed = false
+		DebugLog.log_command("PlayerController", "spawn_point", "placement cancelled")
+
+
+func _player_building() -> Node2D:
+	for b in pc.get_tree().get_nodes_in_group("buildings"):
+		if b.get("team") == GameManager.Team.PLAYER:
+			return b
+	return null
+
+
 ## Attack-move: order every selected fighter to attack-move to the click. The
 ## order marker is red, matching the explicit attack branches.
 func attack_move_order(screen_pos: Vector2) -> void:
 	pc._attack_move_armed = false
+	pc._spawn_point_armed = false
 	var world_pos: Vector2 = _screen_to_world(screen_pos)
 	var fighters: Array = pc._selection._filter_fighters(pc._selected_units.filter(func(u): return is_instance_valid(u)))
 	if fighters.is_empty():
@@ -383,8 +437,10 @@ func set_stance(stance: String) -> void:
 	# to every fighter trained afterwards (see _on_fighter_spawned), so setting
 	# a mode with zero fighters is valid.
 	if stance in ["attack", "defend", "garrison"]:
-		# Choosing any stance cancels a pending rally-point placement.
+		# Choosing any stance cancels a pending rally-point or spawn-point
+		# placement.
 		pc._rally_armed = false
+		pc._spawn_point_armed = false
 		pc._build_placement._cancel_build_mode()
 		pc._current_stance = stance
 	var fighters: Array = pc._selection._filter_fighters(pc.get_tree().get_nodes_in_group("player"))

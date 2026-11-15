@@ -17,14 +17,16 @@ func _spawn_ambient_particles() -> void:
 	var world_half_w: float = (world_right - world_left) / 2.0
 
 	# Snow: tiny, slow flakes over the sky/surface band at 30% opacity.
+	var snow_y: float = grid.SURFACE_TOP * grid.CELL_SIZE - 140.0
+	var snow_visibility := Rect2(-world_half_w - 100, -100, (world_half_w + 100) * 2, 150.0 - snow_y)
 	var snow: GPUParticles2D = GPUParticles2D.new()
 	snow.name = "SnowParticles"
 	snow.amount = 180
 	snow.lifetime = 14.0
 	snow.texture = dot
 	snow.modulate = Color(1, 1, 1, 0.3)
-	snow.position = Vector2(world_center_x, -300)
-	snow.visibility_rect = Rect2(-world_half_w - 100, -100, (world_half_w + 100) * 2, 450)
+	snow.position = Vector2(world_center_x, snow_y)
+	snow.visibility_rect = snow_visibility
 	var snow_mat: ParticleProcessMaterial = ParticleProcessMaterial.new()
 	snow_mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
 	snow_mat.emission_box_extents = Vector3(world_half_w, 10, 1)
@@ -46,8 +48,8 @@ func _spawn_ambient_particles() -> void:
 	storm.lifetime = 10.0
 	storm.texture = dot
 	storm.modulate = Color(1, 1, 1, 0.55)
-	storm.position = Vector2(world_center_x, -300)
-	storm.visibility_rect = Rect2(-world_half_w - 100, -100, (world_half_w + 100) * 2, 450)
+	storm.position = Vector2(world_center_x, snow_y)
+	storm.visibility_rect = snow_visibility
 	storm.emitting = false
 	var storm_mat: ParticleProcessMaterial = ParticleProcessMaterial.new()
 	storm_mat.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX

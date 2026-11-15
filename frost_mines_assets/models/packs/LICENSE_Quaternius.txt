@@ -1,0 +1,22 @@
+This directory contains selected models from the standard FREE version of the
+Stylized Nature MegaKit by Quaternius.
+
+Official source:
+https://quaternius.itch.io/stylized-nature-megakit
+https://quaternius.com/packs/stylizednaturemegakit.html
+
+License:
+CC0 1.0 Universal (CC0 1.0)
+Public Domain Dedication
+https://creativecommons.org/publicdomain/zero/1.0/
+
+The source pack's License_Standard.txt states:
+
+Models by @Quaternius
+Consider supporting me on Patreon!
+https://www.patreon.com/quaternius
+
+The curated GLBs retain the source geometry and painted materials. Import
+processing embedded external resources, applied uniform scale and ground/XZ
+normalization, set metallic 0 / roughness 0.92, and reduced texture atlases to
+512x512 for sub-cell RTS rendering. See SOURCES.md for exact files and hashes.

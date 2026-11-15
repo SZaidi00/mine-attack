@@ -35,10 +35,19 @@ func _ore_count(grid: Node) -> int:
 	return n
 
 
+func _cell_signature(grid: Node) -> Dictionary:
+	var signature: Dictionary = {}
+	for pos: Vector2i in grid._cells:
+		var cell: GridWorld.Cell = grid._cells[pos]
+		signature[pos] = [cell.type, cell.hp, cell.miner_level_required, cell.coin_value]
+	return signature
+
+
 func test_same_seed_rebuilds_same_map_and_profile() -> void:
 	_main = _spawn_main()
 	var grid_a: Node = _main.get_node("World/GridWorld")
 	var ore_a: int = _ore_count(grid_a)
+	var cells_a: Dictionary = _cell_signature(grid_a)
 	var wall_a: int = grid_a._wall_max_hp
 	var profile_a: Dictionary = grid_a.map_profile.duplicate()
 	var seed_a: int = grid_a.map_seed
@@ -48,6 +57,7 @@ func test_same_seed_rebuilds_same_map_and_profile() -> void:
 	var grid_b: Node = _main.get_node("World/GridWorld")
 	assert_eq(grid_b.map_seed, seed_a, "pinned seed is used as-is")
 	assert_eq(_ore_count(grid_b), ore_a, "same seed -> identical ore layout")
+	assert_eq(_cell_signature(grid_b), cells_a, "same seed -> identical full grid and ore values")
 	assert_eq(grid_b._wall_max_hp, wall_a, "same seed -> identical wall pool")
 	assert_eq(grid_b.map_profile, profile_a, "same seed -> identical rolled profile")
 	assert_true(GameManager.map_seed_locked, "pinned seed stays locked")

@@ -65,6 +65,7 @@ const _ICON_SNOWSTORM: Texture2D = preload("res://frost_mines_assets/icons/icon_
 # Necromancy raise toggle: created at runtime (like the build-menu cards)
 # because it only appears once the Necromancy research completes.
 var _raise_button: Button = null
+var _spawn_point_button: Button = null
 @onready var _research_panel: Control = $ResearchPanel
 @onready var _player_faction_icon: TextureRect = $TopBar/MarginContainer/VBoxContainer/StatsRow/LeftGroup/PlayerFactionIcon
 @onready var _enemy_faction_icon: TextureRect = $TopBar/MarginContainer/VBoxContainer/StatsRow/RightGroup/EnemyFactionIcon
@@ -145,6 +146,7 @@ func _ready() -> void:
 	_add_unit_breakdown_icons()
 	_add_attack_button_icon()
 	_build_raise_button()
+	_build_spawn_point_button()
 
 	_upgrade_button.pressed.connect(_upgrade_miner)
 	for unit_id: String in _fighter_upgrade_buttons:
@@ -300,6 +302,33 @@ func _build_raise_button() -> void:
 	_apply_ui_scale.call_deferred()
 
 
+## Spawn-point arm toggle ("Set Spawn"): the next left-click on a surface
+## cell becomes the building's muster point for newly trained fighters and
+## engineers. Miners and crawlers still head straight into the mine. Sits
+## with the stance buttons, before Kill, like the Raise toggle.
+func _build_spawn_point_button() -> void:
+	_spawn_point_button = Button.new()
+	_spawn_point_button.custom_minimum_size = Vector2(100, 70)
+	_spawn_point_button.add_theme_font_size_override("font_size", 12)
+	_spawn_point_button.toggle_mode = true
+	UIThemeTokens.apply_button_theme(_spawn_point_button, UIThemeTokens.ButtonVariant.SECONDARY)
+	_spawn_point_button.text = "Set\nSpawn"
+	_spawn_point_button.tooltip_text = "Set a spawn point: newly trained fighters and engineers walk there automatically; miners and crawlers still head into the mine. Left-click a surface cell to place it, right-click or Esc to cancel. Place it again elsewhere to move it."
+	_command_row.add_child(_spawn_point_button)
+	_command_row.move_child(_spawn_point_button, _kill_button.get_index())
+	_spawn_point_button.pressed.connect(_toggle_spawn_point_armed)
+	_spawn_point_button.pressed.connect(func(): AudioManager.play("click"))
+	# The extra button widens the BottomBar's minimum: re-fit the UI scale.
+	_apply_ui_scale.call_deferred()
+
+
+func _toggle_spawn_point_armed() -> void:
+	var pc: PlayerController = _get_player_controller()
+	if pc == null:
+		return
+	pc.toggle_spawn_point_armed()
+
+
 func _cycle_raise_mode() -> void:
 	var pc: PlayerController = _get_player_controller()
 	if pc == null:
@@ -326,6 +355,9 @@ func _process(delta: float) -> void:
 		# the controller waits for the rally-point right-click.
 		if _rally_button.button_pressed != pc.is_rally_armed():
 			_rally_button.set_pressed_no_signal(pc.is_rally_armed())
+		# Same momentary-arm sync for the spawn-point button.
+		if _spawn_point_button.button_pressed != pc.is_spawn_point_armed():
+			_spawn_point_button.set_pressed_no_signal(pc.is_spawn_point_armed())
 		var build_menu_open: bool = _build_menu != null and _build_menu.visible
 		if _build_button.button_pressed != build_menu_open:
 			_build_button.set_pressed_no_signal(build_menu_open)

@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MapDefinition" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/map_definition.gd" id="1_map"]
+
+[resource]
+script = ExtResource("1_map")
+grid_x_min = -40
+grid_x_max = 40
+surface_rows = 1
+mine_entries_centered = false
+camera_start = Vector2(0, -150)
+player_building_cell = Vector2i(-30, 0)
+enemy_building_cell = Vector2i(30, 0)
+player_mine_cell = Vector2i(-15, 0)
+enemy_mine_cell = Vector2i(15, 0)
+surface_regions = Array[Dictionary]([])
+surface_roads = Array[Rect2i]([])

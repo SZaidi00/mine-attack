@@ -56,13 +56,13 @@ const _GROUND_RESAMPLE_DIST: float = 8.0  # px; 1/4 cell keeps snap error tiny
 var _terrain: Node = null
 
 
-static func create(u: Node2D) -> UnitProxy3D:
+static func create(u: Node2D, prefer_skeletal := true) -> UnitProxy3D:
 	var p := UnitProxy3D.new()
 	p.unit = u
 	p._underground_unit = u.is_underground
 	p.scale = Vector3.ONE * PROXY_SCALE
 
-	p._model = UnitModel3D.create(u)
+	p._model = UnitModel3D.create(u, prefer_skeletal)
 	p._model_height = p._model.model_height
 	p.add_child(p._model)
 

@@ -45,6 +45,10 @@ func _grid() -> GridWorld:
 	return _main.get_node("World/GridWorld") as GridWorld
 
 
+func _pc() -> PlayerController:
+	return _main.get_node("PlayerController") as PlayerController
+
+
 func test_fog_node_exists_and_builds_mesh() -> void:
 	await _frames(30)
 	var fog := _fog()
@@ -160,3 +164,128 @@ func test_reveal_all_hides_the_overlay() -> void:
 	grid.set_reveal_all(GameManager.Team.PLAYER, false)
 	fog._rebuild()
 	assert_not_null(fog.mesh, "overlay returns when reveal-all is lifted")
+
+
+# ─── Fog-diff-cap telemetry (plans/01) ───
+# A reveal burst past the sim's change-accumulator cap must set the overflow
+# flag (with a counted warning), and one Fog3D refresh must restore every
+# cell's visual state — no stale tint after an overflowed revision.
+
+## Two synchronous detection passes: first pins the underground half of the
+## player fog maps to a known hidden baseline (prev-state bookkeeping), then
+## flips it all visible — a reveal burst far past PLAYER_FOG_CHANGE_CAP, same
+## as a big lantern reveal or wall breach live. Deterministic regardless of
+## how many live frames ran before it (GUT can chain tests within one frame).
+func _force_fog_overflow(grid: GridWorld) -> void:
+	grid.consume_player_fog_changes()
+	grid.consume_player_fog_overflow()
+	var vision: Array = grid._vision_maps[GameManager.Team.PLAYER]
+	var memory: Array = grid._memory_maps[GameManager.Team.PLAYER]
+	for ix in range(vision.size()):
+		for iy in range(vision[ix].size()):
+			if iy + grid.SURFACE_TOP > grid.Y_MIN:
+				vision[ix][iy] = false
+				memory[ix][iy] = -1.0
+	grid._fog._detect_player_fog_changes()
+	grid.consume_player_fog_changes()
+	grid.consume_player_fog_overflow()
+	for ix in range(vision.size()):
+		for iy in range(vision[ix].size()):
+			if iy + grid.SURFACE_TOP > grid.Y_MIN:
+				vision[ix][iy] = true
+	grid._fog._detect_player_fog_changes()
+
+
+func test_change_burst_past_cap_sets_overflow_flag_and_caps_the_list() -> void:
+	var grid := _grid()
+	var revision: int = grid.player_fog_revision
+	_force_fog_overflow(grid)
+	assert_true(grid.player_fog_overflow, "burst past the cap sets the overflow flag")
+	assert_eq(grid._player_fog_changed_cells.size(), GridWorld.PLAYER_FOG_CHANGE_CAP,
+		"change list holds exactly the capped amount; the rest is dropped")
+	assert_gt(grid.player_fog_revision, revision, "the overflow pass still bumps the revision")
+	grid.consume_player_fog_changes()
+	grid.consume_player_fog_overflow()
+
+
+func test_overflow_recovers_with_one_full_fog_refresh() -> void:
+	var fog := _fog()
+	var grid := _grid()
+	_force_fog_overflow(grid)
+	assert_true(grid.player_fog_overflow)
+	# One refresh tick (0.5s cadence forced): drains the overflow flag and
+	# lands the full rebuild — the recovery path, not a silently stale board.
+	fog._process(Fog3D.REFRESH_INTERVAL)
+	assert_false(grid.player_fog_overflow, "Fog3D's refresh drains the overflow flag")
+	var checked: int = 0
+	for x in range(GridWorld.X_MIN, GridWorld.X_MAX + 1):
+		for y in range(GridWorld.SURFACE_TOP, GridWorld.Y_MAX + 1):
+			var cell := Vector2i(x, y)
+			var expected: Color
+			match grid.fog_state_at(GameManager.Team.PLAYER, cell):
+				2:
+					expected = Color(1.0, 1.0, 1.0, Fog3D.ALPHA_VISIBLE)
+				1:
+					expected = Color(Fog3D.SHADOW_COLOR, Fog3D.ALPHA_REMEMBERED)
+				_:
+					expected = Color(Fog3D.VOID_COLOR, Fog3D.ALPHA_HIDDEN)
+			assert_eq(fog.color_at_cell(cell), expected,
+				"cell %s matches fog_state_at after one refresh" % cell)
+			checked += 1
+	assert_gt(checked, GridWorld.PLAYER_FOG_CHANGE_CAP,
+		"samples well past the cap, including dropped cells")
+
+
+# ─── Sentry tower vision (plan 13) ───
+# The sim owns tower vision; Fog3D only projects fog_state_at. A built player
+# tower must clear the surface cells in its TOWER_VISION radius while the
+# underground cell directly below stays in the opaque void.
+
+func test_built_tower_clears_surface_fog_but_not_the_cell_below() -> void:
+	var fog := _fog()
+	var grid := _grid()
+	# Far-backfield column: quiet at test time (plan 17 centered the base at
+	# x=-25, so the old -30 probes sit inside the mining neighborhood and the
+	# tower itself would land in the footprint's no-build zone).
+	var tower_cell := Vector2i(-45, 0)
+	var surface_probe := Vector2i(-45, -4)  # 4 rows up, at TOWER_VISION's edge (plan 18)
+	var underground_probe := Vector2i(-45, GridWorld.Y_MIN + 1)
+	# Precondition: an otherwise-hidden surface area on the own half. The
+	# fog-diff-cap tests above force-visible the whole underground half, which
+	# the next _update_vision demotes to fresh memory — wipe the maps so the
+	# probes start from the true never-seen state (house pattern from
+	# test_fog_of_war.gd).
+	grid._fog._init_vision_maps()
+	await _frames(5)
+	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, surface_probe), 0,
+		"setup: surface probe starts hidden")
+	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, underground_probe), 0,
+		"setup: underground probe starts hidden")
+	EconomyManager.add_coin(GameManager.Team.PLAYER, 1000)
+	assert_true(_pc().try_place_structure("tower", grid.grid_to_world(tower_cell)),
+		"placement accepted")
+	var tower: Tower = null
+	for t in get_tree().get_nodes_in_group("towers"):
+		tower = t
+	assert_not_null(tower, "tower spawned")
+	if tower == null:
+		return
+	# Under construction the tower reveals nothing.
+	await _frames(3)
+	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, surface_probe), 0,
+		"under-construction tower reveals nothing")
+	# Finish construction; the sim's next fog passes pick the tower up.
+	tower._build_progress = tower.build_time
+	await _frames(4)
+	assert_true(tower.is_built(), "tower finished construction")
+	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, surface_probe), 2,
+		"tower vision clears the surface cell in the sim fog")
+	assert_eq(grid.fog_state_at(GameManager.Team.PLAYER, underground_probe), 0,
+		"the underground cell below stays hidden")
+	fog._rebuild()
+	assert_almost_eq(fog.alpha_at_cell(surface_probe), Fog3D.ALPHA_VISIBLE, 0.001,
+		"Fog3D shows the revealed surface cell as clear")
+	assert_almost_eq(fog.alpha_at_cell(underground_probe), Fog3D.ALPHA_HIDDEN, 0.001,
+		"Fog3D keeps the underground cell opaque")
+	tower.demolish()
+	await _frames(2)

@@ -4,9 +4,13 @@
 ## R2 replaces the inherited 2D browns/ice with the revamp's shadow-snow,
 ## indigo rock, cooled dirt, tiered ore, and warm lava tokens. R3 (visual
 ## revamp) displaces the surface quads onto the HeightField3D dune field —
-## same chunk path and vertex count, corners sampled from the shared field so
-## seams stay watertight and proxies/camera ground-snap read the same ground.
-## The grid is only read, never written.
+## corners sampled from the shared field so seams stay watertight, with shared
+## surface corners smoothed into continuous normals. Standard+ multiplies the
+## cell/fog vertex colors by a subtle world-triplanar detail texture. Plan 12
+## applies MapDefinition compacted-road and authored-region tints before fog.
+## Plan 13 gives mined-out underground cells presentation-only floors: cold
+## depth-strata colors, deterministic seams, and the same fog tint semantics
+## as normal cells. The grid is only read, never written.
 extends Node3D
 
 const WORLD_SCALE: float = 0.01
@@ -18,7 +22,7 @@ const FOG_REFRESH_INTERVAL: float = 0.5
 ## Slow full-sweep backstop for the signal-less cell mutations (cave-in
 ## restore, ore respawn, depletion tint) the fog diff can't see.
 const BACKSTOP_INTERVAL: float = 5.0
-const CHUNK_COLS: int = 21
+const CHUNK_COLS: int = 26
 const CHUNK_ROWS: int = 8
 const SNOW_RATE: float = 0.1
 ## Snow-dirty quantization: the cover tween marks chunks dirty only when the
@@ -40,8 +44,15 @@ const DIRT_MID_COLOR := ArtStyle3D.PALETTE.rock
 const DIRT_DEEP_COLOR := ArtStyle3D.PALETTE.rock_dark
 const FOG_VOID_TINT := ArtStyle3D.PALETTE.fog_void
 const FOG_SHADOW_TINT := ArtStyle3D.PALETTE.rock_dark
+## Plan 13 floor décor lifts: seams sit just above the flat floor but stay
+## under the lava glow pass (GLOW_LIFT 0.004) and the fog overlay (0.06).
+const FLOOR_SEAM_LIFT: float = 0.002
+const FLOOR_SEAM_SALT := 913
+const FLOOR_SEAM_CHANCE: float = 0.42
+const FLOOR_COLOR_SALT := 911
 
 var _grid: GridWorld
+var _map_definition: MapDefinition
 var _mat: StandardMaterial3D
 var _glow_mat: StandardMaterial3D
 var _chunks: Dictionary = {}  # Vector2i chunk coord -> MeshInstance3D
@@ -72,19 +83,25 @@ var detail: TerrainDetail3D
 var height_field: HeightField3D
 
 
-func setup(grid: GridWorld) -> void:
+func setup(grid: GridWorld, map_definition: MapDefinition = null) -> void:
 	_grid = grid
+	_map_definition = map_definition
 	height_field = HeightField3D.new()
 	height_field.setup(grid)
 	_mat = StandardMaterial3D.new()
 	_mat.vertex_color_use_as_albedo = true
 	_mat.roughness = ArtStyle3D.MATERIAL_ROUGHNESS
+	_mat.uv1_triplanar = true
+	_mat.uv1_world_triplanar = true
+	_mat.uv1_scale = Vector3(2.0, 2.0, 2.0)
+	_mat.albedo_texture = _make_detail_texture()
+	apply_quality()
 	if not LIT_TERRAIN:
 		_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	# One shared emissive material for every glow chunk; _process pulses its
 	# emission_energy_multiplier (ArtStyle3D's cache makes it shared state).
 	_glow_mat = ArtStyle3D.get_material(ArtStyle3D.PALETTE.lava, ArtStyle3D.PALETTE.lava, 1.0)
-	# Chunk starts cover the full cell range (incl. border walls at x=+-41,
+	# Chunk starts cover the full cell range (incl. border walls at x=+-51,
 	# the surface band above row 0, and the y=22 floor row); posmod keeps them
 	# aligned to CHUNK_* sizes.
 	var x0: int = GridWorld.X_MIN - 1 - int(posmod(GridWorld.X_MIN - 1, CHUNK_COLS))
@@ -107,7 +124,7 @@ func setup(grid: GridWorld) -> void:
 	detail = TerrainDetail3D.new()
 	detail.name = "TerrainDetail"
 	add_child(detail)
-	detail.setup(grid)
+	detail.setup(grid, map_definition)
 	# Snow cover follows the storm state: init from the live flag (a storm
 	# may already be raging when the shell sets up) and track the signals.
 	if is_instance_valid(WeatherManager):
@@ -123,6 +140,37 @@ func setup(grid: GridWorld) -> void:
 	_grid.cave_in_occurred.connect(_on_cave_in)
 	_mark_all_dirty()
 	_seen_fog_revision = _grid.player_fog_revision
+
+
+func _make_detail_texture() -> NoiseTexture2D:
+	var noise := FastNoiseLite.new()
+	noise.seed = 9401
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.055
+	noise.fractal_octaves = 3
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color(0.84, 0.87, 0.90))
+	ramp.set_color(1, Color.WHITE)
+	var texture := NoiseTexture2D.new()
+	texture.width = 128
+	texture.height = 128
+	texture.generate_mipmaps = true
+	texture.seamless = true
+	texture.noise = noise
+	texture.color_ramp = ramp
+	return texture
+
+
+func apply_quality() -> void:
+	if _mat == null:
+		return
+	var detailed := ArtStyle3D.detail_enabled()
+	_mat.uv1_triplanar = detailed
+	_mat.uv1_world_triplanar = detailed
+	if detailed and _mat.albedo_texture == null:
+		_mat.albedo_texture = _make_detail_texture()
+	elif not detailed:
+		_mat.albedo_texture = null
 
 
 func get_snow_level() -> float:
@@ -174,8 +222,13 @@ func _chunk_key_for(pos: Vector2i) -> Vector2i:
 ## EntityProxies3D emits structure_set_changed when a reconcile spawns or
 ## culls a structure proxy; the height field's clearance stamps only need a
 ## re-run at those moments (plus the first rebuild batch after setup).
+## The re-stamp runs inside a rebuild batch, so a structure change must also
+## dirty the chunks — otherwise the dune re-flattening and the plan-07 prop
+## scatter re-filter would wait for the 5s backstop instead of landing with
+## the next batch.
 func notify_structures_changed() -> void:
 	_clearances_dirty = true
+	_mark_all_dirty()
 
 
 ## Public alias for the full-dirty mark (live quality switches, external
@@ -298,6 +351,12 @@ func _rebuild_chunk(key: Vector2i) -> void:
 			if pos.y < GridWorld.SURFACE_TOP or pos.y > GridWorld.Y_MAX + 1:
 				continue
 			if not _grid.has_cell(pos):
+				# Plan 13: a missing in-bounds underground cell is excavated
+				# space — draw its presentation-only floor (and optional seam)
+				# before skipping, so tunnels read as carved mine instead of
+				# holes in the board. The sim never gains a Cell for it.
+				if _is_excavated_floor(pos):
+					_add_excavated_floor(st, pos)
 				continue
 			if _underground_view and _grid.is_surface_row(pos.y):
 				continue
@@ -327,8 +386,10 @@ func _rebuild_chunk(key: Vector2i) -> void:
 					color = color.lerp(FOG_SHADOW_TINT, 0.8)
 			_add_quad(st, cx, cz, color, heights[0], heights[1], heights[2], heights[3])
 	if LIT_TERRAIN:
-		# Flat per-face normals off the sculpted corner heights; the glow
-		# pass is unshaded/emissive and needs none.
+		# Shared surface corners smooth into continuous dunes; differing cell
+		# colors keep fog/material boundaries hard. Underground stays faceted.
+		if not _underground_view:
+			st.index()
 		st.generate_normals()
 	chunk.mesh = st.commit()
 	if chunk.mesh != null:
@@ -352,6 +413,106 @@ func _corner_heights(pos: Vector2i, _cell: GridWorld.Cell) -> Array[float]:
 		height_field.height_at_cell(pos.x + 1, pos.y + 1),
 		height_field.height_at_cell(pos.x, pos.y + 1),
 	]
+
+
+## Plan 13: true when pos is genuine excavated space — a real in-bounds
+## underground grid position whose sim entry was mined away. Surface rows,
+## out-of-bounds positions, present cells, and the surface view never qualify,
+## so tests can separate tunnel floors from plain absent data.
+func _is_excavated_floor(pos: Vector2i) -> bool:
+	return _underground_view \
+		and pos.y > GridWorld.Y_MIN and pos.y <= GridWorld.Y_MAX \
+		and pos.x >= GridWorld.X_MIN and pos.x <= GridWorld.X_MAX \
+		and not _grid.has_cell(pos)
+
+
+## Plan 13 excavated-floor base color: the seven-layer depth mapping
+## ((pos.y - 1) / 3 + 1) picks the shallow/mid/deep mine-floor token, nudged
+## by a small deterministic hash so floors stay stable across rebuilds and
+## pinned seeds replay identical strata.
+func _floor_color(pos: Vector2i) -> Color:
+	var layer := (pos.y - 1) / 3 + 1
+	var base: Color
+	if layer <= 2:
+		base = ArtStyle3D.PALETTE.mine_floor_shallow
+	elif layer <= 4:
+		base = ArtStyle3D.PALETTE.mine_floor_mid
+	else:
+		base = ArtStyle3D.PALETTE.mine_floor_deep
+	return base.lightened(ArtStyle3D.cell_hash(pos, FLOOR_COLOR_SALT) * 0.05)
+
+
+## Floor color with the exact normal-cell fog semantics: hidden floors take
+## the opaque void tint (the fog overlay keeps them covered), remembered
+## floors dim toward deep-rock shadow, visible floors keep their strata color.
+func _excavated_floor_color(pos: Vector2i) -> Color:
+	var color := _floor_color(pos)
+	match _grid.fog_state_at(GameManager.Team.PLAYER, pos):
+		0:
+			return FOG_VOID_TINT
+		1:
+			return color.lerp(FOG_SHADOW_TINT, 0.8)
+	return color
+
+
+## Deterministic per-cell decision (stable across rebuilds) for the subtle
+## crack strip on an excavated floor.
+func _has_floor_seam(pos: Vector2i) -> bool:
+	return ArtStyle3D.cell_hash(pos, FLOOR_SEAM_SALT) < FLOOR_SEAM_CHANCE
+
+
+## One flat floor quad (plus its optional seam strips) for an excavated cell.
+## Purely presentational — the sim never gains a Cell and A* stays untouched.
+func _add_excavated_floor(st: SurfaceTool, pos: Vector2i) -> void:
+	var center: Vector2 = _grid.grid_to_world(pos, true)
+	var cx := center.x * WORLD_SCALE
+	var cz := center.y * WORLD_SCALE
+	var color := _excavated_floor_color(pos)
+	_add_quad(st, cx, cz, color)
+	if _has_floor_seam(pos):
+		_add_floor_seam(st, pos, cx, cz, color)
+
+
+## Subtle deterministic seam/crack strips, drawn at FLOOR_SEAM_LIFT (under the
+## lava glow lift and the fog overlay) in the fog-tinted floor's darkened hue.
+func _add_floor_seam(st: SurfaceTool, pos: Vector2i, cx: float, cz: float, color: Color) -> void:
+	var seam_color := color.darkened(0.38)
+	var half: float = GridWorld.CELL_SIZE * 0.5 * WORLD_SCALE
+	var h1 := ArtStyle3D.cell_hash(pos, FLOOR_SEAM_SALT + 1)
+	var h2 := ArtStyle3D.cell_hash(pos, FLOOR_SEAM_SALT + 2)
+	var h3 := ArtStyle3D.cell_hash(pos, FLOOR_SEAM_SALT + 3)
+	var a := Vector3(cx - half + h1 * half * 2.0, FLOOR_SEAM_LIFT, cz - half)
+	var mid := Vector3(cx - half * 0.6 + h2 * half * 1.2, FLOOR_SEAM_LIFT,
+		cz - half * 0.6 + h3 * half * 1.2)
+	var b := Vector3(cx + half, FLOOR_SEAM_LIFT, cz - half + h1 * half * 1.6)
+	_add_flat_strip(st, a, mid, 0.013, seam_color)
+	_add_flat_strip(st, mid, b, 0.010, seam_color)
+	if h2 > 0.55:
+		var c := Vector3(cx - half + h3 * half * 2.0, FLOOR_SEAM_LIFT, cz + half)
+		_add_flat_strip(st, mid, c, 0.008, seam_color)
+
+
+## Thin flat quad strip between two points (a crack segment); y comes from the
+## endpoints so seams stay a constant lift above the floor.
+func _add_flat_strip(st: SurfaceTool, a: Vector3, b: Vector3, width: float, color: Color) -> void:
+	var dir := b - a
+	dir.y = 0.0
+	if dir.length_squared() < 0.000001:
+		return
+	dir = dir.normalized()
+	var side := Vector3(-dir.z, 0.0, dir.x) * (width * 0.5)
+	st.set_color(color)
+	st.add_vertex(a - side)
+	st.set_color(color)
+	st.add_vertex(a + side)
+	st.set_color(color)
+	st.add_vertex(b + side)
+	st.set_color(color)
+	st.add_vertex(a - side)
+	st.set_color(color)
+	st.add_vertex(b + side)
+	st.set_color(color)
+	st.add_vertex(b - side)
 
 
 func _has_lava_neighbor(pos: Vector2i) -> bool:
@@ -415,8 +576,7 @@ func _add_flat_quad(st: SurfaceTool, cx: float, cz: float, y: float) -> void:
 func _cell_color(cell: GridWorld.Cell, pos: Vector2i, max_ore: int) -> Color:
 	match cell.type:
 		GridWorld.CellType.SURFACE_GROUND:
-			var snow_mix := lerpf(0.45, 1.0, _snow_level)
-			return ArtStyle3D.PALETTE.snow_shadow.lerp(ArtStyle3D.PALETTE.snow, snow_mix)
+			return _surface_color(pos, lerpf(0.45, 1.0, _snow_level))
 		GridWorld.CellType.DIRT:
 			return _dirt_color(cell.layer)
 		GridWorld.CellType.ORE:
@@ -440,6 +600,24 @@ func _cell_color(cell: GridWorld.Cell, pos: Vector2i, max_ore: int) -> Color:
 		GridWorld.CellType.SOLID_ROCK:
 			return SOLID_ROCK_COLOR
 	return ArtStyle3D.PALETTE.night
+
+
+func _surface_color(pos: Vector2i, snow_mix: float) -> Color:
+	var color := ArtStyle3D.PALETTE.snow_shadow.lerp(ArtStyle3D.PALETTE.snow, snow_mix)
+	if _map_definition == null:
+		return color
+	if _map_definition.is_road(pos):
+		return color.lerp(ArtStyle3D.PALETTE.compacted_snow, 0.6)
+	var region := _map_definition.region_at(pos)
+	if region.is_empty():
+		return color
+	var tint: Color = ArtStyle3D.PALETTE.rock
+	match str(region.get("recipe", "")):
+		"trees":
+			tint = ArtStyle3D.PALETTE.pine
+		"low":
+			tint = ArtStyle3D.PALETTE.wood_dark
+	return color.lerp(tint, 0.12)
 
 
 func _dirt_color(layer: int) -> Color:
