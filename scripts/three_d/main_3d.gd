@@ -39,6 +39,12 @@ const DOLLY_START: float = 12.0
 const VIEW_TWEEN_DURATION: float = 0.25
 const PAN_SPEED: float = 10.0
 const EDGE_PAN_MARGIN: float = 24.0
+## Endgame cinematic: on game_over the rig swoops to the collapsing base and
+## pushes in while GameManager's win slow-mo owns the time scale. The swoop
+## runs on wall-clock time (the slow-mo must not stretch it) and is skipped
+## under the reduced-motion accessibility setting.
+const ENDGAME_CINE_DURATION: float = 2.4
+const ENDGAME_CINE_DOLLY: float = 5.0
 
 var _sim: Node2D
 var _pc: Node
@@ -53,6 +59,7 @@ var _projectile_proxies: ProjectileProxies3D
 var _event_proxies: EventProxies3D
 var _fog: Fog3D
 var _backdrop: Backdrop3D
+var _ghost: GhostLayer3D
 var _focus: Vector3 = Vector3.ZERO
 var _surface_focus: Vector3
 var _underground_focus: Vector3
@@ -62,6 +69,15 @@ var _underground_view: bool = false
 var _view_tween: Tween
 var _shake: float = 0.0
 var _breach_played: bool = false
+## Endgame cinematic state: the ground point of the first base collapse
+## (captured from the building's destroyed signal, since the building leaves
+## its group before game_over fires), then the wall-clock swoop anchors.
+var _collapse_point: Variant = null
+var _cine_active := false
+var _cine_start_msec := 0
+var _cine_from_focus := Vector3.ZERO
+var _cine_to_focus := Vector3.ZERO
+var _cine_from_dolly := 0.0
 
 
 func _ready() -> void:
@@ -143,6 +159,19 @@ func _ready() -> void:
 	# Fog-of-war mist overlay (scene-stubbed like the other subsystems).
 	_fog = $World3D/Fog3D
 	_fog.setup(grid)
+	# Ghost-surface x-ray: the frozen "world above" hologram for the
+	# underground view (snapshots on the Tab switch, hidden on the surface).
+	_ghost = $World3D/GhostLayer3D
+	_ghost.setup(grid)
+
+	# Endgame cinematic wiring: the losing building leaves the "buildings"
+	# group before GameManager.game_over fires, so the collapse site comes
+	# from its own destroyed signal; the swoop itself starts on game_over.
+	# (GameManager is an autoload that outlives the shell — see _exit_tree.)
+	for b in get_tree().get_nodes_in_group("buildings"):
+		if b.has_signal("destroyed") and not b.is_connected("destroyed", _on_building_destroyed):
+			b.connect("destroyed", _on_building_destroyed.bind(b))
+	GameManager.game_over.connect(_on_game_over)
 
 	# §2.5 juice: world events shake the rig (max-wins, reduced-motion aware).
 	grid.cave_in_occurred.connect(_on_cave_in_occurred)
@@ -200,7 +229,10 @@ func _to_ground(pos2d: Vector2) -> Vector3:
 
 
 func _process(delta: float) -> void:
-	_pan(delta)
+	if _cine_active:
+		_step_cinematic()
+	else:
+		_pan(delta)
 	if _shake > 0.0:
 		_shake = maxf(0.0, _shake - 4.0 * delta)
 	_sync_camera()
@@ -257,6 +289,46 @@ func _on_volcano_warning_started(_seconds: float) -> void:
 
 func _on_volcano_started() -> void:
 	add_shake(1.0)
+
+
+## Base collapse hook (fires before game_over, while the building node is
+## still positionable): remembers the collapse site for the endgame swoop.
+func _on_building_destroyed(_team: int, building: Node2D) -> void:
+	if _collapse_point == null:
+		_collapse_point = _to_ground(building.global_position)
+
+
+## Game over: swoop to the collapsing base and push in while the sim's win
+## slow-mo plays. Reduced-motion players keep the slow-mo but not the yank.
+func _on_game_over(_winner: GameManager.Team) -> void:
+	if SettingsManager.get_reduced_motion():
+		return
+	add_shake(1.0)
+	if _collapse_point == null:
+		return
+	# The collapse reads on the surface; if the player is underground, bring
+	# the whole presentation up through the same path a Tab switch takes.
+	if _underground_view:
+		_apply_view(false, false)
+	if is_instance_valid(_view_tween):
+		_view_tween.kill()
+	_cine_active = true
+	_cine_start_msec = Time.get_ticks_msec()
+	_cine_from_focus = _focus
+	_cine_to_focus = _collapse_point
+	_cine_from_dolly = _dolly
+
+
+## Wall-clock ease-out swoop (see ENDGAME_CINE_DURATION); while it runs, pan
+## input is suspended so the shot can't be fought. Focus/dolly clamping stays
+## off — the collapse point is in-bounds by construction.
+func _step_cinematic() -> void:
+	var t := clampf(float(Time.get_ticks_msec() - _cine_start_msec) / (ENDGAME_CINE_DURATION * 1000.0), 0.0, 1.0)
+	var e := 1.0 - pow(1.0 - t, 3.0)
+	_focus = _cine_from_focus.lerp(_cine_to_focus, e)
+	_dolly = lerpf(_cine_from_dolly, ENDGAME_CINE_DOLLY, e)
+	if t >= 1.0:
+		_cine_active = false
 
 
 func _pan(delta: float) -> void:
@@ -392,6 +464,7 @@ func _on_view_mode_changed(mode: PlayerController.ViewMode) -> void:
 func pose_camera(focus: Vector3, dolly: float, pitch: float = SURFACE_PITCH_DEGREES) -> void:
 	if is_instance_valid(_view_tween):
 		_view_tween.kill()
+	_cine_active = false
 	_focus = focus
 	_dolly = clampf(dolly, DOLLY_MIN, _dolly_max_for_view())
 	_pitch_degrees = pitch
@@ -430,6 +503,8 @@ func _apply_view(underground: bool, initial: bool) -> void:
 	_event_proxies.set_underground_view(underground)
 	if _fog != null:
 		_fog.set_underground_view(underground)
+	if _ghost != null:
+		_ghost.set_underground_view(underground)
 	if _lighting != null:
 		_lighting.set_underground_view(underground)
 
@@ -441,6 +516,10 @@ func _exit_tree() -> void:
 		WeatherManager.volcano_warning_started.disconnect(_on_volcano_warning_started)
 	if WeatherManager.volcano_started.is_connected(_on_volcano_started):
 		WeatherManager.volcano_started.disconnect(_on_volcano_started)
+	# Same for GameManager (autoload): the endgame-cinematic hook must not
+	# outlive the shell either.
+	if GameManager.game_over.is_connected(_on_game_over):
+		GameManager.game_over.disconnect(_on_game_over)
 	# Same for the settings listener (SettingsManager outlives the shell).
 	if SettingsManager.setting_changed.is_connected(_on_setting_changed):
 		SettingsManager.setting_changed.disconnect(_on_setting_changed)
