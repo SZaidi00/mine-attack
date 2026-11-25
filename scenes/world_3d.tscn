@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/three_d/entity_proxies_3d.gd" id="1_proxies"]
 [ext_resource type="Script" path="res://scripts/three_d/terrain_3d.gd" id="2_terrain"]
@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/three_d/event_proxies_3d.gd" id="5_events"]
 [ext_resource type="Script" path="res://scripts/three_d/fog_3d.gd" id="6_fog"]
 [ext_resource type="Script" path="res://scripts/three_d/backdrop_3d.gd" id="7_backdrop"]
+[ext_resource type="Script" path="res://scripts/three_d/ghost_layer_3d.gd" id="8_ghost"]
 
 [sub_resource type="Environment" id="Environment_world3d"]
 background_mode = 1
@@ -68,3 +69,6 @@ script = ExtResource("5_events")
 
 [node name="Fog3D" type="MeshInstance3D" parent="."]
 script = ExtResource("6_fog")
+
+[node name="GhostLayer3D" type="MeshInstance3D" parent="."]
+script = ExtResource("8_ghost")
