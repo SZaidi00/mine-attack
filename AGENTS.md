@@ -51,7 +51,9 @@ mine-attack/
 │   │                  # rig, 55deg surface / 82.5deg underground pitches, 0.25s
 │   │                  # Tab tween, dolly 12 within 3-16 (3-10 underground),
 │   │                  # zoom-to-cursor, pose_camera(), minimal shake,
-│   │                  # AudioListener3D, quality preset), terrain_3d.gd
+│   │                  # wall-clock endgame cinematic (swoop + push-in to the
+│   │                  # collapsing base on game_over, reduced-motion aware,
+│   │                  # cancelled by pose_camera), AudioListener3D, quality preset), terrain_3d.gd
 │   │                  # (chunked cell->mesh projection, R3 height-field dune
 │   │                  # displacement via height_field_3d.gd — deterministic
 │   │                  # map-seeded value noise + ridged dune bands, structure
@@ -116,7 +118,9 @@ mine-attack/
 │   │                  # lighting_3d.gd
 │   │                  # (R2 cold overcast/storm/underground/volcano moods with
 │   │                  # weather-specific background/fog density + ACES, warm-source
-│   │                  # bloom on Standard+, SSAO/shadows on Fancy), effects_3d.gd
+│   │                  # bloom on Standard+, per-mood color grading — saturation/
+│   │                  # contrast/brightness Environment adjustments on Standard+,
+│   │                  # SSAO/shadows on Fancy), effects_3d.gd
 │   │                  # (camera-local full-depth storm snow and eruption cinders/ash,
 │   │                  # underground dust motes, world-space cave-in bursts + R6
 │   │                  # first-breach dust pool and fading ground-crack decal;
@@ -182,10 +186,15 @@ mine-attack/
 │   │                  # underground lanterns add warm OmniLights + static radial
 │   │                  # ground pools at the sim vision radius, hidden by fog and
 │   │                  # construction state; first central-wall breach triggers
-│   │                  # one-shot dust/crack feedback + minimal camera nudge)
+│   │                  # one-shot dust/crack feedback + minimal camera nudge),
+│   │                  # ghost_layer_3d.gd (ghost-surface x-ray: while underground,
+│   │                  # a frozen translucent hologram of the surface band — fog-known
+│   │                  # cells + team-colored structure marks as they stood at the
+│   │                  # Tab switch; hidden cells stay empty so it never leaks
+│   │                  # unexplored information)
 │   └── world/         # grid_world.gd + helper modules, building.gd, mine_entry.gd,
 │                      # ladder.gd, lantern.gd, tower.gd, wall_segment.gd, trap.gd
-├── tests/             # GUT test suite (83 test scripts)
+├── tests/             # GUT test suite (86 test scripts)
 ├── tools/             # export_all.sh, serve_web.py, gen_engineer_sprites.gd,
 │                      # gen_crawler_sprites.gd, gen_unit_glbs.py (R7 deterministic
 │                      # sculpted/textured unit GLBs), gen_prop_glbs.py
