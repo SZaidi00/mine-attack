@@ -4,7 +4,10 @@
 ## gloom; eruptions keep a cold key/ambient so meteors and lava are the warm
 ## heroes. The existing warning pulse briefly warms the key without accumulating.
 ## Post remains ACES everywhere, warm-source bloom on Standard+, depth fog on
-## every tier, and SSAO/shadows on Fancy. Presentation only.
+## every tier, and SSAO/shadows on Fancy. Each mood also carries a color-grade
+## target (Environment adjustments, Standard+): storms bleach toward a desaturated
+## gloom, the mine goes contrasty and cold, eruptions push a hot grade — the
+## weather reads in the grade even before any particle spawns. Presentation only.
 ##
 ## WeatherManager signals are wired in setup() (the autoload always exists);
 ## PlayerController (view authority) and GridWorld (lava state) mount deferred
@@ -32,6 +35,9 @@ const _MOODS: Dictionary = {
 		"background_color": ArtStyle3D.PALETTE.night,
 		"fog_color": ArtStyle3D.PALETTE.night,
 		"fog_density": 0.02,
+		"grade_sat": 1.0,
+		"grade_con": 1.0,
+		"grade_bri": 1.0,
 	},
 	"underground": {
 		"sun_color": Color("#6C7684"),
@@ -43,6 +49,10 @@ const _MOODS: Dictionary = {
 		"background_color": ArtStyle3D.PALETTE.rock_dark,
 		"fog_color": ArtStyle3D.PALETTE.rock_dark,
 		"fog_density": 0.022,
+		# Claustrophobic grade: desaturated, contrasty, slightly crushed.
+		"grade_sat": 0.82,
+		"grade_con": 1.08,
+		"grade_bri": 0.92,
 	},
 	"storm": {
 		"sun_color": ArtStyle3D.PALETTE.storm_gloom,
@@ -52,6 +62,10 @@ const _MOODS: Dictionary = {
 		"background_color": Color("#53677E"),
 		"fog_color": Color("#6E8095"),
 		"fog_density": 0.055,
+		# Whiteout gloom: bleached and washed flat.
+		"grade_sat": 0.72,
+		"grade_con": 0.97,
+		"grade_bri": 1.03,
 	},
 	"volcano": {
 		"sun_color": Color("#91A4BC"),
@@ -61,6 +75,10 @@ const _MOODS: Dictionary = {
 		"background_color": ArtStyle3D.PALETTE.rock_dark,
 		"fog_color": ArtStyle3D.PALETTE.rock,
 		"fog_density": 0.06,
+		# Hot, harsh grade — ember saturation and hard contrast.
+		"grade_sat": 1.1,
+		"grade_con": 1.12,
+		"grade_bri": 0.96,
 	},
 }
 
@@ -130,6 +148,12 @@ func apply_quality_settings() -> void:
 		_env.glow_strength = ArtStyle3D.BLOOM_STRENGTH
 		_env.ssao_enabled = ArtStyle3D.ssao_enabled()
 		_env.fog_enabled = ArtStyle3D.fog_enabled()
+		# Per-mood color grading, Standard+ (same post gate as bloom). Reset to
+		# neutral here; _tween_toward eases the live values to the mood target.
+		_env.adjustment_enabled = ArtStyle3D.adjustments_enabled()
+		_env.adjustment_saturation = 1.0
+		_env.adjustment_contrast = 1.0
+		_env.adjustment_brightness = 1.0
 	var viewport := get_viewport()
 	if viewport != null:
 		# FSR 1.0 upscaling where the renderer supports it (gl_compatibility
@@ -185,6 +209,9 @@ func _resolve_mood(delta: float, lava_glow: bool) -> Dictionary:
 	_resolved["background_color"] = base["background_color"]
 	_resolved["fog_color"] = base["fog_color"]
 	_resolved["fog_density"] = base["fog_density"]
+	_resolved["grade_sat"] = base["grade_sat"]
+	_resolved["grade_con"] = base["grade_con"]
+	_resolved["grade_bri"] = base["grade_bri"]
 	if mood_name == "storm":
 		_storm_gust_time += delta
 		var gust := clampf(0.5 + 0.5 * sin(_storm_gust_time * 1.9) + 0.25 * sin(_storm_gust_time * 0.63), 0.0, 1.0)
@@ -253,6 +280,10 @@ func _tween_toward(target: Dictionary, delta: float) -> void:
 		_env.background_color = _env.background_color.lerp(target["background_color"], f)
 		_env.fog_light_color = _env.fog_light_color.lerp(target["fog_color"], f)
 		_env.fog_density = lerpf(_env.fog_density, target["fog_density"], f)
+		if _env.adjustment_enabled:
+			_env.adjustment_saturation = lerpf(_env.adjustment_saturation, target["grade_sat"], f)
+			_env.adjustment_contrast = lerpf(_env.adjustment_contrast, target["grade_con"], f)
+			_env.adjustment_brightness = lerpf(_env.adjustment_brightness, target["grade_bri"], f)
 
 
 func _reconcile_weather() -> void:
@@ -316,5 +347,5 @@ func _on_lava_risen(_layers: int) -> void:
 	_lava_event = true
 
 
-func _on_lava_receded() -> void:
+func _on_lava_receded(_layers: int) -> void:
 	_lava_event = false

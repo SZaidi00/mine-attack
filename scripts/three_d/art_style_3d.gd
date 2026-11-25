@@ -105,6 +105,12 @@ static func ssao_enabled() -> bool:
 	return quality == Quality.FANCY
 
 
+## Per-mood color grading (Environment adjustments), Standard and up — same
+## post gate as glow: Potato stays flat to protect fps.
+static func adjustments_enabled() -> bool:
+	return quality != Quality.POTATO
+
+
 ## Atmospheric depth fog is nearly free, so it runs on every preset — the
 ## fog-of-war darkening stays a separate, unmistakably darker read.
 static func fog_enabled() -> bool:
